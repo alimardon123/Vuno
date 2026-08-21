@@ -1,8 +1,10 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// AI Organization OS — Prisma schema
+// Implements: tenant → org → department → team → member → agent
+//              + append-only event spine
+//              + epistemic ledger (claims with status + provenance)
+//              + work graph (objectives, projects, decisions, experiments, artifacts)
+//              + gates
+// Per ADR-0003 (data model), ADR-0004 (event spine), ADR-0005 (ledger), ADR-0006 (agents)
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +15,321 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ─── Tenant ───────────────────────────────────────────────────────────────────
+// One tenant can host multiple orgs. v1 ships one seeded tenant.
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orgs        Organization[]
+  agents      Agent[]
+  events      Event[]
+  claims      Claim[]
+  users       User[]
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model User {
+  id          String   @id @default(cuid())
+  tenantId    String
+  email       String   @unique
+  name        String?
+  isOrgOwner  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// ─── Organization ──────────────────────────────────────────────────────────────
+model Organization {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  slug        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  departments Department[]
+  teams       Team[]
+  channels    Channel[]
+  agents      Agent[]
+  events      Event[]
+  claims      Claim[]
+  objectives  Objective[]
+  projects    Project[]
+  decisions   Decision[]
+  experiments Experiment[]
+  gates       Gate[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+}
+
+// ─── Department / Team ─────────────────────────────────────────────────────────
+model Department {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  name        String   // Product, Engineering, Security, HR/Meta, etc.
+  slug        String
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teams       Team[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  departmentId String
+  name        String
+  slug        String
+  leadAgentId String?  // ref to Agent, set via membership
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  department  Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+  channels    Channel[]
+
+  @@unique([orgId, slug])
+  @@index([orgId, departmentId])
+}
+
+// Polymorphic membership: a team can contain agents and humans.
+// We store memberType as discriminator; memberId as the FK string.
+model Membership {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  teamId      String
+  memberType  String   // 'agent' | 'human'
+  memberId    String   // Agent.id or User.id
+  role        String   // 'ORG_OWNER' | 'DEPARTMENT_HEAD' | 'TEAM_LEAD' | 'MEMBER' | 'HR_META'
+  createdAt   DateTime @default(now())
+
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, memberType, memberId])
+  @@index([teamId, role])
+  @@index([memberType, memberId])
+}
+
+// ─── Agents ────────────────────────────────────────────────────────────────────
+// Per ADR-0006. Independent or personal-assistant. v1 = simulated harness.
+model Agent {
+  id            String   @id @default(cuid())
+  tenantId      String
+  orgId         String
+  name          String
+  kind          String   // 'independent' | 'personal_assistant'
+  role          String   // 'architect' | 'engineer' | 'security' | 'perf' | 'hr' | 'product' | 'research' | 'devils_advocate' | 'verifier' | ...
+  modelName     String   @default("simulated/echo-1")
+  harnessName   String   @default("simulated")
+  tools         String   @default("[]")    // JSON array of tool IDs
+  permissions   String   @default("[]")    // JSON array of permission IDs
+  ownerHumanId  String?  // set only for personal_assistant
+  teamId        String?
+  status        String   @default("active") // 'active' | 'retired' | 'pending'
+  installedAt   DateTime @default(now())
+  retiredAt     DateTime?
+  metadata      String?  // JSON — model-specific config (temperature, system prompt path, etc.)
+  avatarGlyph   String?  // single lucide icon name, optional override
+
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  events        Event[]      @relation("ActorAgent")
+  claims        Claim[]      @relation("ProvenanceAgent")
+
+  @@index([tenantId, orgId, teamId])
+  @@index([kind, status])
+  @@index([role, status])
+}
+
+// ─── Channels (chat surface) ───────────────────────────────────────────────────
+model Channel {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  teamId      String?
+  name        String   // e.g. "storage-engine"
+  slug        String
+  topic       String?
+  isDm        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, slug])
+  @@index([orgId, teamId])
+}
+
+// ─── Event Spine (append-only) ────────────────────────────────────────────────
+// Per ADR-0004. NEVER update or delete rows. The chat surface is a projection.
+model Event {
+  id            String   @id @default(cuid())
+  seq           Int      @unique           // monotonic, for replay ordering
+  type          String                     // discriminated union key
+  payload       String                     // JSON-encoded, typed via TS
+  tenantId      String
+  orgId         String
+  actorType     String                     // 'agent' | 'human' | 'system'
+  actorAgentId  String?
+  actorUserId   String?
+  scopeType     String                     // 'channel' | 'decision' | 'project' | 'team' | 'org' | 'tenant'
+  scopeId       String
+  visibility    String   @default("org")   // 'tenant' | 'org' | 'team' | 'private'
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  actorAgent    Agent?       @relation("ActorAgent", fields: [actorAgentId], references: [id], onDelete: SetNull)
+  // NOTE: scopeId is intentionally NOT a foreign key. Events are polymorphic —
+  // scopeId may reference a Channel, Decision, Project, Objective, Team, Org,
+  // or Tenant. Queries filter by (scopeType, scopeId).
+
+  @@index([tenantId, orgId, scopeType, scopeId, seq])
+  @@index([type, createdAt])
+  @@index([actorAgentId])
+}
+
+// ─── Epistemic Ledger ──────────────────────────────────────────────────────────
+// Per ADR-0005. Every claim has status + provenance. Status transitions via events.
+model Claim {
+  id              String   @id @default(cuid())
+  tenantId        String
+  orgId           String
+  statement       String
+  status          String   @default("asserted")  // 'asserted' | 'believed' | 'tested' | 'falsified' | 'uncertain'
+  scopeType       String   // 'project' | 'decision' | 'objective' | 'team' | 'org'
+  scopeId         String
+  provenanceEventId String // the Event that originated this claim
+  provenanceActorType String
+  provenanceAgentId  String?
+  supersedesId    String?  // optional: if this claim supersedes an earlier one
+  evidenceIds     String   @default("[]")    // JSON array of evidence Event IDs
+  contradictsIds  String   @default("[]")    // JSON array of claim IDs this contradicts
+  statusReason    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  provenanceAgent Agent?       @relation("ProvenanceAgent", fields: [provenanceAgentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, orgId, status])
+  @@index([scopeType, scopeId])
+  @@index([provenanceAgentId])
+}
+
+// ─── Work Graph ────────────────────────────────────────────────────────────────
+model Objective {
+  id              String   @id @default(cuid())
+  tenantId        String
+  orgId           String
+  title           String
+  successCriteria  String
+  constraints      String?
+  budget           String?
+  autonomyLevel    String   @default("L2")  // L1-L4
+  status          String   @default("filed") // 'filed' | 'routing' | 'in_progress' | 'shipped' | 'killed'
+  owningDepartment String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  projects        Project[]
+
+  @@index([orgId, status])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  objectiveId String?
+  name        String
+  slug        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  objective   Objective?    @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  decisions   Decision[]
+  experiments Experiment[]
+  gates       Gate[]
+
+  @@unique([orgId, slug])
+  @@index([orgId, objectiveId])
+}
+
+model Decision {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  projectId   String
+  title       String
+  state       String   @default("draft") // 'draft'|'open'|'contested'|'experiment_pending'|'resolved'|'escalated'
+  proposerAgentId String?
+  outcome     String?  // 'accepted' | 'rejected' | 'falsified' | 'superseded'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gates       Gate[]
+
+  @@index([orgId, projectId, state])
+}
+
+model Experiment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  projectId   String
+  kind        String   // 'benchmark' | 'load_test' | 'spike' | 'fuzz' | 'failure_injection'
+  status      String   @default("requested") // 'requested' | 'running' | 'completed' | 'failed'
+  result      String?  // JSON — the actual measurement results
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, projectId, status])
+}
+
+model Gate {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  projectId   String
+  decisionId  String?
+  name        String   // 'security' | 'qa' | 'performance' | 'release'
+  policy      String   // declarative policy text, e.g. "no open RiskFlag of severity >= high"
+  state       String   @default("pending") // 'pending' | 'passed' | 'blocked'
+  reason      String?
+  evaluatedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decision    Decision?     @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, projectId, state])
+  @@index([decisionId])
 }
