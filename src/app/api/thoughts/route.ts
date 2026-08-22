@@ -1,0 +1,99 @@
+// Vuno — /api/thoughts — the memory graph query layer
+// Per the user's vision: "I would like at least independent agents to somehow
+// see each other's thoughts too if possible."
+//
+// Queries AgentThought events from the event spine. Supports filtering by:
+// - agentId (whose thoughts)
+// - topic (what the thought is about)
+// - thoughtType (observation/hypothesis/conclusion/question/doubt)
+// - relatedEventId (thoughts linked to a specific event)
+//
+// Returns thoughts with their agent name + role resolved. Visibility-filtered
+// (currently returns all org-visible thoughts; team/private filtering in a
+// later slice).
+
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { EventSpine } from '@/lib/events/spine';
+import type { EventPayloadMap } from '@/lib/events/types';
+
+export const dynamic = 'force-dynamic';
+
+const ROLE_LABELS: Record<string, string> = {
+  architect: 'Distributed Systems Architect',
+  engineer: 'Software Engineer',
+  security: 'Security Architect',
+  perf: 'Performance Engineer',
+  qa: 'QA Engineer',
+  devils_advocate: "Devil's Advocate",
+  verifier: 'Verifier',
+  product: 'Product Lead',
+  research: 'Researcher',
+  hr: 'HR / Meta',
+};
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const params = url.searchParams;
+  const agentId = params.get('agentId');
+  const topic = params.get('topic');
+  const thoughtType = params.get('thoughtType');
+  const relatedEventId = params.get('relatedEventId');
+  const scopeType = params.get('scopeType') ?? 'channel';
+  const scopeId = params.get('scopeId');
+
+  const org = await db.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { tenantId: true, id: true },
+  });
+  if (!org) return NextResponse.json({ thoughts: [] });
+
+  // Replay all AgentThought events for this org
+  const spine = new EventSpine(org.tenantId, org.id);
+  const allEvents = await spine.replay({
+    scopeType: scopeType || undefined,
+    scopeId: scopeId || undefined,
+    types: ['AgentThought'],
+    limit: 1000,
+  });
+
+  // Agent lookup for name/role resolution
+  const agents = await db.agent.findMany({
+    where: { orgId: org.id },
+    select: { id: true, name: true, role: true },
+  });
+  const agentById = new Map(agents.map((a) => [a.id, a]));
+
+  // Filter + map thoughts
+  const thoughts = allEvents
+    .filter((e) => {
+      const p = e.payload as EventPayloadMap['AgentThought'];
+      if (!p) return false;
+      if (agentId && e.actorAgentId !== agentId) return false;
+      if (topic && !p.topic.toLowerCase().includes(topic.toLowerCase())) return false;
+      if (thoughtType && p.thoughtType !== thoughtType) return false;
+      if (relatedEventId && p.relatedEventId !== relatedEventId) return false;
+      return true;
+    })
+    .map((e) => {
+      const p = e.payload as EventPayloadMap['AgentThought'];
+      const agent = e.actorAgentId ? agentById.get(e.actorAgentId) : null;
+      return {
+        id: e.id,
+        seq: e.seq,
+        agentId: e.actorAgentId,
+        agentName: agent?.name ?? 'Unknown',
+        agentRole: agent?.role ?? '',
+        agentRoleLabel: agent ? ROLE_LABELS[agent.role] ?? agent.role : '',
+        thoughtType: p.thoughtType,
+        content: p.content,
+        topic: p.topic,
+        relatedEventId: p.relatedEventId ?? null,
+        relatedThoughtId: p.relatedThoughtId ?? null,
+        visibility: p.visibility,
+        createdAt: e.createdAt,
+      };
+    });
+
+  return NextResponse.json({ thoughts, count: thoughts.length });
+}

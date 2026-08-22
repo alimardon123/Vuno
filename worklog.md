@@ -991,3 +991,130 @@ The "evolving" part: agents write to their memory over time. The "shared" part: 
 - MODIFIED: `src/components/left-rail/chats-panel.tsx` (merged DMs + group chats, Users icon for groups)
 - MODIFIED: `src/components/left-rail/org-panel.tsx` (Leadership section, type tags, team members filter fix)
 
+
+---
+Task ID: 15 (Round 7 — Memory graph: AgentThought events + shared cognitive space)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Deep dive into the memory architecture. Research LangGraph, CrewAI, MemGPT/Letta. Design + implement the memory graph — AgentThought events that let independent agents see each other's reasoning. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1) — Deep dive into agent memory architectures
+
+### Products researched
+1. **LangGraph**: shared "State" object — all agents read/write to the same typed state. Good for sequential pipelines, less for concurrent.
+2. **CrewAI**: "All agents in the crew share the crew's memory unless an agent has its own." Four types: short-term (conversation history, shared), long-term (per-agent), entity (facts), contextual. This is closest to what the user wants.
+3. **MemGPT/Letta**: "Memories form graph structures where agents can traverse relationships between concepts." Core memory + archival memory, paginated like an OS. Validates the user's "memory graph" idea.
+4. **AutoGen**: conversation history IS the memory — all agents see all messages. Transparency by default.
+5. **Buzz from Block**: Nostr events are the memory — every event is in one log, searchable. The event log IS the memory graph.
+
+### Key insight from the research
+The memory graph should be a **layer on top of the existing event spine** — not a new storage system. Just a new event type (`AgentThought`) that forms a graph via references (`relatedEventId`, `relatedThoughtId`).
+
+### The user's explicit ask
+"I would like at least independent agents to somehow see each other's thoughts too if possible."
+
+This means: when Aris proposes, Security (Sid) should see not just the final proposal but Aris's REASONING — why he chose LSM, what tradeoffs he considered. Currently, the spine stores final outputs (ProposalOpened, ObjectionRaised) but NOT intermediate reasoning.
+
+### Design: AgentThought event
+```typescript
+{
+  thoughtType: 'observation' | 'hypothesis' | 'conclusion' | 'question' | 'doubt',
+  content: string,                     // the thought text
+  topic: string,                       // what it's about (queryable)
+  relatedEventId?: string,             // graph edge to another event
+  relatedThoughtId?: string,           // graph edge to another thought
+  visibility: 'agent' | 'team' | 'org' // who can see this thought
+}
+```
+
+## 💻 Action (Step 2)
+
+### 1. Added AgentThought event type
+- `src/lib/events/types.ts`: added `AgentThought` to the EventType union + EventPayloadMap with the full schema (thoughtType, content, topic, relatedEventId, relatedThoughtId, visibility)
+- `src/lib/events/project.ts`: added `AgentThought` to TYPED_MESSAGE_EVENTS (so it renders in the chat), added type label `THOUGHT`
+
+### 2. Updated simulated adapters to produce thoughts
+- `src/lib/agents/adapters/simulated.ts`:
+  - **Architect**: produces 3 thoughts before proposing (observation → hypothesis → conclusion):
+    1. "The objective asks for sub-50ms p99 at 10k concurrent readers. I've reviewed prior art — RocksDB, LevelDB, Pebble all use LSM-trees."
+    2. "A memory-mapped LSM-tree with per-SSTable bloom filters should serve reads from memory where possible."
+    3. "I'll propose the Mmap-LSM architecture. The key tradeoff is bloom filter memory overhead vs. read performance."
+  - **Devil's Advocate**: produces 2 thoughts before objecting (observation → doubt):
+    1. "The proposal mentions bloom filters. At 10M keys, bloom filters add ~1.5x memory overhead."
+    2. "I should raise this as an objection — the memory/performance tradeoff is unverified. Peri should benchmark this."
+  - Thoughts are returned in the events array BEFORE the typed response, so they appear first in the chat
+
+### 3. Added /api/thoughts endpoint — the memory graph query layer
+- `src/app/api/thoughts/route.ts` (NEW): queries AgentThought events from the spine
+  - Filterable by: agentId, topic, thoughtType, relatedEventId, scopeType, scopeId
+  - Returns thoughts with agent name + role resolved
+  - This is what agents use to query each other's reasoning ("what does Aris think about bloom filters?")
+
+### 4. Added AgentThought rendering in the chat
+- `src/components/chat/message-bubble.tsx`: new `case 'AgentThought'`:
+  - Subtle, italic style — distinguishable from regular messages
+  - Left-border accent in the thought-type color (doubt=amber, question=gray, hypothesis=sky, conclusion=emerald, observation=muted)
+  - Small thought-type pill (uppercase, color-coded)
+  - Content in muted-foreground italic — shows the reasoning behind each agent action
+
+## 📊 Result (Step 3)
+- Lint: clean
+- /api/thoughts verified: 5 thoughts found after a debate (3 from Aris, 2 from Devi)
+- Thoughts render in chat: 5 AgentThought messages visible with italic style + thought-type pills
+- VLM analysis: 8/10 — "strong implementation of agents seeing each other's thoughts... solved the visibility problem"
+
+## 💡 Information (Step 4)
+
+### What worked
+- AgentThought events stream in real time (via the existing socket.io layer) — thoughts appear as agents reason
+- The /api/thoughts endpoint is queryable — the foundation for agents querying each other's reasoning
+- The italic + thought-type pill rendering is elegant — distinguishes reasoning from commitment
+- The `relatedEventId` field creates graph edges — thoughts can link to the events they reference
+
+### What's missing (VLM feedback)
+1. **Thought-to-thought linking**: agents should @-reference specific hypotheses from other agents. The `relatedThoughtId` field exists but isn't used yet.
+2. **Thought state transitions**: thoughts should have lifecycles (pending → validated → superseded). Currently thoughts just sit there.
+3. **Argument graph visualization**: the "why" graph for decisions — which thoughts led to a decision. Should be a secondary visualization.
+4. **Meta-reasoning**: agents reasoning about each other's reasoning (not just seeing thoughts, but responding to specific thoughts)
+
+### VLM verdict: "The foundation is solid. The AgentThought schema is the right primitive. Now give those thoughts edges, and you'll have genuine collective intelligence."
+
+## 🔧 Adjustment (Step 5)
+- All bugs fixed. The memory graph foundation is in place.
+- Next: use `relatedThoughtId` for thought-to-thought linking (graph edges), add thought state transitions, build the argument graph visualization.
+
+## Design principles assessment
+| Principle | How this round delivers |
+|---|---|
+| **Simple** | One new event type on the existing spine — no new storage |
+| **Powerful** | Agents see each other's reasoning — shared cognitive space |
+| **Performant** | Thoughts are just events — same append/broadcast pipeline |
+| **Scalable** | Queryable by topic/agent/type — can handle thousands of thoughts |
+| **Efficient** | No new tables, no new services — just a new event type |
+| **Beautiful** | Italic + thought-type pill — elegant, distinguishes reasoning from commitment |
+| **Functional** | Delivers the user's explicit ask: "independent agents seeing each other's thoughts" |
+
+## Memory architecture — updated status
+| Tier | Status | Implementation |
+|---|---|---|
+| **Organizational ledger** | ✅ Done | Event spine + claims + decisions + gates + wiki |
+| **Agent thoughts (shared cognitive space)** | ✅ Done (this round) | AgentThought events on the spine, queryable via /api/thoughts |
+| **Team memory** | ❌ Planned | visibility='team' on events + team-scoped queries |
+| **Personal assistant memory** | ❌ Planned | PersonalMemory table (ownerId, agentId, key, value) |
+| **Agent private memory** | ❌ Planned | AgentMemory table (agentId, key, value) |
+
+## Unresolved issues / next steps
+1. **Thought-to-thought edges** — use `relatedThoughtId` so agents can @-reference specific hypotheses from other agents. This creates the actual GRAPH (not just a list of thoughts).
+2. **Thought state transitions** — thoughts should have lifecycles (pending → validated → superseded). Add a ThoughtStatusChanged event type.
+3. **Argument graph visualization** — a secondary view showing the "why" graph for decisions (which thoughts led to a decision).
+4. **Wire Next.js API to proxy to Rust** — the Rust substrate (port 3030) is running; Next.js API routes should proxy to it.
+5. **Implement memory tiers 2-3** — personal assistant memory + team memory.
+6. **Concurrent agent runtime in Rust** — move from TS Promise.all to Rust tokio::join_all.
+7. **Real-LLM agent adapter via MCP**.
+
+### Files created/modified this round
+- MODIFIED: `src/lib/events/types.ts` (added AgentThought event type + payload)
+- MODIFIED: `src/lib/events/project.ts` (added AgentThought to chat projection + type label)
+- MODIFIED: `src/lib/agents/adapters/simulated.ts` (architect + devils_advocate produce thoughts)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (AgentThought rendering: italic + thought-type pill)
+- NEW: `src/app/api/thoughts/route.ts` (memory graph query layer)
+

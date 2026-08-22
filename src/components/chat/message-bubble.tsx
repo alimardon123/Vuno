@@ -642,6 +642,38 @@ function MessageBody({
       );
     }
 
+    case 'AgentThought': {
+      const t = p as EventPayloadMap['AgentThought'];
+      // AgentThought events render with a subtle, italic style —
+      // distinguishable from regular messages. Shows the reasoning
+      // behind each agent action. The thought type gets a small pill.
+      const thoughtColor =
+        t.thoughtType === 'doubt' ? 'var(--status-asserted)' :
+        t.thoughtType === 'question' ? 'var(--status-uncertain)' :
+        t.thoughtType === 'hypothesis' ? 'var(--status-believed)' :
+        t.thoughtType === 'conclusion' ? 'var(--status-tested)' :
+        'var(--muted-foreground)';
+      return (
+        <div
+          className="flex items-start gap-2 rounded-md border-l-2 bg-muted/20 px-3 py-2 italic"
+          style={{ borderColor: `color-mix(in oklch, ${thoughtColor} 40%, transparent)` }}
+        >
+          <span
+            className="rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider not-italic"
+            style={{
+              backgroundColor: `color-mix(in oklch, ${thoughtColor} 14%, transparent)`,
+              color: thoughtColor,
+            }}
+          >
+            {t.thoughtType}
+          </span>
+          <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
+            {t.content}
+          </p>
+        </div>
+      );
+    }
+
     default:
       // generic fallback
       return (

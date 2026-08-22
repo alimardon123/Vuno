@@ -25,7 +25,8 @@ export type EventType =
   | 'EscalationResolved'
   | 'AgentInstalled'
   | 'AgentRetired'
-  | 'WikiSectionAuthored';
+  | 'WikiSectionAuthored'
+  | 'AgentThought';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -168,6 +169,14 @@ export interface EventPayloadMap {
   };
   AgentRetired: { agentId: string; reason: string };
   WikiSectionAuthored: { sectionId: string; title: string; body: string; scope: string };
+  AgentThought: {
+    thoughtType: 'observation' | 'hypothesis' | 'conclusion' | 'question' | 'doubt';
+    content: string;                    // the thought text
+    topic: string;                      // what this thought is about (queryable)
+    relatedEventId?: string;            // optional link to another event (graph edge)
+    relatedThoughtId?: string;          // optional link to another thought (graph edge)
+    visibility: 'agent' | 'team' | 'org';  // who can see this thought
+  };
 }
 
 export interface EventRecord<T extends EventType = EventType> {

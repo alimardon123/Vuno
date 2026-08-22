@@ -96,10 +96,54 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
     return {
       ProposalRequested: (ctx: AgentContext): AgentResponse => {
         const trigger = ctx.trigger.payload as { decisionId: string; projectId: string; title: string };
-        // Pick a proposal deterministically based on the decisionId hash, so
-        // different decisions get different proposals.
         const idx = Math.abs(hashString(trigger.decisionId)) % ARCHITECT_PROPOSALS.length;
         const proposal = ARCHITECT_PROPOSALS[idx]!;
+
+        // AgentThought events — the architect reasons aloud BEFORE proposing.
+        // These are visible to other agents (visibility='org'), creating the
+        // shared cognitive space the user asked for.
+        const thoughts: NewEventInput[] = [
+          {
+            type: 'AgentThought',
+            actorType: 'agent',
+            actorAgentId: this.manifest.id,
+            scopeType: 'channel',
+            scopeId: 'ch-storage',
+            payload: {
+              thoughtType: 'observation',
+              content: `The objective asks for sub-50ms p99 at 10k concurrent readers. I've reviewed prior art — RocksDB, LevelDB, Pebble all use LSM-trees. None hit 50ms p99 at this concurrency without tuning.`,
+              topic: 'architecture-selection',
+              visibility: 'org',
+            },
+          },
+          {
+            type: 'AgentThought',
+            actorType: 'agent',
+            actorAgentId: this.manifest.id,
+            scopeType: 'channel',
+            scopeId: 'ch-storage',
+            payload: {
+              thoughtType: 'hypothesis',
+              content: `A memory-mapped LSM-tree with per-SSTable bloom filters should serve reads from memory where possible. B-tree was rejected due to write amplification at scale. Hash index can't do range queries.`,
+              topic: 'architecture-selection',
+              visibility: 'org',
+            },
+          },
+          {
+            type: 'AgentThought',
+            actorType: 'agent',
+            actorAgentId: this.manifest.id,
+            scopeType: 'channel',
+            scopeId: 'ch-storage',
+            payload: {
+              thoughtType: 'conclusion',
+              content: `I'll propose the Mmap-LSM architecture. The key tradeoff is bloom filter memory overhead vs. read performance — I believe it's worth it at this concurrency level.`,
+              topic: 'architecture-selection',
+              visibility: 'org',
+            },
+          },
+        ];
+
         const event: NewEventInput<'ProposalOpened'> = {
           type: 'ProposalOpened',
           actorType: 'agent',
@@ -114,7 +158,6 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
             scopeProjectId: trigger.projectId,
           },
         };
-        // Also post a chat message announcing the proposal
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
           actorType: 'agent',
@@ -125,7 +168,9 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
             body: `Proposal opened: ${proposal.title}. Awaiting review from Security, Performance, and Devil's Advocate.`,
           },
         };
-        return { events: [event, chatEvent], claims: [] };
+        // Thoughts FIRST (so they appear before the proposal in the chat),
+        // then the proposal, then the chat message.
+        return { events: [...thoughts, event, chatEvent], claims: [] };
       },
     };
   }
@@ -151,22 +196,59 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
   protected script() {
     return {
       ProposalOpened: (ctx: AgentContext): AgentResponse => {
-        // Find the ProposalOpened event in the context
         const proposalEvent = ctx.events.find((e) => e.type === 'ProposalOpened');
         if (!proposalEvent) return { events: [], claims: [] };
         const p = proposalEvent.payload as EventPayloadMap['ProposalOpened'];
-        // Heuristic objection based on the proposal body
         const mentionsBloom = p.body.toLowerCase().includes('bloom');
         const mentionsMvcc = p.body.toLowerCase().includes('mvcc');
         const mentionsLsm = p.body.toLowerCase().includes('lsm');
         let claimText = 'The proposed architecture has unverified performance characteristics under concurrent read pressure; memory overhead of auxiliary structures may push the working set beyond RAM.';
+        let thoughtContent = 'The proposal has unverified performance characteristics. Memory overhead of auxiliary structures is a concern.';
         if (mentionsBloom) {
           claimText = 'Bloom filters add ~1.5x memory overhead at 10M keys, which may push working set beyond RAM and cause p99 regression under concurrent read pressure.';
+          thoughtContent = 'The proposal mentions bloom filters. At 10M keys, bloom filters add ~1.5x memory overhead. This could push the working set beyond RAM.';
         } else if (mentionsMvcc) {
           claimText = 'MVCC with copy-on-write may introduce write amplification under sustained write pressure; the adaptive page cache heuristic is unvalidated.';
+          thoughtContent = 'MVCC with copy-on-write is proposed. Write amplification under sustained writes is a concern; the adaptive page cache heuristic is unvalidated.';
         } else if (mentionsLsm) {
           claimText = 'Adaptive compaction switching between size-tiered and leveled strategies may cause transient read latency spikes during strategy transitions.';
+          thoughtContent = 'Adaptive compaction switching between size-tiered and leveled strategies may cause transient read latency spikes during transitions.';
         }
+
+        // AgentThought events — the devil's advocate reasons aloud.
+        // Other agents (especially Peri) can see these thoughts and use them
+        // to inform their own responses.
+        const thoughts: NewEventInput[] = [
+          {
+            type: 'AgentThought',
+            actorType: 'agent',
+            actorAgentId: this.manifest.id,
+            scopeType: 'channel',
+            scopeId: 'ch-storage',
+            payload: {
+              thoughtType: 'observation',
+              content: thoughtContent,
+              topic: 'bloom-filters',
+              relatedEventId: proposalEvent.id,
+              visibility: 'org',
+            },
+          },
+          {
+            type: 'AgentThought',
+            actorType: 'agent',
+            actorAgentId: this.manifest.id,
+            scopeType: 'channel',
+            scopeId: 'ch-storage',
+            payload: {
+              thoughtType: 'doubt',
+              content: 'I should raise this as an objection — the memory/performance tradeoff is unverified. Peri should benchmark this.',
+              topic: 'bloom-filters',
+              relatedEventId: proposalEvent.id,
+              visibility: 'org',
+            },
+          },
+        ];
+
         const event: NewEventInput<'ObjectionRaised'> = {
           type: 'ObjectionRaised',
           actorType: 'agent',
@@ -185,11 +267,9 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
           actorAgentId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
-          payload: {
-            body: `Objection raised: ${claimText}`,
-          },
+          payload: { body: `Objection raised: ${claimText}` },
         };
-        return { events: [event, chatEvent], claims: [] };
+        return { events: [...thoughts, event, chatEvent], claims: [] };
       },
     };
   }
