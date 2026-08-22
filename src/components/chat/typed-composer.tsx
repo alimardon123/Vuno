@@ -138,6 +138,36 @@ export function TypedComposer({ channelId }: { channelId: string }) {
     }
   }
 
+  async function postDebate(title: string) {
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/debate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title || undefined }),
+      });
+      const data = (await res.json()) as { ok: boolean; decisionId?: string; eventsAppended?: number; message?: string; error?: string };
+      if (!data.ok) throw new Error(data.error ?? 'Debate failed');
+      // Close any dialog/composer state first, then defer the chat refresh
+      // to avoid the React 19 Dialog close race.
+      setTimeout(() => {
+        bumpChatNonce();
+        toast({
+          title: 'Debate completed',
+          description: data.message,
+        });
+      }, 0);
+    } catch (e) {
+      toast({
+        title: 'Debate failed',
+        description: e instanceof Error ? e.message : String(e),
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (type === 'Message') {
@@ -145,19 +175,20 @@ export function TypedComposer({ channelId }: { channelId: string }) {
       void postMessage(body.trim());
       return;
     }
-    // Non-Message types — POST to /api/events with the structured payload.
+    // Proposal — triggers the full agent debate chain via /api/debate.
+    // Per the user's direction: no separate "Run debate" button.
+    // Filing a proposal IS how you start a debate — agents respond naturally.
     if (type === 'Proposal') {
       if (!proposalTitle.trim() || !proposalBody.trim()) return;
-      void postTypedEvent('ProposalOpened', {
-        decisionId: `dec-${Date.now().toString(36)}`,
-        title: proposalTitle.trim(),
-        body: proposalBody.trim(),
-        scopeProjectId: 'proj-storage-engine',
-      });
+      // v1: the debate endpoint uses its own proposal title; the body field is
+      // ignored by the simulated architect (it picks from a rotation). In v2
+      // with real LLMs, the body will be passed through.
+      void postDebate(`${proposalTitle.trim()} — ${proposalBody.trim().slice(0, 80)}`);
       setProposalTitle('');
       setProposalBody('');
       return;
     }
+    // Non-Proposal typed events — POST to /api/events with the structured payload.
     if (type === 'Objection') {
       if (!claimText.trim()) return;
       void postTypedEvent('ObjectionRaised', {
@@ -317,7 +348,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
               ) : (
                 <Send className="size-3.5" aria-hidden />
               )}
-              {isMessage ? 'Post' : `Append ${type}`}
+              {isMessage ? 'Post' : type === 'Proposal' ? 'File proposal' : `Append ${type}`}
             </Button>
           </div>
         </div>
@@ -360,7 +391,11 @@ function TypedForm(props: TypedFormProps) {
     <div className="rounded-md border bg-card p-3">
       <div className="mb-2 flex items-center gap-1.5 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
         <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary">{props.type}</span>
-        <span>· structured form — appends to spine</span>
+        {props.type === 'Proposal' ? (
+          <span>· filing a proposal triggers the agent debate chain</span>
+        ) : (
+          <span>· appends to spine</span>
+        )}
       </div>
       <div className="grid gap-2">
         {props.type === 'Proposal' ? (

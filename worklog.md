@@ -411,3 +411,128 @@ Task: Rename product to Vuno, rebuild left rail as Teams-style three-panel switc
 - MODIFIED: `src/lib/seed/seed.ts` (added Bob — Kai's personal assistant)
 - BULK RENAMED: 42 files (AI Org OS → Vuno)
 
+
+---
+Task ID: 10 (Round 2 — Buzz-inspired UI overhaul + remove Run debate button)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Research Buzz from Block, shift to warm cream/mustard palette, restructure left rail to icon-rail + 5 panels (Chats/Channels/Org/HR/Settings), remove "Run debate" button (make Proposal composer trigger the debate), new Vuno logo, framer-motion animations.
+
+## Current project status assessment
+- Round 1 (Task ID 9) renamed to Vuno, built 3-tab left rail, agent-as-colleague badges. VLM 8.5/10.
+- User gave deeper direction: research Buzz from Block (github.com/block/buzz), shift to warm palette, restructure to icon-rail with separate Channels and HR panels, remove the "Run debate" button (think deep on it), new product icon, improve animations.
+
+## Deep research on Buzz from Block
+- Used VLM to analyze the user's reference screenshot — confirmed it's Buzz from Block.
+- Used web-search to find Buzz details. Then fetched the Buzz GitHub README (raw.githubusercontent.com/block/buzz/main/README.md).
+- Key findings:
+  - **Buzz is built on Nostr** — every message/reaction/workflow/review/git event is a signed event in one log. This validates Vuno's event-spine architecture.
+  - **Buzz uses "a suspicious number of Rust crates"** — confirms the user's instinct to use Rust for the substrate. Buzz already does it.
+  - **Buzz is Tauri + React desktop app** — React UI (which we have), Rust backend (which we're moving to).
+  - **Buzz has ACP harness** (Goose, Codex, Claude Code) — the ACP the user mentioned. Buzz already supports it.
+  - **Buzz's design language** (from VLM): WARM palette — cream sidebar (#FBF9F1), white content, mustard/gold active states (#EFEBD6), charcoal text. NOT cold blue/emerald. Clean Inter typography. Rounded friendly icons. Channel-based with `#` prefix. DMs at bottom. User profile pinned bottom-left.
+  - **Buzz's org structure** is flat — communities (workspaces) with channels. User said "Buzz is kind of close to what I want in UI side, though it is not really fully satisfy my needs in terms of org structure." So: ADOPT Buzz's warm visual design, KEEP Vuno's richer org structure (org/department/team/channels).
+
+## Deep thinking on the "Run debate" button
+- User said: "There is no specific run debate button I guess. But you can double check and think deep on that."
+- **Conclusion: REMOVE the "Run debate" button.** It was a demo crutch. In a real org — and in Buzz — you don't press a "run debate" button. Debates happen organically when someone files a proposal and colleagues respond. Buzz's framing: "Agents are members, not bots."
+- **Right UX: filing a Proposal via the typed composer triggers the agent debate chain automatically.** The debate emerges from the work, not from a button. This is the deep answer.
+
+## Goals / completed modifications / verification results
+
+### 1. Color palette shift to Buzz-inspired warm cream/mustard (Task b1)
+- `src/app/globals.css` (REWRITTEN): warm cream backgrounds, mustard/gold accent (replaces emerald), warm dark mode (not cold blue-black). Recalibrated all 5 status colors for warm palette.
+  - Light mode (primary, Buzz-inspired): cream sidebar oklch(0.96 0.01 85), white content, mustard primary oklch(0.52 0.13 70), charcoal text oklch(0.18 0.006 60), warm grey muted-foreground oklch(0.48 0.01 60)
+  - Dark mode (warm dark): warm charcoal oklch(0.15 0.008 60) — NOT cold blue. Warm off-white text. Mustard accent.
+  - Status colors: amber (asserted), sky (believed — cool contrast), warm green (tested), warm red-orange (falsified), warm grey (uncertain)
+  - Added framer-motion-friendly CSS animations: msg-fade-in, panel-slide-in, status-pulse
+  - Darkened gold slightly for WCAG AA per VLM feedback (oklch 0.58 → 0.52)
+- `src/app/layout.tsx`: defaultTheme changed from "dark" → "light" (Buzz is light-primary)
+
+### 2. Restructure left rail to icon-rail + content panel (Task b2)
+- `src/store/app-store.ts`: LeftPanel union expanded to 'chats' | 'channels' | 'org' | 'hr' | 'settings'
+- `src/components/app-shell/left-rail.tsx` (REWRITTEN): icon rail (48px wide) + content panel (240px). 5 vertical icon tabs with hover tooltips. This is the Slack/Teams/Discord pattern — sleek, scalable, lets us add panels without crowding tabs.
+  - Icon rail: Chats (MessageSquare) / Channels (Hash) / Org (Building2) / HR (Users) / Settings (SettingsIcon)
+  - Each icon has a hover tooltip with the panel name
+  - Active icon: primary background + primary-foreground
+  - Inactive icon: muted-foreground, hover shows sidebar-accent
+
+### 3. New Channels panel (Task b3)
+- `src/components/left-rail/channels-panel.tsx` (NEW): separate panel for all channels (with `#` prefix). Per user: "channels can be any org level too, or dynamic. Each team/department get one default channel as always. But we can create separate channels and add any department, team or user (human/agent)."
+  - Search input + "Create channel" button at top (v1: placeholder, full creation in a later slice)
+  - All channels list (sorted by name), each with `#` prefix, team name as subtitle
+  - Active channel: sidebar-accent background + font-medium
+
+### 4. HR as separate top-level panel (Task b4)
+- `src/components/left-rail/hr-panel.tsx` (NEW): per user "Can you put HR as separate pane left side below too. It will be main separate point."
+  - Quick stats at top: active agents, open risks, gates passed (3-col grid)
+  - Compact member roster (all humans + agents with badges)
+  - "Open HR dashboard" button (primary, switches to the hr view)
+  - "Install agent" button at bottom
+
+### 5. Removed "Run debate" button, Proposal triggers debate (Task b5)
+- `src/components/chat/chat-view.tsx`: removed RunDebateButton import and rendering from chat header
+- `src/components/chat/typed-composer.tsx`:
+  - Added `postDebate(title)` function that POSTs to /api/debate
+  - Proposal submit now calls postDebate (not postTypedEvent) — filing a proposal triggers the full agent debate chain
+  - Updated form label: "filing a proposal triggers the agent debate chain" (vs the old "appends to spine" for other types)
+  - Submit button label for Proposal: "File proposal" (vs "Append X" for other types)
+  - Defers the chat nonce bump + toast via setTimeout(0) to avoid the React 19 Dialog close race
+- Verified: filed a test proposal via the composer, the debate chain ran end-to-end (15 chat messages: architect proposed, security reviewed, devils_advocate objected, perf ran benchmark, claim falsified, gate blocked, decision recorded, HR retrospective)
+
+### 6. New Vuno product icon (Task b6)
+- `public/vuno-logo.svg` (NEW): custom geometric mark — two overlapping rounded "V" shapes forming an "M", with a center dot. Represents human + agent as colleagues meeting at the event spine. Mustard/gold gradient on transparent background.
+- `src/components/app-shell/top-bar.tsx`: replaced the Boxes lucide icon with the custom Vuno logo SVG (`<img src="/vuno-logo.svg">`)
+
+### 7. Framer-motion animations (Task b7)
+- `src/app/globals.css`: added CSS keyframe animations:
+  - `animate-msg-in`: messages fade-in + slide-up (0.2s ease-out)
+  - `animate-panel-in`: panel content slides in from left (0.15s ease-out)
+  - `animate-status-pulse`: status pulse for blocked gates (2s ease-in-out infinite)
+- All animations respect prefers-reduced-motion
+- (Note: full framer-motion component integration is a later slice; CSS animations provide the immediate polish)
+
+## Verification results
+- **VLM analysis of new warm Vuno UI: 8.5/10** — "sophisticated pivot toward a more inviting, human enterprise aesthetic... evokes the cozy, approachable aesthetic of Buzz from Block."
+  - ✅ Warm palette feels like Buzz (cream sidebar, mustard/gold accents)
+  - ✅ Icon-rail + content panel layout is "brilliant for muscle memory" and "sleek and highly scalable"
+  - ✅ Custom Vuno logo is visible and distinctive
+  - ✅ Agent badges retain excellent contrast on warm background
+  - Improvement suggestions for future: warm glass depth (subtle texture), darker gold for accessibility (applied), system message differentiation, sidebar footer organization
+- Agent Browser QA: all 5 panels render correctly. Filed a test proposal via the typed composer → debate chain ran end-to-end (15 chat messages with the full falsification arc). Custom Vuno logo renders in top bar.
+- Lint passes cleanly.
+- Dev server runs without runtime errors.
+
+## Unresolved issues or risks, and priority recommendations for the next phase
+
+### Known issues / incomplete items
+1. **Create channel dialog not yet implemented** — the "Create channel" button in the Channels panel is a placeholder. Full channel creation (with member selection: departments, teams, users) is a later slice.
+2. **DM routing still not implemented** — clicking a DM opens the main channel. Per-member private chat scope is a later slice.
+3. **Personal assistant @-mention routing** — Bob can be pinned and his badge shows, but @-mentioning him in a channel doesn't yet route to him.
+4. **No unread indicators** (VLM suggestion from Round 1, still open) — no red dots or bold text for unread threads.
+5. **No timestamp grouping** (VLM suggestion) — every message shows "X minutes ago" individually.
+6. **System messages use the same avatar style** (VLM suggestion) — should use a distinct treatment.
+7. **Framer-motion component integration** — CSS animations are in place, but full framer-motion Motion components (for richer page transitions, layout animations) is a later slice.
+8. **Live-debate React 19 Dialog close race** — the setTimeout(0) fix is applied in the composer; should verify the run-debate-button dialog (if re-used) is also fixed. The button itself is removed, so this is moot for the chat header.
+
+### Priority recommendations for next phase
+1. **Round 3: Real-time chat via socket.io mini-service (port 3003)** — replace 5s polling with WebSocket push. Live presence + typing indicators. Foundation for concurrent agent runtime.
+2. **Round 4: Rust substrate service (port 3030)** — new `mini-services/vuno-substrate/` Rust project. Owns the event spine writer. Next.js API routes proxy to it. (Buzz validates this approach — they use Rust crates.)
+3. **Round 5: Concurrent agent runtime in Rust** — event loop in the Rust service. On every new event, find matching agents, invoke them concurrently via `tokio::join_all`. Each agent response appends events → triggers more agents → cascade. Streamed to UI via socket.io. THIS IS THE HEADLINE.
+4. **Round 6: Real-LLM agent adapter via MCP** — implement AgentAdapter in Rust using the `rmcp` crate. Drop-in alongside simulated adapters. (Buzz has ACP harness for Goose, Codex, Claude Code — same thesis.)
+5. **Round 7: ACP for agent-to-agent comms** — adopt ACP for structured agent-to-agent messages.
+6. **Bonus: Create channel dialog** with member selection (departments, teams, users).
+7. **Bonus: DM routing** — per-member private chat scope.
+8. **Bonus: Unread indicators + timestamp grouping** (VLM suggestions).
+
+### Files created/modified this round
+- NEW: `src/components/left-rail/channels-panel.tsx` (90 lines)
+- NEW: `src/components/left-rail/hr-panel.tsx` (170 lines)
+- NEW: `public/vuno-logo.svg` (custom geometric mark)
+- REWRITTEN: `src/app/globals.css` (warm cream/mustard palette, framer-motion CSS animations)
+- REWRITTEN: `src/components/app-shell/left-rail.tsx` (icon-rail + 5-panel switcher)
+- REWRITTEN: `src/components/app-shell/top-bar.tsx` (custom Vuno logo, removed Boxes icon)
+- MODIFIED: `src/store/app-store.ts` (LeftPanel expanded: chats | channels | org | hr | settings)
+- MODIFIED: `src/app/layout.tsx` (defaultTheme: dark → light)
+- MODIFIED: `src/components/chat/chat-view.tsx` (removed RunDebateButton)
+- MODIFIED: `src/components/chat/typed-composer.tsx` (Proposal now triggers /api/debate, "File proposal" button label, "filing a proposal triggers the agent debate chain" hint)
+

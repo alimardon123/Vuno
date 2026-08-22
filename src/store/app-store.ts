@@ -6,8 +6,8 @@ import type { ClaimStatus } from '@/lib/events/types';
 
 export type ActiveView = 'chat' | 'decision' | 'ledger' | 'agents' | 'wiki' | 'hr';
 
-// Left-rail panel switcher (Teams-style: Chats / Org / Settings)
-export type LeftPanel = 'chats' | 'org' | 'settings';
+// Left-rail panel switcher (Buzz/Slack-style icon rail: Chats / Channels / Org / HR / Settings)
+export type LeftPanel = 'chats' | 'channels' | 'org' | 'hr' | 'settings';
 
 export interface LedgerFilters {
   status: ClaimStatus[]; // multi-select; empty = all

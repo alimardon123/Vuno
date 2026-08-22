@@ -1,9 +1,9 @@
 // Vuno — Top bar
-// Logo, tenant switcher, org switcher, theme toggle, help.
+// Custom Vuno logo, tenant switcher, org switcher, theme toggle, help.
 
 'use client';
 
-import { HelpCircle, Boxes } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -27,12 +27,15 @@ export function TopBar({ tenantName, orgName, onHelp }: TopBarProps) {
       role="banner"
     >
       <div className="flex items-center gap-2">
-        <div
-          className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground"
+        {/* Custom Vuno logo — two overlapping shapes (human + agent) */}
+        <img
+          src="/vuno-logo.svg"
+          alt=""
           aria-hidden
-        >
-          <Boxes className="size-4" />
-        </div>
+          className="size-7"
+          width={28}
+          height={28}
+        />
         <div className="flex flex-col leading-none">
           <span className="text-sm font-semibold tracking-tight">
             Vuno

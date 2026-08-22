@@ -54,95 +54,105 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── Sleek dark mode (primary) ─────────────────────────────────────────────
-   Charcoal base with the faintest blue undertone. Single emerald accent.
-   Status colors are load-bearing: every claim/gate status has a distinct hue. */
+/* ─── Buzz-inspired WARM palette (light mode primary) ─────────────────────
+   Block's Buzz uses warm cream + mustard/gold accents, not cold blue.
+   Per VLM analysis of the Buzz screenshot:
+   - Sidebar: warm off-white/cream (#FBF9F1)
+   - Content: pure white
+   - Active: muted mustard tint (#EFEBD6)
+   - Text: dark charcoal
+   - Accent: muted gold/mustard
+   This replaces the previous cold charcoal + emerald palette. */
 :root {
   --radius: 0.5rem;
 
-  --background: oklch(0.13 0.005 250);
-  --foreground: oklch(0.96 0 0);
-  --card: oklch(0.16 0.006 250);
-  --card-foreground: oklch(0.96 0 0);
-  --popover: oklch(0.18 0.006 250);
-  --popover-foreground: oklch(0.96 0 0);
-  --primary: oklch(0.70 0.14 165);
-  --primary-foreground: oklch(0.13 0.005 250);
-  --secondary: oklch(0.20 0.005 250);
-  --secondary-foreground: oklch(0.96 0 0);
-  --muted: oklch(0.20 0.005 250);
-  --muted-foreground: oklch(0.72 0.012 250);
-  --accent: oklch(0.22 0.006 250);
-  --accent-foreground: oklch(0.96 0 0);
-  --destructive: oklch(0.65 0.20 25);
-  --border: oklch(0.25 0.005 250 / 60%);
-  --input: oklch(0.22 0.005 250);
-  --ring: oklch(0.70 0.14 165 / 40%);
+  /* Warm cream backgrounds */
+  --background: oklch(0.98 0.006 85);
+  --foreground: oklch(0.18 0.006 60);
+  --card: oklch(1 0.003 85);
+  --card-foreground: oklch(0.18 0.006 60);
+  --popover: oklch(1 0.003 85);
+  --popover-foreground: oklch(0.18 0.006 60);
 
-  --chart-1: oklch(0.70 0.14 165);
-  --chart-2: oklch(0.70 0.13 60);
-  --chart-3: oklch(0.65 0.20 25);
-  --chart-4: oklch(0.70 0.14 200);
-  --chart-5: oklch(0.66 0.02 250);
+  /* Mustard/gold accent (replaces emerald) — darkened slightly for WCAG AA */
+  --primary: oklch(0.52 0.13 70);
+  --primary-foreground: oklch(0.99 0.003 85);
 
-  --sidebar: oklch(0.15 0.005 250);
-  --sidebar-foreground: oklch(0.96 0 0);
-  --sidebar-primary: oklch(0.70 0.14 165);
-  --sidebar-primary-foreground: oklch(0.13 0.005 250);
-  --sidebar-accent: oklch(0.20 0.005 250);
-  --sidebar-accent-foreground: oklch(0.96 0 0);
-  --sidebar-border: oklch(0.22 0.005 250 / 60%);
-  --sidebar-ring: oklch(0.70 0.14 165 / 40%);
+  --secondary: oklch(0.94 0.012 85);
+  --secondary-foreground: oklch(0.18 0.006 60);
+  --muted: oklch(0.94 0.012 85);
+  --muted-foreground: oklch(0.48 0.01 60);
+  --accent: oklch(0.92 0.025 85);
+  --accent-foreground: oklch(0.18 0.006 60);
+  --destructive: oklch(0.55 0.20 25);
+  --border: oklch(0.88 0.008 60 / 50%);
+  --input: oklch(0.92 0.012 85);
+  --ring: oklch(0.58 0.14 75 / 40%);
 
-  /* claim status colors — load-bearing */
-  --status-asserted: oklch(0.70 0.13 60);     /* amber */
-  --status-believed: oklch(0.70 0.14 200);   /* sky */
-  --status-tested: oklch(0.70 0.14 165);      /* emerald */
-  --status-falsified: oklch(0.65 0.20 25);    /* red-orange */
-  --status-uncertain: oklch(0.66 0.02 250);   /* gray */
+  --chart-1: oklch(0.58 0.14 75);
+  --chart-2: oklch(0.60 0.13 60);
+  --chart-3: oklch(0.55 0.20 25);
+  --chart-4: oklch(0.55 0.13 230);
+  --chart-5: oklch(0.50 0.01 60);
+
+  --sidebar: oklch(0.96 0.01 85);
+  --sidebar-foreground: oklch(0.18 0.006 60);
+  --sidebar-primary: oklch(0.58 0.14 75);
+  --sidebar-primary-foreground: oklch(0.99 0.003 85);
+  --sidebar-accent: oklch(0.90 0.03 85);
+  --sidebar-accent-foreground: oklch(0.18 0.006 60);
+  --sidebar-border: oklch(0.88 0.008 60 / 40%);
+  --sidebar-ring: oklch(0.58 0.14 75 / 40%);
+
+  /* claim status colors — load-bearing, recalibrated for warm light bg */
+  --status-asserted: oklch(0.55 0.13 60);     /* amber */
+  --status-believed: oklch(0.50 0.13 230);    /* sky (cool contrast) */
+  --status-tested: oklch(0.50 0.12 145);      /* warm green */
+  --status-falsified: oklch(0.50 0.20 25);    /* warm red-orange */
+  --status-uncertain: oklch(0.45 0.01 60);    /* warm grey */
 }
 
-/* Sleek light mode — same palette, inverted L values. Accent stays emerald. */
-.light {
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.15 0.005 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.005 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.005 250);
-  --primary: oklch(0.55 0.14 165);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.15 0.005 250);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.45 0.01 250);
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0.15 0.005 250);
-  --destructive: oklch(0.55 0.22 25);
-  --border: oklch(0.90 0 0);
-  --input: oklch(0.90 0 0);
-  --ring: oklch(0.55 0.14 165 / 40%);
+/* Warm dark mode — not cold blue-black, but warm charcoal */
+.dark {
+  --background: oklch(0.15 0.008 60);
+  --foreground: oklch(0.94 0.008 80);
+  --card: oklch(0.18 0.008 60);
+  --card-foreground: oklch(0.94 0.008 80);
+  --popover: oklch(0.20 0.008 60);
+  --popover-foreground: oklch(0.94 0.008 80);
+  --primary: oklch(0.70 0.14 75);
+  --primary-foreground: oklch(0.15 0.008 60);
+  --secondary: oklch(0.22 0.008 60);
+  --secondary-foreground: oklch(0.94 0.008 80);
+  --muted: oklch(0.22 0.008 60);
+  --muted-foreground: oklch(0.68 0.01 60);
+  --accent: oklch(0.25 0.012 75);
+  --accent-foreground: oklch(0.94 0.008 80);
+  --destructive: oklch(0.62 0.20 25);
+  --border: oklch(0.25 0.008 60 / 50%);
+  --input: oklch(0.22 0.008 60);
+  --ring: oklch(0.70 0.14 75 / 40%);
 
-  --chart-1: oklch(0.55 0.14 165);
-  --chart-2: oklch(0.65 0.13 60);
-  --chart-3: oklch(0.55 0.20 25);
-  --chart-4: oklch(0.55 0.14 200);
-  --chart-5: oklch(0.55 0.02 250);
+  --chart-1: oklch(0.70 0.14 75);
+  --chart-2: oklch(0.70 0.13 60);
+  --chart-3: oklch(0.65 0.20 25);
+  --chart-4: oklch(0.70 0.13 230);
+  --chart-5: oklch(0.66 0.01 60);
 
-  --sidebar: oklch(0.98 0 0);
-  --sidebar-foreground: oklch(0.15 0.005 250);
-  --sidebar-primary: oklch(0.55 0.14 165);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.94 0 0);
-  --sidebar-accent-foreground: oklch(0.15 0.005 250);
-  --sidebar-border: oklch(0.90 0 0);
-  --sidebar-ring: oklch(0.55 0.14 165 / 40%);
+  --sidebar: oklch(0.16 0.008 60);
+  --sidebar-foreground: oklch(0.94 0.008 80);
+  --sidebar-primary: oklch(0.70 0.14 75);
+  --sidebar-primary-foreground: oklch(0.15 0.008 60);
+  --sidebar-accent: oklch(0.24 0.012 75);
+  --sidebar-accent-foreground: oklch(0.94 0.008 80);
+  --sidebar-border: oklch(0.25 0.008 60 / 40%);
+  --sidebar-ring: oklch(0.70 0.14 75 / 40%);
 
-  --status-asserted: oklch(0.55 0.13 60);
-  --status-believed: oklch(0.55 0.14 200);
-  --status-tested: oklch(0.55 0.14 165);
-  --status-falsified: oklch(0.55 0.20 25);
-  --status-uncertain: oklch(0.55 0.02 250);
+  --status-asserted: oklch(0.70 0.13 60);
+  --status-believed: oklch(0.70 0.13 230);
+  --status-tested: oklch(0.70 0.14 145);
+  --status-falsified: oklch(0.65 0.20 25);
+  --status-uncertain: oklch(0.66 0.01 60);
 }
 
 @layer base {
@@ -153,13 +163,12 @@
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
   }
-  /* Tighter line height for dense chat / ledger surfaces */
   .dense {
     line-height: 1.375;
   }
 }
 
-/* Custom scrollbar styling — denser and more elegant than the default */
+/* Custom scrollbar — warm and elegant */
 .scrollbar-sleek::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -168,14 +177,14 @@
   background: transparent;
 }
 .scrollbar-sleek::-webkit-scrollbar-thumb {
-  background: oklch(0.30 0.005 250 / 60%);
+  background: oklch(0.30 0.008 60 / 50%);
   border-radius: 4px;
 }
 .scrollbar-sleek::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.40 0.005 250 / 80%);
+  background: oklch(0.40 0.01 60 / 70%);
 }
 
-/* Status pulse animation for the blocked-gate alert */
+/* Status pulse animation for blocked-gate alerts */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
@@ -184,8 +193,28 @@
   animation: status-pulse 2s ease-in-out infinite;
 }
 
+/* Framer-motion-friendly fade-in for messages */
+@keyframes msg-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-msg-in {
+  animation: msg-fade-in 0.2s ease-out;
+}
+
+/* Panel transition */
+@keyframes panel-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-panel-in {
+  animation: panel-slide-in 0.15s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-status-pulse {
+  .animate-status-pulse,
+  .animate-msg-in,
+  .animate-panel-in {
     animation: none;
   }
 }
