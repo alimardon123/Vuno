@@ -1447,3 +1447,84 @@ Task: Add bidirectional thought graph edges (replyCount), wire the debate endpoi
 - MODIFIED: `src/app/api/thoughts/route.ts` (bidirectional replyCount)
 - MODIFIED: `src/app/api/debate/route.ts` (streamEvents now uses Rust substrate with Prisma fallback)
 
+
+---
+Task ID: 21 (Round 13 — Bidirectional thought edges + debate wired to Rust + Thought Graph view)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Add bidirectional replyCount to thoughts, wire the debate endpoint to use the Rust substrate, build the Thought Graph visualization view. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- VLM from Round 12 said: "Add concurrency timeline view" for 10/10
+- The /api/thoughts endpoint had forward edges (relatedThoughtId) but no reverse edges (replyCount)
+- The debate endpoint still used Prisma directly — the Rust substrate (port 3030) was running but not integrated with the debate chain
+- The user wanted a "memory graph" — there was no visual representation of the thought graph
+
+## 💻 Action (Step 2)
+
+### 1. Bidirectional thought graph edges (replyCount)
+- `src/app/api/thoughts/route.ts`: added `replyCount` to each thought — scans all thoughts for `relatedThoughtId` references and counts how many point to each thought. This makes the graph bidirectional:
+  - Forward: `relatedThoughtId` (this thought references another)
+  - Reverse: `replyCount` (how many thoughts reference this one)
+- Verified: Aris's conclusion thoughts have `replyCount=2` (Devi's observation + doubt both reference them)
+
+### 2. Debate wired to Rust substrate
+- `src/app/api/debate/route.ts`: rewrote `streamEvents()` to:
+  - Check if Rust substrate (port 3030) is available via health check
+  - If available: `POST http://localhost:3030/events` — Rust owns the spine append
+  - If unavailable: falls back to Prisma (EventSpine)
+  - Either way: broadcasts via socket.io for real-time UI update
+  - Handles camelCase field names + createdAt integer → ISO string conversion
+- The entire concurrent debate chain now goes through Rust — this is the user's explicit ask
+
+### 3. Thought Graph view (the memory graph visualization)
+- `src/components/thoughts/thought-graph-view.tsx` (NEW, 200+ lines):
+  - Fetches from `/api/thoughts` endpoint (which now includes `replyCount`)
+  - Groups thoughts by topic (e.g., "Architecture Selection" with 12 thoughts)
+  - Each thought node shows: avatar, agent name, thought-type pill (color-coded), content, timestamp
+  - Forward edge indicator: "→ replying to X's hypothesis" (if relatedThoughtId set)
+  - Reverse edge badge: "N replies" with Reply icon (if replyCount > 0)
+  - Connector lines between thoughts in the same topic group
+  - Empty state: "No thoughts yet" with explanation
+  - Header: "Thought Graph — The cognitive web" with thought count + edge count
+- Wired into the app:
+  - `src/store/app-store.ts`: added 'thoughts' to ActiveView union
+  - `src/components/app-shell/app-shell.tsx`: added ThoughtGraphView to the main view router
+  - `src/components/left-rail/settings-panel.tsx`: added "Thought Graph" nav button (Brain icon) between Project Wiki and HR / Meta
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Thought Graph verified: 20 thoughts, 4 edges, grouped by topic ("Architecture Selection" with 12 thoughts)
+- Bidirectional edges verified: Aris's conclusions have replyCount=2, Devi's thoughts have relatedThoughtId pointing to them
+- Debate through Rust verified: 28 events appended via Rust substrate
+- VLM: 7/10 — "strong cognitive ledger implementation... perfect for reading how an agent reasoned step-by-step"
+  - 10/10 suggestion: add a "Topology" view (force-directed node-link diagram) alongside the current "Timeline" view
+
+## 💡 Information (Step 4)
+- The Thought Graph view makes the memory graph VISIBLE — the user can see how agents' reasoning connects
+- The bidirectional edges (replyCount) let users traverse the graph in both directions
+- The debate chain now goes through Rust — the user's explicit ask for Rust is delivered in the core operation
+- VLM feedback: the current view is a "Timeline" — a "Topology" (force-directed graph) view would make it a 10/10
+
+## 🔧 Adjustment (Step 5)
+- All working. Thought Graph renders, bidirectional edges work, debate goes through Rust.
+- Next: Topology view (force-directed graph with D3.js or react-force-graph), memory tiers 2-3, real-LLM via MCP.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | Thought Graph is a projection of existing events — no new storage |
+| **Powerful** | Visual cognitive web with bidirectional edges |
+| **Performant** | Debate through Rust (compiled binary, no GC) |
+| **Scalable** | Thoughts grouped by topic, can handle thousands |
+| **Efficient** | replyCount computed in one pass, no extra queries |
+| **Beautiful** | Thought-type pills, edge indicators, connector lines |
+| **Functional** | Memory graph is now VISIBLE — the user's ask delivered |
+
+### Files created/modified this round
+- NEW: `src/components/thoughts/thought-graph-view.tsx` (200+ lines)
+- MODIFIED: `src/app/api/thoughts/route.ts` (bidirectional replyCount)
+- MODIFIED: `src/app/api/debate/route.ts` (streamEvents uses Rust substrate with Prisma fallback)
+- MODIFIED: `src/store/app-store.ts` (added 'thoughts' to ActiveView)
+- MODIFIED: `src/components/app-shell/app-shell.tsx` (added ThoughtGraphView to router)
+- MODIFIED: `src/components/left-rail/settings-panel.tsx` (added Thought Graph nav button)
+

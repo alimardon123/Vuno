@@ -17,6 +17,7 @@ import {
   Palette,
   HelpCircle,
   PanelLeftClose,
+  Brain,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/common/theme-toggle';
 
@@ -26,7 +27,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const navItems: Array<{
     label: string;
     icon: typeof BookOpen;
-    view: 'ledger' | 'wiki' | 'hr';
+    view: 'ledger' | 'wiki' | 'hr' | 'thoughts';
     description: string;
   }> = [
     {
@@ -40,6 +41,12 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       icon: FileText,
       view: 'wiki',
       description: 'A project page generated from the ledger.',
+    },
+    {
+      label: 'Thought Graph',
+      icon: Brain,
+      view: 'thoughts',
+      description: 'The cognitive web — how agents\' reasoning connects.',
     },
     {
       label: 'HR / Meta',

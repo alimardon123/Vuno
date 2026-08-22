@@ -15,6 +15,7 @@ import { LedgerView } from '@/components/ledger/ledger-view';
 import { AgentsView } from '@/components/agents/agents-view';
 import { WikiView } from '@/components/wiki/wiki-view';
 import { HRView } from '@/components/hr/hr-view';
+import { ThoughtGraphView } from '@/components/thoughts/thought-graph-view';
 import { InstallAgentDialog } from '@/components/agents/install-agent-dialog';
 import { FileObjectiveDialog } from '@/components/objective/file-objective-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -157,6 +158,7 @@ export function AppShell() {
           {activeView === 'agents' ? <AgentsView /> : null}
           {activeView === 'wiki' ? <WikiView /> : null}
           {activeView === 'hr' ? <HRView /> : null}
+          {activeView === 'thoughts' ? <ThoughtGraphView /> : null}
         </main>
 
         {/* Right rail — hidden on mobile; sheet-triggered */}

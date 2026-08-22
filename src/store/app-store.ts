@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import type { ClaimStatus } from '@/lib/events/types';
 
-export type ActiveView = 'chat' | 'decision' | 'ledger' | 'agents' | 'wiki' | 'hr';
+export type ActiveView = 'chat' | 'decision' | 'ledger' | 'agents' | 'wiki' | 'hr' | 'thoughts';
 
 // Left-rail panel switcher (Buzz/Slack-style icon rail: Chats / Channels / Org / HR / Settings)
 export type LeftPanel = 'chats' | 'channels' | 'org' | 'hr' | 'settings';
