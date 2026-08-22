@@ -135,7 +135,7 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4 p-2">
           {/* Pinned personal assistant */}
           {personalAssistants.length > 0 ? (

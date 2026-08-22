@@ -123,7 +123,7 @@ export function ChannelDetailsContent({
         ) : null}
       </div>
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4 p-4">
           {eventsRes.loading ? (
             <div className="flex flex-col gap-2">

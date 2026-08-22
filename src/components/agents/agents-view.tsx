@@ -55,7 +55,7 @@ export function AgentsView() {
         </Button>
       </header>
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         {agentsRes.loading ? (
           <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (

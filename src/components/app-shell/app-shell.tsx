@@ -150,7 +150,7 @@ export function AppShell() {
         </aside>
 
         {/* Main content — scrolls internally */}
-        <main className="flex-1 overflow-hidden" role="main">
+        <main className="h-full min-h-0 flex-1 overflow-hidden" role="main">
           {activeView === 'chat' ? <ChatView /> : null}
           {activeView === 'decision' ? <DecisionView /> : null}
           {activeView === 'ledger' ? <LedgerView /> : null}

@@ -86,7 +86,7 @@ export function ChannelsPanel({ onClose }: { onClose?: () => void }) {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4 p-2">
           <section aria-label="All channels">
             <div className="mb-1 flex items-center justify-between px-2">

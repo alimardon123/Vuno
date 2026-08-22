@@ -69,7 +69,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
         </div>
       ) : null}
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-3 p-2">
           <section aria-label="App views">
             <div className="mb-1 px-2">

@@ -198,7 +198,7 @@ export function DecisionView() {
         </p>
       </header>
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4 p-4">
           {/* Top: 2-column layout */}
           <div className="grid gap-4 lg:grid-cols-2">

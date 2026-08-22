@@ -201,7 +201,7 @@ export function WikiView() {
         </div>
       </header>
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
           {/* Objective summary */}
           {wiki.objective ? (

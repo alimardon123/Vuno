@@ -1203,3 +1203,48 @@ Task: Update all docs (replace "AI Organization OS" → "Vuno"), wire Next.js AP
 - MODIFIED: `src/app/api/events/route.ts` (rewritten: Rust proxy with Prisma fallback)
 - MODIFIED: `mini-services/vuno-substrate/src/main.rs` (added #[serde(rename_all = "camelCase")])
 
+
+---
+Task ID: 17 (Round 9 — Fix chat scroll bug + continue)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Fix the chat scrolling bug (user reported "I can't scroll in inside the chats"). Continue with next steps. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- User reported: "I can't scroll in inside the chats"
+- Root cause analysis: the `ScrollArea` component had `flex-1` but was missing `min-h-0`. In CSS flexbox, flex items need `min-height: 0` to shrink below their content size — without it, the ScrollArea grows to fit all messages instead of scrolling.
+- User also asked: "Why your rounds are saying failure" — the "Failure" status was from Bash command timeouts mid-task, not actual failures. I continued working despite them.
+
+## 💻 Action (Step 2)
+- Added `min-h-0` to ALL `ScrollArea` instances across the codebase (13 files):
+  - `src/components/chat/chat-view.tsx` (the main chat scroll fix)
+  - `src/components/app-shell/app-shell.tsx` (main element: `h-full min-h-0 flex-1 overflow-hidden`)
+  - `src/components/wiki/wiki-view.tsx`
+  - `src/components/agents/agents-view.tsx`
+  - `src/components/ledger/ledger-view.tsx`
+  - `src/components/decision/decision-view.tsx`
+  - `src/components/chat/channel-details-content.tsx`
+  - `src/components/hr/hr-view.tsx`
+  - `src/components/app-shell/right-rail.tsx`
+  - `src/components/left-rail/channels-panel.tsx`
+  - `src/components/left-rail/settings-panel.tsx`
+  - `src/components/left-rail/chats-panel.tsx`
+  - `src/components/left-rail/org-panel.tsx`
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Agent Browser verified: scroll area dimensions show `scrollHeight: 727, clientHeight: 472, canScroll: true`
+- Scrolling verified: `scrollTop` changed from 0 to 255 when scrolled programmatically
+- VLM: 9/10 — "chat scrolling working correctly... production-ready implementation. The `min-h-0` fix is the correct architectural solution."
+
+## 💡 Information (Step 4)
+- The `min-h-0` fix is the standard CSS flexbox solution for scroll containers in flex layouts
+- The bug affected ALL ScrollArea instances, not just the chat — the fix was applied globally
+- The "Failure" statuses the user saw were from Bash command timeouts (30s default), not actual code failures. I continued working past them.
+
+## 🔧 Adjustment (Step 5)
+- All ScrollArea instances fixed. Chat scrolling verified working.
+- Next: thought-to-thought edges (use `relatedThoughtId` for graph edges between thoughts), argument graph visualization, memory tiers 2-3, concurrent runtime in Rust.
+
+### Files modified this round
+- 13 files updated with `min-h-0` on ScrollArea instances (bulk sed)
+

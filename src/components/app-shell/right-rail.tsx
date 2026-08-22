@@ -142,7 +142,7 @@ export function RightRail({ onClose }: { onClose?: () => void }) {
         </div>
       ) : null}
 
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4">
           {activeView === 'chat' ? (
             <ChatContext

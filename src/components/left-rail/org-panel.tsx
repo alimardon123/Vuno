@@ -143,7 +143,7 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <ScrollArea className="flex-1 scrollbar-sleek">
+      <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4 p-2">
           {/* Org tree — correct hierarchy: org → leadership → departments → teams → channels */}
           <section aria-label="Organization">
