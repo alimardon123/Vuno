@@ -1032,6 +1032,76 @@ function MessageBody({
       );
     }
 
+    case 'PaProactiveNote': {
+      // The PA's proactive note — weaves learned facts into a natural message.
+      // This closes the learn→reference loop: Bob learns (MemoryUpdated badges)
+      // THEN Bob speaks, referencing what he just learned.
+      // Per the "Beautiful" principle: warm amber accent (PA color), Brain icon
+      // "proactive" badge, body text, and 🧠 memory pills linking to the
+      // MemoryUpdated events that established each fact.
+      const n = p as EventPayloadMap['PaProactiveNote'];
+      const accentColor = 'var(--status-asserted)'; // amber — warm, personal
+      return (
+        <div
+          className="flex flex-col gap-2 rounded-md border-l-2 bg-[var(--status-asserted)]/[0.06] px-3 py-2.5"
+          style={{ borderColor: accentColor }}
+        >
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider"
+              style={{
+                backgroundColor: `color-mix(in oklch, ${accentColor} 14%, transparent)`,
+                color: accentColor,
+              }}
+            >
+              <Brain className="size-2.5" aria-hidden />
+              proactive
+            </span>
+            <span className="text-[0.6875rem] text-muted-foreground">
+              {n.agentName} → {n.ownerName}
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-foreground/90">{n.body}</p>
+          {n.memoryReferences.length > 0 ? (
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[0.5625rem] uppercase tracking-widest text-muted-foreground/70">
+                referencing:
+              </span>
+              {n.memoryReferences.map((ref, i) => {
+                const refColor = ref.factType === 'interest' ? 'var(--status-believed)'
+                  : ref.factType === 'focus_area' ? 'var(--status-tested)'
+                  : ref.factType === 'sentiment' ? 'var(--status-asserted)'
+                  : 'var(--status-asserted)';
+                const factLabel = ref.factType === 'focus_area' ? 'focus'
+                  : ref.factType === 'interest' ? 'interest'
+                  : ref.factType === 'sentiment' ? 'sentiment'
+                  : 'pref';
+                return (
+                  <span
+                    key={`${ref.memoryEventId}-${i}`}
+                    className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.625rem]"
+                    style={{
+                      borderColor: `color-mix(in oklch, ${refColor} 30%, transparent)`,
+                      backgroundColor: `color-mix(in oklch, ${refColor} 8%, transparent)`,
+                    }}
+                    title={`learned in event ${ref.memoryEventId}`}
+                  >
+                    <Brain className="size-2.5" style={{ color: refColor }} aria-hidden />
+                    <span className="font-mono uppercase tracking-wider" style={{ color: refColor }}>
+                      {factLabel}
+                    </span>
+                    <span className="font-mono text-foreground/70">
+                      {ref.key} → {ref.value}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
     case 'ThreadReplyPosted': {
       const t = p as EventPayloadMap['ThreadReplyPosted'];
       return (

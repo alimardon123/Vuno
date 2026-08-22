@@ -31,7 +31,8 @@ export type EventType =
   | 'ReactionAdded'
   | 'PreemptIssued'
   | 'AttentionWakeup'
-  | 'MemoryUpdated';
+  | 'MemoryUpdated'
+  | 'PaProactiveNote';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -224,6 +225,19 @@ export interface EventPayloadMap {
     oldValue: string | null;        // previous value (null if new fact)
     evidenceEventId: string;        // the user message that triggered this learning
     confidence: number;             // 0-1 — how confident the PA is in this inference
+  };
+  PaProactiveNote: {
+    agentId: string;               // the personal assistant (e.g. Bob)
+    agentName: string;
+    ownerHumanId: string;           // the human owner (e.g. Kai)
+    ownerName: string;              // owner's display name (for rendering)
+    body: string;                    // the proactive note text — weaves in learned facts
+    memoryReferences: Array<{
+      factType: 'interest' | 'focus_area' | 'sentiment' | 'preference';
+      key: string;                   // e.g. "interests"
+      value: string;                 // e.g. "Rust"
+      memoryEventId: string;         // the MemoryUpdated event this references (for the 🧠 pill)
+    }>;
   };
 }
 

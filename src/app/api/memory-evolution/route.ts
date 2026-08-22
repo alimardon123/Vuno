@@ -26,8 +26,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
-import { broadcastEventAppended } from '@/lib/realtime/broadcast';
-import { detectMemoryFacts, appendToListValue, valueInList } from '@/lib/agents/memory-detector';
+import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
+import { detectMemoryFacts, appendToListValue, valueInList, type DetectedFact } from '@/lib/agents/memory-detector';
+import { generateProactiveNote } from '@/lib/agents/proactive-note-generator';
 import type { NewEventInput, EventRecord } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -141,6 +142,10 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const useRust = await isRustAvailable();
     const learned: Array<{ key: string; value: string; factType: string; isNew: boolean }> = [];
+    // Track each learned fact with its DetectedFact + isUpdate flag + the event ID
+    // assigned by the spine. Used to generate the PaProactiveNote that references
+    // these MemoryUpdated events (closing the learn→reference loop).
+    const learnedForNote: Array<{ fact: DetectedFact; isUpdate: boolean; memoryEventId: string }> = [];
 
     // Brief delay — the PA is "thinking" about the message (like a colleague
     // glancing at Slack and quietly noting something). Per the "Beautiful"
@@ -169,20 +174,24 @@ export async function POST(req: Request): Promise<NextResponse> {
       // Compute new value + oldValue
       let newValue: string;
       let oldValue: string | null = null;
+      let isUpdate = false;
       if (fact.factType === 'sentiment') {
         // Parse existing as a plain string (sentiment is a single value, not a list)
         if (existing) {
           try {
             const parsed = JSON.parse(existing.value);
             oldValue = typeof parsed === 'string' ? parsed : existing.value;
+            isUpdate = true;
           } catch {
             oldValue = existing.value;
+            isUpdate = true;
           }
         }
         newValue = JSON.stringify(fact.value);
       } else {
         // List type — append
         oldValue = existing?.value ?? null;
+        isUpdate = existing !== null;
         newValue = appendToListValue(existing?.value ?? null, fact.value);
       }
 
@@ -231,8 +240,11 @@ export async function POST(req: Request): Promise<NextResponse> {
         key: fact.key,
         value: fact.value,
         factType: fact.factType,
-        isNew: oldValue === null,
+        isNew: !isUpdate,
       });
+
+      // Track for the proactive note (we'll fill in memoryEventId after streaming)
+      learnedForNote.push({ fact, isUpdate, memoryEventId: '' });
     }
 
     if (events.length === 0) {
@@ -240,7 +252,52 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // Stream all MemoryUpdated events (they'll appear in chat as "🧠 learned" badges)
-    await streamEvents(events, org, useRust);
+    const createdEvents = await streamEvents(events, org, useRust);
+
+    // Map the created event IDs back to the learnedForNote entries (same order)
+    for (let i = 0; i < createdEvents.length && i < learnedForNote.length; i++) {
+      learnedForNote[i]!.memoryEventId = createdEvents[i]!.id;
+    }
+
+    // ─── Close the learn→reference loop ────────────────────────────────────
+    // Per the design principle "Powerful": the PA doesn't just learn — it ACTS
+    // on what it learned. After the MemoryUpdated badges appear, Bob posts a
+    // proactive note that weaves the learned facts into a natural message,
+    // referencing each fact with a 🧠 memory pill.
+    //
+    // Only fire the proactive note if there's at least 1 NEW fact OR a sentiment
+    // update (the emotional shift is worth noting). Don't fire on pure list
+    // appends to existing lists — too noisy.
+    const shouldFireProactiveNote = learnedForNote.some(
+      (l) => !l.isUpdate || l.fact.factType === 'sentiment',
+    );
+
+    if (shouldFireProactiveNote) {
+      // Brief pause — let the MemoryUpdated badges land first, then Bob "speaks".
+      // Per the "Beautiful" principle: learn → think → speak, not all at once.
+      void broadcastTyping({ channelId: body.channelId, userId: pa.id, isTyping: true });
+      await sleep(700 + Math.random() * 400);
+      void broadcastTyping({ channelId: body.channelId, userId: pa.id, isTyping: false });
+
+      const note = generateProactiveNote(learnedForNote, ownerName);
+      if (note.body) {
+        await streamEvents([{
+          type: 'PaProactiveNote',
+          actorType: 'agent',
+          actorAgentId: pa.id,
+          scopeType: 'channel',
+          scopeId: body.channelId,
+          payload: {
+            agentId: pa.id,
+            agentName: pa.name,
+            ownerHumanId: body.ownerUserId,
+            ownerName,
+            body: note.body,
+            memoryReferences: note.memoryReferences,
+          },
+        }], org, useRust);
+      }
+    }
 
     return NextResponse.json({
       ok: true,

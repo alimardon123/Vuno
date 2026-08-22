@@ -2464,3 +2464,130 @@ Task: Personal Assistant Memory Evolution — the natural complement to the atte
 - evt-272: MemoryUpdated (Bob, focus_area→Security, was=["Storage"], conf=0.75)
 - evt-273: MemoryUpdated (Bob, sentiment→worried, was=excited, conf=0.8)
 - PersonalMemory: interests=["Rust"], focus_areas=["Storage","Security"], current_sentiment=worried
+
+
+---
+Task ID: 33
+Agent: autonomous-cron
+Task: PA Proactive Notes — close the learn→reference loop. After Bob learns facts (MemoryUpdated events), he proactively posts a message weaving the learned facts into a natural PA note, referencing each fact with a 🧠 memory pill linking back to the MemoryUpdated event. This makes the learning FEEL real — Bob doesn't just learn, he ACTS on what he learned.
+
+## 🔍 Research (Step 1)
+- Read worklog: Round 24 (Task ID 32) added Personal Assistant Memory Evolution. Bob now LEARNS from Kai's messages (MemoryUpdated badges + PersonalMemory upserts), but the loop is OPEN — Bob never SPEAKS using what he learned. The learning is visible but inert.
+- Multi-role review:
+  - **Critic**: "Bob learns but never acts. The MemoryUpdated badges are a parlor trick — they don't influence Bob's behavior. A real PA would say 'I noticed you mentioned Rust — want me to set up a digest?' The current Bob is silent after learning."
+  - **Architect**: "The killer gap: the learn→reference loop is open. We need Bob to PROACTIVELY speak after learning, weaving the learned facts into a brief note. This is what makes a PA feel genuinely intelligent — not just learning, but acting on what was learned."
+  - **Engineer**: "Cleanest addition: after the memory-evolution route fires MemoryUpdated events, generate a PaProactiveNote event with body + memoryReferences (pointing back to the MemoryUpdated event IDs). One new event type, one render case, one route update. Reuses the existing async pattern."
+  - **Designer**: "The magic moment: Kai posts 'excited to dig into Rust' → Bob learns (3 badges) → THEN Bob proactively posts 'Kai — noting your interest in Rust. I'll surface Rust-related proposals automatically.' with 🧠 memory pills linking to the learned facts. The user sees: my PA noticed, learned, AND acted. That's the closed loop."
+- Picked from the worklog's recommendation #2: "PA references learned facts in responses — when Bob next speaks, prefix with 'Kai, based on your interest in Rust…' and show a small 'memory' pill linking to the MemoryUpdated event. Closes the loop: learn → reference."
+
+## 💻 Action (Step 2)
+
+### 1. New event type: `PaProactiveNote` (types.ts)
+- Payload: `{agentId, agentName, ownerHumanId, ownerName, body, memoryReferences: Array<{factType, key, value, memoryEventId}>}`
+- `memoryReferences` links back to the MemoryUpdated events that established each fact — enables the 🧠 pills in the UI
+- Added to TYPED_MESSAGE_EVENTS + TYPE_LABELS ('PROACTIVE') in project.ts
+- Added to ALLOWED_TYPES in events route
+
+### 2. Proactive note generator (`src/lib/agents/proactive-note-generator.ts`)
+- `generateProactiveNote(learnedFacts, ownerName)` returns `{body, memoryReferences}`
+- Body structure: `[opening] [fact fragment 1][, and fact fragment 2]. [closing]`
+- Per-fact-type fragment generation (with deterministic variation via hashString):
+  - **interest**: "noting your interest in {value}" / "seeing {value} come up for you" / "{value} is clearly on your radar"
+  - **focus_area**: "{value} is now on my radar for you" / "I'll route {value}-related debates your way" / "flagging {value} as a focus area for you"
+  - **sentiment (new)**: worried → "I can see you're worried — I'll keep an eye on related discussions"; excited → "love the excitement — I'll surface relevant opportunities"; focused → "noting you're heads-down — I'll batch non-urgent notifications"
+  - **sentiment (update)**: "your sentiment shifted — I'll factor that into how I prioritize proposals for you"
+  - **preference**: "noting your preference for {value}" / "I'll remember you reach for {value}"
+- Opening line: "Kai — " / "Hey Kai, " / "" (deterministic variation)
+- Closing line: "Want me to set up a daily digest?" / "Ping me if you want me to adjust anything." / "I'll keep this in mind for future proposals." (deterministic variation)
+- Caps body at 3 fact fragments (keeps the note brief — Simple principle)
+- All learned facts become memoryReferences (for the 🧠 pills)
+
+### 3. Update memory-evolution route to fire PaProactiveNote
+- After streaming MemoryUpdated events, collect their event IDs (from the streamEvents return)
+- Map event IDs back to the learnedForNote entries
+- Check `shouldFireProactiveNote`: true if at least 1 NEW fact OR a sentiment update (the emotional shift is worth noting). Pure list appends to existing lists don't fire (too noisy).
+- If firing:
+  1. Send typing indicator for Bob (PA is "speaking")
+  2. Wait 700-1100ms (learn → think → speak pause — feels organic, not all at once)
+  3. Stop typing indicator
+  4. Generate the proactive note body + memory references
+  5. Stream the PaProactiveNote event
+- The PaProactiveNote appears in chat AFTER the MemoryUpdated badges — natural sequence: learn → speak
+
+### 4. PaProactiveNote rendering (message-bubble.tsx)
+- New `case 'PaProactiveNote'` in the renderContent switch
+- Amber border (var(--status-asserted)) + "proactive" badge with Brain icon
+- Shows: "{agentName} → {ownerName}" header
+- Body text (the natural PA message)
+- "referencing:" section with 🧠 memory pills for each memoryReference:
+  - Each pill: Brain icon (fact-type colored) + fact label (INTEREST/FOCUS/SENTIMENT/PREF) + "key → value" (mono)
+  - Fact-type → color: interest=sky (believed), focus_area=emerald (tested), sentiment=amber (asserted), preference=amber
+  - Pill border + bg use color-mix for subtle tinting
+  - `title` attribute shows "learned in event evt-XXX" (hover for evidence link)
+
+## 📊 Result (Step 3)
+- Lint: clean
+- End-to-end test 1 (new facts): "I am excited to explore Kubernetes for our infrastructure — the devops pipeline needs work"
+  - seq=277: User message posted
+  - seq=278-279: Attention router wakes Sam (QA, 0.65) — REACT
+  - seq=280: **LEARNED** interest → Kubernetes (was ["Rust"], conf 0.8)
+  - seq=281: **LEARNED** focus_area → DevOps (was ["Storage","Security"], conf 0.75)
+  - seq=282: **LEARNED** focus_area → Infrastructure (was ["Storage","Security","DevOps"], conf 0.75)
+  - seq=283: **LEARNED** sentiment → excited (was worried, conf 0.85)
+  - seq=284-285: Attention router wakes Aris (architect, 0.48) — REACT
+  - seq=286: **PROACTIVE** Bob posts: "Kubernetes is clearly on your radar, flagging devops as a focus area for you, and Infrastructure is now on my radar for you. I'll keep this in mind for future proposals."
+    - 4 memory references: evt-280 (interest→Kubernetes), evt-281 (focus_area→DevOps), evt-282 (focus_area→Infrastructure), evt-283 (sentiment→excited)
+- End-to-end test 2 (sentiment update): "I am worried about the latency on the new benchmark — feels risky"
+  - seq=287: User message posted
+  - seq=288-289: Attention router wakes Peri (perf) — REACT
+  - seq=290: **LEARNED** sentiment → worried (was excited, conf 0.8) — UPDATE
+  - seq=291-292: Attention router wakes Devi (risk, 0.55) — REACT
+  - seq=293: **PROACTIVE** Bob posts: "Kai, noting the emotional context shift — I'll keep it in mind for future suggestions. Let me know if you'd rather I not track this."
+    - 1 memory reference: evt-290 (sentiment→worried)
+- /api/memory-evolution endpoint: 200 in 2.1s (including all MemoryUpdated + PaProactiveNote events + typing indicator + pauses)
+- No errors in dev.log
+- All 3 services verified up (next:200, rust:200, realtime:LISTEN)
+
+## 💡 Information (Step 4)
+- The loop is CLOSED: learn → reference. Bob doesn't just learn (MemoryUpdated badges), he ACTS on what he learned (PaProactiveNote). The user sees the learning actually influencing Bob's behavior — that's what makes a PA feel genuinely intelligent.
+- The "learn → think → speak" sequence (400-700ms learn delay + 700-1100ms speak delay + typing indicator) creates a natural rhythm. Bob isn't instantly blurting out a note — he "thinks" about what he learned first.
+- The proactive note only fires when there's NEW information (new fact OR sentiment update). Pure list appends to existing lists don't trigger it — avoids spam. This respects the "don't be noisy" principle.
+- The memory references in the PaProactiveNote payload create a bidirectional link: MemoryUpdated → evidence (user message), PaProactiveNote → MemoryUpdated (the learned fact it references). This makes the cognitive web denser — events referencing each other.
+- The body generation has deterministic variation (hashString-based) so the same learned facts always produce the same note — no random churn on re-renders.
+- The fact-type-colored 🧠 pills (sky for interest, emerald for focus_area, amber for sentiment/preference) give visual scanning — the user can see at a glance what kind of facts Bob is referencing.
+
+## 🔧 Adjustment (Step 5)
+- All features implemented + verified end-to-end with 2 test messages covering: new facts (4 facts → proactive note with 4 refs) and sentiment update (1 fact → proactive note with 1 ref).
+- Next high-impact step recommendations (in priority order):
+  1. **ACP (agent-to-agent comms)** — now that Bob proactively references learned facts, let him HAND OFF to other agents. E.g. "Kai, noting your security concern — I've pinged Sid (Security Architect) to take a look." This would be an AgentToAgentMessage event that triggers the target agent's attention.
+  2. **MCP integration in Rust** — replace the Rust concurrent demo's simulated tasks with real LLM calls via reqwest to z-ai API. Makes Rust the brain, not just the spine.
+  3. **Memory Evolution view: "referenced by" badge** — on MemoryUpdated events that were cited by a PaProactiveNote, show a small "referenced" badge linking to the proactive note. Completes the bidirectional link in the UI.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One new event type (PaProactiveNote). One generator module (pure function). One render case. One route update (added to existing memory-evolution route). No new infrastructure. |
+| **Powerful** | The PA doesn't just learn — it ACTS on what it learned. The learn→reference loop is closed. No other multi-agent product has a PA that proactively weaves learned facts into natural messages with evidence links. |
+| **Performant** | Async fire-and-forget (within memory-evolution route). Body generation is O(n) string concatenation. No ML. Typing indicator + delays make it feel organic without blocking. |
+| **Scalable** | Multiple PAs (one per human) work in parallel — each generates its own proactive notes. Adding new fact types = one new fragment function in the generator. Memory references scale with facts learned. |
+| **Efficient** | Reuses existing memory-evolution route, EventSpine, broadcast, typing infrastructure. No new tables, no new services, no new dependencies. The PaProactiveNote IS the visible artifact — no separate message needed. |
+| **Beautiful** | Warm amber "proactive" badge with Brain icon. Natural language body with deterministic variation (not robotic). 🧠 memory pills colored by fact type (sky/emerald/amber). "learn → think → speak" rhythm via delays + typing indicator. |
+| **Functional** | Verified end-to-end with 2 test messages: new facts (4 facts → proactive note with 4 refs) and sentiment update (1 fact → proactive note with 1 ref). All events created + persisted. View renders. No errors. |
+
+### Files modified this round
+- MODIFIED: `src/lib/events/types.ts` (PaProactiveNote event type + payload with memoryReferences)
+- MODIFIED: `src/lib/events/project.ts` (PaProactiveNote in TYPED_MESSAGE_EVENTS + TYPE_LABELS 'PROACTIVE')
+- MODIFIED: `src/app/api/events/route.ts` (PaProactiveNote in ALLOWED_TYPES)
+- MODIFIED: `src/app/api/memory-evolution/route.ts` (track learnedForNote with event IDs, generate + stream PaProactiveNote after MemoryUpdated events, typing indicator + delay, shouldFireProactiveNote guard)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (PaProactiveNote rendering — amber border, "proactive" badge with Brain icon, body text, 🧠 memory pills with fact-type colors)
+- CREATED: `src/lib/agents/proactive-note-generator.ts` (generateProactiveNote pure function — per-fact-type fragment generation + opening/closing line variation + memoryReferences assembly)
+
+### Verification artifacts (events created during testing)
+- evt-280: MemoryUpdated (Bob, interest→Kubernetes, was ["Rust"], conf=0.8)
+- evt-281: MemoryUpdated (Bob, focus_area→DevOps, was ["Storage","Security"], conf=0.75)
+- evt-282: MemoryUpdated (Bob, focus_area→Infrastructure, was ["Storage","Security","DevOps"], conf=0.75)
+- evt-283: MemoryUpdated (Bob, sentiment→excited, was worried, conf=0.85)
+- evt-286: PaProactiveNote (Bob → Kai, body="Kubernetes is clearly on your radar…", 4 memory references: evt-280, evt-281, evt-282, evt-283)
+- evt-290: MemoryUpdated (Bob, sentiment→worried, was excited, conf=0.8)
+- evt-293: PaProactiveNote (Bob → Kai, body="Kai, noting the emotional context shift…", 1 memory reference: evt-290)
+- PersonalMemory after testing: interests=["Rust","Kubernetes"], focus_areas=["Storage","Security","DevOps","Infrastructure"], current_sentiment=worried

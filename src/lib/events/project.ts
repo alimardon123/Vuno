@@ -34,6 +34,7 @@ export const TYPED_MESSAGE_EVENTS: EventType[] = [
   'PreemptIssued',
   'AttentionWakeup',
   'MemoryUpdated',
+  'PaProactiveNote',
 ];
 
 export interface ChatMessageProjection {
@@ -76,6 +77,7 @@ const TYPE_LABELS: Partial<Record<EventType, string>> = {
   PreemptIssued: 'PREEMPT',
   AttentionWakeup: 'ATTENTION',
   MemoryUpdated: 'LEARNED',
+  PaProactiveNote: 'PROACTIVE',
 };
 
 const STATUS_HINTS: Partial<Record<EventType, ClaimStatus | 'blocked' | 'passed'>> = {
