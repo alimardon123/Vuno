@@ -18,6 +18,7 @@ import { HRView } from '@/components/hr/hr-view';
 import { ThoughtGraphView } from '@/components/thoughts/thought-graph-view';
 import { AttentionRouterView } from '@/components/attention/attention-router-view';
 import { MemoryEvolutionView } from '@/components/memory/memory-evolution-view';
+import { TraceView } from '@/components/trace/trace-view';
 import { InstallAgentDialog } from '@/components/agents/install-agent-dialog';
 import { FileObjectiveDialog } from '@/components/objective/file-objective-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -49,6 +50,9 @@ export function AppShell() {
     setRightRailOpen,
     installAgentOpen,
     fileObjectiveOpen,
+    traceEventId,
+    traceOpen,
+    closeTrace,
   } = useAppStore();
 
   // org info (for top bar + footer)
@@ -193,6 +197,14 @@ export function AppShell() {
         <SheetContent side="bottom" className="h-[60vh] p-0">
           <SheetTitle className="sr-only">Context</SheetTitle>
           <RightRail onClose={() => setRightRailOpen(false)} />
+        </SheetContent>
+      </Sheet>
+
+      {/* Causal Trace sheet — opens on the right when a user clicks "trace" on a message */}
+      <Sheet open={traceOpen} onOpenChange={(open) => { if (!open) closeTrace(); }}>
+        <SheetContent side="right" className="w-[28rem] max-w-[90vw] p-0 sm:w-[32rem]">
+          <SheetTitle className="sr-only">Causal trace for message</SheetTitle>
+          <TraceView triggerEventId={traceEventId} onClose={closeTrace} />
         </SheetContent>
       </Sheet>
 

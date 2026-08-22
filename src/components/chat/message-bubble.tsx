@@ -29,9 +29,11 @@ import {
   Eye,
   Sparkles,
   Brain,
+  GitBranch,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
+import { useAppStore } from '@/store/app-store';
 import { useMemo, useState } from 'react';
 
 interface Agent {
@@ -91,6 +93,7 @@ export function MessageBubble({
   message,
   onOpenDecision,
 }: MessageBubbleProps) {
+  const { openTrace } = useAppStore();
   const agentsRes = useFetch<AgentsResponse>('/api/agents');
   const usersRes = useFetch<UsersResponse>('/api/users');
   const agents = useMemo(
@@ -198,6 +201,18 @@ export function MessageBubble({
     >
       {/* Hover actions — appear on message hover (top-right) */}
       <div className="absolute right-2 top-1 hidden gap-0.5 rounded-md border border-border/40 bg-card/80 px-0.5 py-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 md:flex">
+        {/* Trace button — only on human MessagePosted (these trigger the collaboration loop) */}
+        {message.type === 'MessagePosted' && message.actorType === 'human' ? (
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="View causal trace"
+            title="View causal trace — see how this message rippled through the org"
+            onClick={() => openTrace(message.id)}
+          >
+            <GitBranch className="size-3" aria-hidden />
+          </button>
+        ) : null}
         <button
           type="button"
           className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"

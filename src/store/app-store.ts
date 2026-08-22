@@ -38,6 +38,10 @@ interface AppState {
   // transient: signal a chat refresh after posting a message
   chatNonce: number;
 
+  // trace panel — the causal trace for a specific message event
+  traceEventId: string | null;
+  traceOpen: boolean;
+
   // actions
   setView: (v: ActiveView) => void;
   setActiveChannel: (id: string) => void;
@@ -54,6 +58,8 @@ interface AppState {
   setInstallAgentOpen: (open: boolean) => void;
   setFileObjectiveOpen: (open: boolean) => void;
   bumpChatNonce: () => void;
+  openTrace: (eventId: string) => void;
+  closeTrace: () => void;
 }
 
 const DEFAULT_LEDGER_FILTERS: LedgerFilters = {
@@ -78,6 +84,9 @@ export const useAppStore = create<AppState>((set) => ({
   fileObjectiveOpen: false,
 
   chatNonce: 0,
+
+  traceEventId: null,
+  traceOpen: false,
 
   setView: (v) => set({ activeView: v }),
   setActiveChannel: (id) =>
@@ -105,4 +114,6 @@ export const useAppStore = create<AppState>((set) => ({
   setInstallAgentOpen: (open) => set({ installAgentOpen: open }),
   setFileObjectiveOpen: (open) => set({ fileObjectiveOpen: open }),
   bumpChatNonce: () => set((s) => ({ chatNonce: s.chatNonce + 1 })),
+  openTrace: (eventId) => set({ traceEventId: eventId, traceOpen: true }),
+  closeTrace: () => set({ traceOpen: false }),
 }));

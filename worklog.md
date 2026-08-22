@@ -2730,3 +2730,125 @@ Task: ACP (Agent-to-Agent Comms) — the delegation layer. After Bob learns fact
 - evt-302: AgentHandoff (Bob → Peri, request="please take a perf angle…", context="Kai's message + focus areas + sentiment")
 - evt-303: MessagePosted (Peri, deeper review: "Bob asked me to take the perf angle. On performance: the tail (p99)… I can spin up a micro-benchmark within the hour.")
 - PersonalMemory after testing: focus_areas=["Storage","Security","DevOps","Infrastructure","Performance"], current_sentiment=concerned
+
+
+---
+Task ID: 35
+Agent: autonomous-cron
+Task: Causal Trace View — makes the collaboration loop VISIBLE + AUDITABLE. A new /api/trace endpoint reconstructs the causal chain from a single user message event ID (walking forward through all events that reference it via triggerEventId/evidenceEventId/memoryReferences/handoff chains). A new TraceView component renders it as a vertical timeline with colored nodes per relation type + connecting lines. A trace button on human MessagePosted messages opens the trace in a right-side Sheet panel.
+
+## 🔍 Research (Step 1)
+- Read worklog: Rounds 23-26 (Task IDs 31-34) built the complete agent collaboration loop: react (attention router) → learn (memory evolution) → act (proactive note) → delegate (ACP handoff) → respond (expert deeper review). But there's a missing UI layer — the events all render inline (badges + messages), but the USER can't see the CHAIN. When Kai posts a message and 8-10 events fire, they see a flat list. Where's the 'trace' — the visual story of how my message rippled through the org?
+- Multi-role review:
+  - **Critic**: "The collaboration loop is complete but INVISIBLE. The event spine has rich provenance data (triggerEventId, evidenceEventId, memoryReferences, handoff from→to) but the UI doesn't visualize the CHAIN. The product vision says 'traceable, falsifiable reasoning' — but right now the traces are scattered across a flat chat log."
+  - **Architect**: "The killer gap: provenance exists in the data but not in the UI. We need a 'Trace View' that takes a user message event ID, walks forward through all events that reference it (directly via triggerEventId/evidenceEventId, or indirectly via memoryReferences/handoff chains), and renders them as a vertical timeline with connecting lines showing causality."
+  - **Engineer**: "Cleanest design: one GET endpoint /api/trace?triggerEventId=X that fetches all org events, filters to those causally linked to the trigger within a 30s time window, classifies each by relation type (trigger/reaction/learning/proactive/delegation/response), and returns a sorted timeline. One new component renders it. A trace button on human MessagePosted messages opens it in a Sheet panel."
+  - **Designer**: "The magic moment: click the GitBranch icon on any user message → a right-side panel opens showing the full trace: 'Your message triggered 8 events across 3 agents in 4s. Here's the chain…' with colored nodes per relation type (emerald=trigger, sky=reaction, amber=learning/proactive/delegation, emerald=response), agent avatars, typed badges, italic causal explanations. This makes the org feel like a LIVING SYSTEM, not a chat log."
+- Picked from thinking deeply: this is the highest-impact step because it makes the EXISTING collaboration loop visible. No new event types, no new routes to wire — just a new VIEW that surfaces the provenance data already in the spine. This is the "traceable reasoning" the product vision demands.
+
+## 💻 Action (Step 2)
+
+### 1. New /api/trace GET endpoint (`src/app/api/trace/route.ts`)
+- Input: `?triggerEventId=X`
+- Flow:
+  1. Fetch all org events (up to 1000, ordered by seq)
+  2. Find the trigger event by ID
+  3. Walk forward through all events after the trigger, within a 30s time window
+  4. Classify each causally-linked event by relation type:
+     - **trigger**: the user message itself
+     - **reaction**: AttentionWakeup where triggerEventId = trigger
+     - **learning**: MemoryUpdated where evidenceEventId = trigger
+     - **proactive**: PaProactiveNote where any memoryReference.memoryEventId points to a MemoryUpdated event that was itself triggered by this trigger
+     - **delegation**: AgentHandoff where triggerEventId = trigger
+     - **response**: the next MessagePosted by the handoff target agent within 5s (same scope)
+  5. Return sorted timeline + stats (totalEvents, agentsInvolved, eventTypes, durationMs)
+- Per the "Efficient" principle: reuses the existing event spine — no new table, no new provenance tracking. The data was already there; this endpoint just reconstructs it.
+
+### 2. TraceView component (`src/components/trace/trace-view.tsx`)
+- Vertical timeline with:
+  - **Vertical rail** (absolute-positioned line connecting all nodes)
+  - **Nodes**: each event is a circle with a relation-colored icon (User/Eye/Brain/Sparkles/ArrowUpRight/MessageSquare)
+  - **Relation labels**: TRIGGER/REACTION/LEARNED/PROACTIVE/HANDOFF/RESPONSE (status-colored pills)
+  - **Agent avatars**: MemberAvatar for each event's actor
+  - **Summary**: short body/fact extracted from the payload
+  - **Italic causal explanation**: human-readable ("Peri noticed this message (topic: performance)")
+  - **seq + relative timestamp** (seq=304 · 2 minutes ago)
+- **Header**: "Causal Trace" title + stats row (X events · Y agents · Zs)
+- **Footer**: event types as mono chips
+- **Empty state**: "No causal chain found for this message"
+- Relation → status color mapping:
+  - trigger=emerald (origin), reaction=sky (attention), learning/proactive/delegation=amber (PA actions), response=emerald (expert response)
+
+### 3. App-store updates (`src/store/app-store.ts`)
+- Added `traceEventId: string | null` + `traceOpen: boolean` state
+- Added `openTrace(eventId)` + `closeTrace()` actions
+- `openTrace` sets both the event ID + opens the panel
+
+### 4. App-shell wiring (`src/components/app-shell/app-shell.tsx`)
+- Imported TraceView
+- Destructured `traceEventId, traceOpen, closeTrace` from the store
+- Added a new Sheet panel (side="right", w-28rem) that renders TraceView when `traceOpen` is true
+- The Sheet auto-closes via `onOpenChange` → `closeTrace()`
+
+### 5. Trace button in message-bubble.tsx
+- Added `GitBranch` icon import + `useAppStore` import + `openTrace` action
+- Added a trace button to the hover actions (first button, before Reply)
+- Only visible on `MessagePosted` events with `actorType === 'human'` (these are the ones that trigger the collaboration loop)
+- `title="View causal trace — see how this message rippled through the org"`
+- Clicking calls `openTrace(message.id)` → opens the Sheet panel
+
+## 📊 Result (Step 3)
+- Lint: clean
+- End-to-end test 1 (existing message evt-294): "I am concerned about the performance of the new query engine…"
+  - trace returned 8 nodes across 3 agents (Peri, Bob, Devi), duration 4000ms
+  - Chain: trigger(294) → reaction(295, Peri) → learning(296, Performance) → learning(297, concerned) → reaction(299, Devi) → proactive(300, Bob) → delegation(302, Bob→Peri) → response(303, Peri)
+- End-to-end test 2 (fresh message evt-304): "I am worried about the cryptography in the new auth system — feels like a security risk"
+  - trace returned 8 nodes across 3 agents (Sid, Bob, Devi), duration 4000ms
+  - Chain: trigger(304) → reaction(305, Sid) → learning(307, Cryptography) → learning(308, worried) → reaction(309, Devi) → proactive(311, Bob) → delegation(312, Bob→Sid) → response(313, Sid)
+- End-to-end test 3 (empty state, evt-269): "Thinking about Rust again — the borrow checker is interesting"
+  - trace returned 1 node (just the trigger — no collaboration chain because attention router didn't match)
+  - UI shows "No causal chain found" appropriately
+- /api/trace endpoint: 200 in 17-175ms (fast — just a scan + filter)
+- All 3 services verified up (next:200, rust:200, realtime:LISTEN)
+- No errors in dev.log
+
+## 💡 Information (Step 4)
+- The trace makes the EXISTING collaboration loop visible. The provenance data was already in the event spine (triggerEventId, evidenceEventId, memoryReferences, handoff from→to) — this round just built a VIEW that reconstructs it.
+- The 30s time window is the right scope — the collaboration loop typically completes in 3-5s, so 30s catches everything without pulling in unrelated events.
+- The relation classification is the key insight — each event type has a specific provenance field that links it to the trigger. By checking these fields, we can reconstruct the EXACT causal chain, not just "events that happened after".
+- The "response" relation is the trickiest — it's the expert's MessagePosted after an AgentHandoff. We find it by scanning forward for the next MessagePosted by the handoff's toAgentId within 5s, same scope. This correctly links seq=313 (Sid's response) to seq=312 (Bob's handoff to Sid).
+- The stats row (X events · Y agents · Zs) gives users an instant sense of the collaboration's scope. "8 events across 3 agents in 4s" is a powerful summary.
+- The GitBranch icon on the trace button is meaningful — it visually represents a "branch" of causality. Users intuitively understand "this message branched into multiple agent responses".
+- The trace button only appears on human MessagePosted events — these are the only ones that trigger the collaboration loop. Agent messages don't have traces (they're part of someone else's trace).
+
+## 🔧 Adjustment (Step 5)
+- All features implemented + verified end-to-end with 3 test messages: existing message (8-node chain), fresh message (8-node chain), and empty-state (1-node, no chain).
+- Next high-impact step recommendations (in priority order):
+  1. **MCP integration in Rust** — now that the collaboration loop is complete AND visible, make the Rust service the brain by replacing simulated adapter calls with real LLM calls via reqwest to z-ai API. The Rust substrate currently owns the spine; it should also own LLM invocation. This would make the agent responses genuinely intelligent, not scripted.
+  2. **Trace View: clickable nodes** — clicking a trace node should scroll to / highlight that event in the main chat view. Completes the bidirectional navigation between chat and trace.
+  3. **Trace View: export as proof** — a "Export trace" button that generates a markdown summary of the causal chain (for audit / sharing). This is the "falsifiable reasoning" artifact the product vision demands.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One GET endpoint. One component. One store update. One button. No new event types, no new tables. Reuses existing provenance data in the spine. |
+| **Powerful** | Makes the collaboration loop VISIBLE + AUDITABLE. Users can see exactly how their message rippled through the org — which agents woke, what was learned, who delegated to whom. This is the "traceable reasoning" the product vision demands. |
+| **Performant** | /api/trace runs in 17-175ms (scan + filter). TraceView uses useFetch with conditional URL. Sheet panel renders on demand. No polling — fetches once when opened. |
+| **Scalable** | The 1000-event scan handles 10x the current load. In production, this would be indexed by triggerEventId for O(1) lookup. The 30s time window bounds the scan. |
+| **Efficient** | No new tables, no new services, no new dependencies. Reuses existing EventSpine, Sheet, MemberAvatar, useFetch infrastructure. The trace IS a projection of existing data. |
+| **Beautiful** | Vertical timeline with colored nodes (emerald/sky/amber), connecting rail, agent avatars, typed badges, italic causal explanations, stats row. GitBranch icon on the trace button is meaningful. Warm, dense, calm. |
+| **Functional** | Verified end-to-end with 3 test messages: 8-node chain (existing), 8-node chain (fresh), 1-node empty state. All endpoints 200. No errors. Trace button appears on human MessagePosted only. |
+
+### Files modified this round
+- MODIFIED: `src/store/app-store.ts` (traceEventId + traceOpen state + openTrace/closeTrace actions)
+- MODIFIED: `src/components/app-shell/app-shell.tsx` (TraceView import + trace state destructure + right-side Sheet panel)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (GitBranch + useAppStore imports + openTrace action + trace button on human MessagePosted hover actions)
+- CREATED: `src/app/api/trace/route.ts` (GET endpoint — reconstructs causal chain from triggerEventId via provenance fields)
+- CREATED: `src/components/trace/trace-view.tsx` (vertical timeline component with relation-colored nodes + connecting rail + stats + empty state)
+
+### Verification artifacts (traces reconstructed during testing)
+- Trace for evt-294 ("I am concerned about the performance…"): 8 nodes, 3 agents (Peri/Bob/Devi), 4000ms
+  - trigger(294) → reaction(295, Peri) → learning(296, Performance) → learning(297, concerned) → reaction(299, Devi) → proactive(300, Bob) → delegation(302, Bob→Peri) → response(303, Peri)
+- Trace for evt-304 ("I am worried about the cryptography in the new auth system…"): 8 nodes, 3 agents (Sid/Bob/Devi), 4000ms
+  - trigger(304) → reaction(305, Sid) → learning(307, Cryptography) → learning(308, worried) → reaction(309, Devi) → proactive(311, Bob) → delegation(312, Bob→Sid) → response(313, Sid)
+- Trace for evt-269 ("Thinking about Rust again…"): 1 node (trigger only — no collaboration chain)
