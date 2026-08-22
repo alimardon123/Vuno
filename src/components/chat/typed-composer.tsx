@@ -43,6 +43,7 @@ const TYPES: ComposerType[] = [
 export function TypedComposer({ channelId }: { channelId: string }) {
   const [type, setType] = useState<ComposerType>('Message');
   const [submitting, setSubmitting] = useState(false);
+  const [useRealLLM, setUseRealLLM] = useState(false);
   const { toast } = useToast();
   const bumpChatNonce = useAppStore((s) => s.bumpChatNonce);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -144,7 +145,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
       const res = await fetch('/api/debate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title || undefined }),
+        body: JSON.stringify({ title: title || undefined, useRealLLM: useRealLLM }),
       });
       const data = (await res.json()) as { ok: boolean; decisionId?: string; eventsAppended?: number; message?: string; error?: string };
       if (!data.ok) throw new Error(data.error ?? 'Debate failed');
@@ -333,6 +334,8 @@ export function TypedComposer({ channelId }: { channelId: string }) {
               setDecisionChosen={setDecisionChosen}
               decisionRationale={decisionRationale}
               setDecisionRationale={setDecisionRationale}
+              useRealLLM={useRealLLM}
+              setUseRealLLM={setUseRealLLM}
             />
           )}
 
@@ -384,6 +387,8 @@ interface TypedFormProps {
   setDecisionChosen: (v: string) => void;
   decisionRationale: string;
   setDecisionRationale: (v: string) => void;
+  useRealLLM?: boolean;
+  setUseRealLLM?: (v: boolean) => void;
 }
 
 function TypedForm(props: TypedFormProps) {
@@ -397,6 +402,18 @@ function TypedForm(props: TypedFormProps) {
           <span>· appends to spine</span>
         )}
       </div>
+      {/* Real LLM toggle — only shown for Proposal type */}
+      {props.type === 'Proposal' && props.useRealLLM !== undefined ? (
+        <label className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={props.useRealLLM}
+            onChange={(e) => props.setUseRealLLM?.(e.target.checked)}
+            className="size-3 rounded border-border"
+          />
+          Use real LLM agents (z-ai-web-dev-sdk) instead of simulated
+        </label>
+      ) : null}
       <div className="grid gap-2">
         {props.type === 'Proposal' ? (
           <>

@@ -1729,3 +1729,77 @@ Task: Complete the 4-tier memory architecture by implementing Tier 1 (agent priv
 - NEW: `src/app/api/agent-memory/route.ts` (GET + POST for agent private memories)
 - MODIFIED: `src/components/thoughts/thought-graph-view.tsx` (AgentPrivateMemorySection + Team Memory section + visibility field on Thought interface)
 
+
+---
+Task ID: 24 (Round 16 — Real-LLM agent adapter via z-ai-web-dev-sdk)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Implement a real LLM agent adapter that uses z-ai-web-dev-sdk to generate intelligent responses instead of canned scripts. The user's ultimate vision: "agents debating in real time concurrently like humans in real corporate life." Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- The agents were simulated (canned responses in SimulatedArchitectAdapter, etc.)
+- The adapter interface (AgentAdapter.invoke) is designed for real LLMs — returns typed events + claims
+- z-ai-web-dev-sdk is already installed (backend only)
+- The debate endpoint is server-side (Next.js API route)
+- Multi-role review: the biggest remaining gap is that agents aren't actually intelligent — they repeat scripts. The user's vision requires real LLM agents.
+
+## 💻 Action (Step 2)
+
+### 1. Created RealLLMAdapter
+- `src/lib/agents/adapters/llm.ts` (NEW, 220+ lines):
+  - Implements the `AgentAdapter` interface — SAME interface as simulated adapters
+  - Uses `z-ai-web-dev-sdk` to call the LLM (backend only)
+  - Constructs a system prompt: agent role + responsibilities + available event types + JSON response format
+  - Builds user prompt: trigger type + recent events (last 10) + recent thoughts from other agents (last 5)
+  - Calls `zai.chat.completions.create()` with system + user messages
+  - Parses the LLM's JSON response into `NewEventInput[]` + `NewClaimInput[]`
+  - Handles markdown code fences, finds JSON in the response
+  - Graceful fallback: if LLM call fails, produces a MessagePosted about the failure
+
+### 2. Wired into the debate endpoint
+- `src/app/api/debate/route.ts`: added `useRealLLM` flag to the DebateRequest interface
+- When `useRealLLM: true`: uses `RealLLMAdapter` for all 6 agents (architect, security, devils_advocate, perf, verifier, hr)
+- When `useRealLLM: false` (default): uses the simulated adapters (existing behavior)
+- The ENTIRE debate chain (concurrent + streaming + typing + Rust substrate) works identically with either adapter type
+
+### 3. Added "Use real LLM" toggle to the Proposal form
+- `src/components/chat/typed-composer.tsx`: added `useRealLLM` state + checkbox in the Proposal form
+- The checkbox says "Use real LLM agents (z-ai-web-dev-sdk) instead of simulated"
+- When checked, the POST /api/debate sends `useRealLLM: true`
+- Added `useRealLLM` and `setUseRealLLM` to the TypedFormProps interface + passed from TypedComposer
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Real LLM debate verified: POST /api/debate with `useRealLLM: true` → 19 events streamed, debate completed successfully
+- The LLM-generated thoughts are UNIQUE and context-aware — NOT canned:
+  - Devi: "No cost analysis is provided for API usage, which could lead to unexpected expenses..." — a NEW objection about cost
+  - Sid: "The proposal for real LLM integration testing lacks specific security controls..." — Security raising a NEW concern about the LLM integration
+  - Peri: "The objection about missing performance benchmarks is valid. I need to establish..." — Performance generating its own reasoning
+- Total thoughts after LLM debate: 28 (up from 20) — 8 new LLM-generated thoughts
+
+## 💡 Information (Step 4)
+- The RealLLMAdapter is a DROP-IN replacement for the simulated adapters — same interface, same substrate, same gates, same realtime, same Rust spine
+- The LLM generates context-aware responses that reference the actual trigger + recent events + other agents' thoughts
+- The system prompt includes the full event type schema so the LLM knows what kinds of events it can produce
+- The JSON response parsing handles markdown code fences and extracts JSON from the response
+- VLM feedback (from previous rounds): "agents debating like humans in corporate life" — now the agents are actually intelligent, not just scripted
+
+## 🔧 Adjustment (Step 5)
+- All working. The user can now toggle between simulated and real LLM agents when filing a proposal.
+- Next: test with a full debate via the UI (agent-browser), then move to MCP integration in Rust.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | Same adapter interface — drop-in replacement, one `useRealLLM` flag |
+| **Powerful** | Real LLM intelligence — agents generate unique, context-aware responses |
+| **Performant** | LLM calls happen server-side; the streaming + Rust substrate pipeline is unchanged |
+| **Scalable** | Can swap to any LLM provider via the adapter interface |
+| **Efficient** | LLM generates thoughts + events + claims in one call (not multiple) |
+| **Beautiful** | The toggle is a simple checkbox — users can choose simulated or real |
+| **Functional** | Delivers the user's ultimate vision: agents actually debating with intelligence |
+
+### Files created/modified this round
+- NEW: `src/lib/agents/adapters/llm.ts` (220+ lines — RealLLMAdapter using z-ai-web-dev-sdk)
+- MODIFIED: `src/app/api/debate/route.ts` (useRealLLM flag + RealLLMAdapter instantiation)
+- MODIFIED: `src/components/chat/typed-composer.tsx` (useRealLLM state + checkbox toggle in Proposal form)
+

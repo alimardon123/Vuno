@@ -34,6 +34,7 @@ import {
   SimulatedVerifierAdapter,
   SimulatedHrAdapter,
 } from '@/lib/agents/adapters/simulated';
+import { RealLLMAdapter } from '@/lib/agents/adapters/llm';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,7 @@ interface DebateRequest {
   title?: string;
   projectId?: string;
   channelId?: string;
+  useRealLLM?: boolean; // if true, use RealLLMAdapter instead of simulated
 }
 
 interface DebateResponse {
@@ -97,15 +99,25 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       );
     }
 
-    // Instantiate adapters
-    const adapters: Record<string, AgentAdapter> = {
-      [architect.id]: new SimulatedArchitectAdapter(architect.id),
-      [security.id]: new SimulatedSecurityAdapter(security.id),
-      [devilsAdvocate.id]: new SimulatedDevilsAdvocateAdapter(devilsAdvocate.id),
-      [perf.id]: new SimulatedPerfAdapter(perf.id),
-      [verifier.id]: new SimulatedVerifierAdapter(verifier.id),
-      [hr.id]: new SimulatedHrAdapter(hr.id),
-    };
+    // Instantiate adapters — use real LLM if requested, otherwise simulated
+    const useRealLLM = body.useRealLLM === true;
+    const adapters: Record<string, AgentAdapter> = useRealLLM
+      ? {
+          [architect.id]: new RealLLMAdapter(architect.id, 'architect'),
+          [security.id]: new RealLLMAdapter(security.id, 'security'),
+          [devilsAdvocate.id]: new RealLLMAdapter(devilsAdvocate.id, 'devils_advocate'),
+          [perf.id]: new RealLLMAdapter(perf.id, 'perf'),
+          [verifier.id]: new RealLLMAdapter(verifier.id, 'verifier'),
+          [hr.id]: new RealLLMAdapter(hr.id, 'hr'),
+        }
+      : {
+          [architect.id]: new SimulatedArchitectAdapter(architect.id),
+          [security.id]: new SimulatedSecurityAdapter(security.id),
+          [devilsAdvocate.id]: new SimulatedDevilsAdvocateAdapter(devilsAdvocate.id),
+          [perf.id]: new SimulatedPerfAdapter(perf.id),
+          [verifier.id]: new SimulatedVerifierAdapter(verifier.id),
+          [hr.id]: new SimulatedHrAdapter(hr.id),
+        };
 
     // Create the Decision row first
     const decisionId = `dec-${Date.now().toString(36)}`;
