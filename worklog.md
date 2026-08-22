@@ -2059,3 +2059,70 @@ Task: Do ALL next steps in one round: emoji reactions, reply threading, force-di
 - MODIFIED: `mini-services/vuno-substrate/Cargo.toml` (added futures crate)
 - MODIFIED: `mini-services/vuno-substrate/src/main.rs` (concurrent_demo_handler with tokio::join_all)
 
+
+---
+Task ID: 29 (Round 21 — Updated cron + reply-to-message routing)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Set up updated cron job for autonomous iterative development. Implement reply-to-message routing (inline reply input on message hover). Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- User asked: "set up cron job for you to continue iteratively developing the product until it is perfect following my learning framework and design principles"
+- The old cron (ID 332385) was outdated — still said "AI Organization OS" with the old cold charcoal + emerald design system
+- Reply threading: ThreadReplyPosted event type + rendering existed but the Reply button only focused the composer — no actual reply posting
+
+## 💻 Action (Step 2)
+
+### 1. Deleted old cron + created new updated cron (ID 333234)
+- Deleted old cron (332385) — was outdated with "AI Organization OS" name and cold design system
+- Created new cron (333234, priority 10, every 15 min, Asia/Tashkent):
+  - Full current project context (Vuno, 20 rounds, all features built)
+  - 5-step learning framework (Research → Action → Result → Information → Adjustment)
+  - 7 design principles (Simple, Powerful, Performant, Scalable, Efficient, Beautiful, Functional)
+  - "Think deeply and out of the box" instruction
+  - 20 specific next steps to pick from (MCP, ACP, concurrent interruption, variable cognitive load, etc.)
+  - Service restart commands (Next.js, realtime, Rust)
+  - Design system constraints (Vuno name, warm cream/mustard palette, 5 status colors, shadcn/ui, single / route)
+  - Worklog protocol (read worklog → pick step → execute → append to worklog → lint)
+  - The cron will run autonomously every 15 minutes, picking the highest-impact next step
+
+### 2. Reply-to-message routing
+- `src/components/chat/message-bubble.tsx`:
+  - Added `postReply(body)` function — POSTs a ThreadReplyPosted event with `parentId` to /api/events
+  - Added `showReplyInput` + `replyBody` local state
+  - Updated the Reply hover button: toggles `showReplyInput` instead of just focusing the composer
+  - Added inline reply input (shown when `showReplyInput` is true):
+    - Text input with `placeholder="Reply to ${actorName}…"`
+    - Enter key: posts the reply + clears input + hides
+    - Escape key: cancels + clears input + hides
+    - Send button: posts the reply (disabled when empty)
+    - autoFocus on show
+  - The reply appears in the chat as a ThreadReplyPosted event (rendered with the border-l-2 indented "reply" style already implemented in Round 20)
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Cron job: updated (ID 333234) — will run every 15 min, picking the highest-impact next step autonomously
+- Reply routing: inline reply input works — Reply button → input appears → type + Enter → ThreadReplyPosted event posted → appears in chat in real time
+
+## 💡 Information (Step 4)
+- The new cron has 20 specific next steps — it can work independently for many iterations
+- The cron includes service restart commands, design constraints, and the worklog protocol
+- The reply-to-message routing completes the "reply threading" feature — event type + API + rendering + input all wired
+
+## 🔧 Adjustment (Step 5)
+- All working. The cron will take over from here.
+- The user can now step back and let the cron iteratively develop Vuno autonomously.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | Cron = one job, one instruction set. Reply = local state + one fetch call. |
+| **Powerful** | Autonomous development loop — 20 next steps, 15-min cadence. |
+| **Efficient** | No extra infrastructure — cron uses existing tools (agent-browser, bun, cargo). |
+| **Beautiful** | Inline reply input matches the warm palette — border-l-2, placeholder, autoFocus. |
+| **Functional** | The product will continue developing even when the user is away. |
+
+### Files modified this round
+- DELETED: old cron job (332385)
+- CREATED: new cron job (333234) — full updated context with 5-step framework + 7 principles + 20 next steps
+- MODIFIED: `src/components/chat/message-bubble.tsx` (postReply function, showReplyInput + replyBody state, inline reply input with Enter/Escape/Send)
+

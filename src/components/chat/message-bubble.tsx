@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 interface Agent {
   id: string;
@@ -163,6 +163,27 @@ export function MessageBubble({
     }
   };
 
+  // Post a reply to this message
+  const postReply = async (body: string) => {
+    try {
+      await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ThreadReplyPosted',
+          payload: { body, parentId: message.id },
+          channelId: message.scopeType === 'channel' ? message.scopeId : undefined,
+        }),
+      });
+    } catch (e) {
+      console.error('[reply] failed:', e);
+    }
+  };
+
+  // Local reply input state
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyBody, setReplyBody] = useState('');
+
   return (
     <article
       className={cn(
@@ -178,12 +199,8 @@ export function MessageBubble({
           type="button"
           className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="Reply"
-          title="Reply"
-          onClick={() => {
-            // v1: no reply routing yet — just focus the composer
-            const composer = document.querySelector('textarea');
-            composer?.focus();
-          }}
+          title="Reply to this message"
+          onClick={() => setShowReplyInput(!showReplyInput)}
         >
           <Reply className="size-3" aria-hidden />
         </button>
@@ -272,6 +289,45 @@ export function MessageBubble({
           decisionId={decisionId}
           accent={accent}
         />
+
+        {/* Inline reply input — shown when Reply is clicked */}
+        {showReplyInput ? (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <input
+              type="text"
+              value={replyBody}
+              onChange={(e) => setReplyBody(e.target.value)}
+              placeholder={`Reply to ${actorName}…`}
+              className="h-7 flex-1 rounded-md border border-border/60 bg-card/60 px-2 text-xs placeholder:text-muted-foreground/60 focus:border-primary/40 focus:outline-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && replyBody.trim()) {
+                  void postReply(replyBody.trim());
+                  setReplyBody('');
+                  setShowReplyInput(false);
+                }
+                if (e.key === 'Escape') {
+                  setShowReplyInput(false);
+                  setReplyBody('');
+                }
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={!replyBody.trim()}
+              onClick={() => {
+                if (replyBody.trim()) {
+                  void postReply(replyBody.trim());
+                  setReplyBody('');
+                  setShowReplyInput(false);
+                }
+              }}
+            >
+              Send
+            </button>
+          </div>
+        ) : null}
       </div>
     </article>
   );
