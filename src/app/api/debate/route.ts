@@ -1,25 +1,31 @@
-// Vuno — /api/debate POST endpoint
-// Per ADR-0002 and the live-debate-slice goal: lets the user trigger a new
-// simulated debate. The orchestrator runs the AgentAdapter chain in sequence:
-//   1. architect.invoke(ProposalRequested) → ProposalOpened + MessagePosted
-//   2. role assignments (system) → RoleAssigned × 4
-//   3. security.invoke(ProposalOpened) → MessagePosted (security review)
-//   4. devils_advocate.invoke(ProposalOpened) → ObjectionRaised + MessagePosted
-//   5. perf.invoke(ObjectionRaised) → ExperimentRequested + MessagePosted
-//   6. perf.invoke(ExperimentRequested) → ExperimentCompleted + BenchmarkReported + MessagePosted
-//   7. system: ClaimStatusChanged (believed → falsified) + RiskFlagged + GateEvaluated (perf blocked) + GateBlocked (release blocked)
-//   8. architect.invoke(DecisionRecorded trigger) — actually we craft DecisionRecorded here
-//   9. hr.invoke(DecisionRecorded) → MessagePosted (retrospective)
+// Vuno — /api/debate POST endpoint (CONCURRENT + STREAMING)
+// Per the user's headline: "agents/teams pushing, discussing and debating and
+// reviewing each other's work in real time concurrently just like humans in
+// real corporate life."
 //
-// All events appended atomically via the EventSpine. Returns the new decision id
-// and the count of events appended.
+// This refactor changes the debate from SEQUENTIAL (batch all events, append at end)
+// to CONCURRENT + STREAMING:
+//   1. Append + broadcast EACH event as it's produced (not batched)
+//   2. Security + DevilsAdvocate wake IN PARALLEL after ProposalOpened (Promise.all)
+//   3. Small delays (300-800ms) between phases for a "live conversation" feel
+//   4. Typing indicators before each agent responds
+//
+// The debate chain:
+//   Phase 1: Architect proposes (sequential — must happen first)
+//   Phase 2: Security + DevilsAdvocate review IN PARALLEL (both respond to ProposalOpened)
+//   Phase 3: Perf requests experiment (after ObjectionRaised — sequential dependency)
+//   Phase 4: Perf runs benchmark (after ExperimentRequested — sequential dependency)
+//   Phase 5: Verifier confirms (after BenchmarkReported)
+//   Phase 6: System events (ClaimStatusChanged, RiskFlagged, GateEvaluated, GateBlocked)
+//   Phase 7: DecisionRecorded (after benchmark result)
+//   Phase 8: HR retrospective (after DecisionRecorded)
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
-import { broadcastEventAppended } from '@/lib/realtime/broadcast';
+import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
 import type { NewEventInput, EventRecord, ClaimStatus } from '@/lib/events/types';
-import type { AgentContext, AgentAdapter, AgentClaimRecord } from '@/lib/agents/types';
+import type { AgentContext, AgentAdapter } from '@/lib/agents/types';
 import {
   SimulatedArchitectAdapter,
   SimulatedDevilsAdvocateAdapter,
@@ -32,9 +38,9 @@ import {
 export const dynamic = 'force-dynamic';
 
 interface DebateRequest {
-  title?: string;       // optional: title for the proposal (defaults to a generated one)
-  projectId?: string;   // optional: project to scope to (defaults to first project)
-  channelId?: string;   // optional: channel to post messages to (defaults to ch-storage)
+  title?: string;
+  projectId?: string;
+  channelId?: string;
 }
 
 interface DebateResponse {
@@ -44,6 +50,9 @@ interface DebateResponse {
   message?: string;
   error?: string;
 }
+
+// Sleep helper for "live conversation" feel
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function POST(req: Request): Promise<NextResponse<DebateResponse>> {
   try {
@@ -57,7 +66,6 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       return NextResponse.json({ ok: false, error: 'No organization found. Seed first.' }, { status: 400 });
     }
 
-    // Find the project (default to first)
     const project = body.projectId
       ? await db.project.findUnique({ where: { id: body.projectId } })
       : await db.project.findFirst({ where: { orgId: org.id }, orderBy: { createdAt: 'asc' } });
@@ -66,14 +74,12 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     }
 
     const channelId = body.channelId ?? 'ch-storage';
-
-    // Verify the channel exists
     const channel = await db.channel.findUnique({ where: { id: channelId } });
     if (!channel) {
       return NextResponse.json({ ok: false, error: `Channel ${channelId} not found.` }, { status: 400 });
     }
 
-    // Fetch the agents we need (architect, security, devils_advocate, perf, verifier, hr)
+    // Fetch the agents we need
     const agents = await db.agent.findMany({
       where: { orgId: org.id, status: 'active' },
     });
@@ -101,7 +107,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       [hr.id]: new SimulatedHrAdapter(hr.id),
     };
 
-    // Create the Decision row first (so we have the id for events)
+    // Create the Decision row first
     const decisionId = `dec-${Date.now().toString(36)}`;
     await db.decision.create({
       data: {
@@ -115,7 +121,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       },
     });
 
-    // Create gates for this decision (clone from the project's gate templates)
+    // Create gates
     const gateDefs = [
       { name: 'security', policy: 'no open RiskFlag of severity >= high on this project' },
       { name: 'qa', policy: 'all unit + integration tests pass' },
@@ -125,384 +131,27 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     const gates: Record<string, { id: string; name: string }> = {};
     for (const g of gateDefs) {
       const row = await db.gate.create({
-        data: {
-          tenantId: org.tenantId,
-          orgId: org.id,
-          projectId: project.id,
-          decisionId,
-          name: g.name,
-          policy: g.policy,
-          state: 'pending',
-        },
+        data: { tenantId: org.tenantId, orgId: org.id, projectId: project.id, decisionId, name: g.name, policy: g.policy, state: 'pending' },
       });
       gates[g.name] = { id: row.id, name: g.name };
     }
 
-    // ─── Run the debate chain ───────────────────────────────────────────────
+    // ─── Streaming helper: append + broadcast events as they're produced ─────
     const spine = new EventSpine(org.tenantId, org.id);
-    const allNewEvents: NewEventInput[] = [];
-    const allNewClaims: Array<NewClaimInput & { _statusTransition?: { from: ClaimStatus; to: ClaimStatus; reason: string } }> = [];
+    let eventsAppended = 0;
 
-    // Helper: invoke an adapter and collect its events/claims
-    async function runAdapter(
-      agentId: string,
-      triggerType: string,
-      triggerPayload: unknown,
-      contextEvents: EventRecord[],
-    ): Promise<EventRecord[]> {
-      const adapter = adapters[agentId];
-      if (!adapter) return [];
-      const ctx: AgentContext = {
-        events: contextEvents,
-        claims: [],
-        trigger: { type: triggerType, payload: triggerPayload },
-      };
-      const response = await adapter.invoke(ctx);
-      // Collect events (we'll append them all at once atomically at the end)
-      for (const ev of response.events) {
-        allNewEvents.push(ev);
-      }
-      for (const cl of response.claims) {
-        allNewClaims.push(cl);
-      }
-      // Return the new events as EventRecord-like objects for the next adapter's context
-      // We need to fake the EventRecord shape (with id, seq, createdAt) so the next
-      // adapter can find them by type. We'll use placeholder ids/seqs since the spine
-      // will assign real ones on append.
-      return response.events.map((ev, i) => ({
-        id: `pending-${allNewEvents.length}-${i}`,
-        seq: -1 - i, // placeholder; not used for filtering
-        type: ev.type,
-        payload: ev.payload,
-        tenantId: org.tenantId,
-        orgId: org.id,
-        actorType: ev.actorType,
-        actorAgentId: ev.actorAgentId,
-        actorUserId: ev.actorUserId,
-        scopeType: ev.scopeType,
-        scopeId: ev.scopeId,
-        visibility: ev.visibility ?? 'org',
-        createdAt: new Date().toISOString(),
+    async function streamEvents(events: NewEventInput[]): Promise<EventRecord[]> {
+      if (events.length === 0) return [];
+      const created = await spine.append(events);
+      eventsAppended += created.length;
+      // Parse the payload from JSON string → object (Prisma stores it stringified,
+      // but downstream adapters need the parsed object)
+      const parsed = created.map((e) => ({
+        ...e,
+        payload: typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload,
       })) as EventRecord[];
-    }
-
-    // Step 1: Architect proposes
-    const proposalTriggerPayload = {
-      decisionId,
-      projectId: project.id,
-      title: body.title ?? 'Architecture: simulated proposal',
-    };
-    // We need to pass the ProposalOpened event to the next adapters, so we run
-    // the architect first and capture its events.
-    const architectAdapter = adapters[architect.id]!;
-    const architectCtx: AgentContext = {
-      events: [],
-      claims: [],
-      trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload },
-    };
-    const architectResponse = await architectAdapter.invoke(architectCtx);
-    for (const ev of architectResponse.events) allNewEvents.push(ev);
-    // Find the ProposalOpened event for downstream context
-    const proposalEventRecord: EventRecord = {
-      id: 'pending-proposal',
-      seq: -1,
-      type: 'ProposalOpened',
-      payload: architectResponse.events.find((e) => e.type === 'ProposalOpened')!.payload,
-      tenantId: org.tenantId,
-      orgId: org.id,
-      actorType: 'agent',
-      actorAgentId: architect.id,
-      scopeType: 'decision',
-      scopeId: decisionId,
-      visibility: 'org',
-      createdAt: new Date().toISOString(),
-    };
-
-    // Step 2: Role assignments (system events)
-    const roleAssignments: Array<{ role: string; agentId: string; agentName: string }> = [
-      { role: 'proposer', agentId: architect.id, agentName: architect.name },
-      { role: 'reviewer', agentId: security.id, agentName: security.name },
-      { role: 'devils_advocate', agentId: devilsAdvocate.id, agentName: devilsAdvocate.name },
-      { role: 'verifier', agentId: perf.id, agentName: perf.name },
-    ];
-    for (const r of roleAssignments) {
-      allNewEvents.push({
-        type: 'RoleAssigned',
-        actorType: 'system',
-        scopeType: 'decision',
-        scopeId: decisionId,
-        payload: {
-          decisionId,
-          role: r.role as 'reviewer' | 'devils_advocate' | 'domain_expert' | 'verifier' | 'proposer',
-          agentId: r.agentId,
-          agentName: r.agentName,
-        },
-      });
-    }
-
-    // Step 3: Security reviews the proposal
-    await runAdapter(security.id, 'ProposalOpened', proposalEventRecord.payload, [proposalEventRecord]);
-
-    // Step 4: Devil's advocate raises an objection
-    const devilsResponse = await adapters[devilsAdvocate.id]!.invoke({
-      events: [proposalEventRecord],
-      claims: [],
-      trigger: { type: 'ProposalOpened', payload: proposalEventRecord.payload },
-    });
-    for (const ev of devilsResponse.events) allNewEvents.push(ev);
-    // Find the ObjectionRaised event
-    const objectionEvent = devilsResponse.events.find((e) => e.type === 'ObjectionRaised');
-    const objectionEventRecord: EventRecord | null = objectionEvent
-      ? {
-          id: 'pending-objection',
-          seq: -2,
-          type: 'ObjectionRaised',
-          payload: objectionEvent.payload,
-          tenantId: org.tenantId,
-          orgId: org.id,
-          actorType: 'agent',
-          actorAgentId: devilsAdvocate.id,
-          scopeType: 'decision',
-          scopeId: decisionId,
-          visibility: 'org',
-          createdAt: new Date().toISOString(),
-        }
-      : null;
-
-    // Step 5: Perf requests an experiment
-    let experimentEventRecord: EventRecord | null = null;
-    if (objectionEventRecord) {
-      const perfExpResponse = await adapters[perf.id]!.invoke({
-        events: [objectionEventRecord],
-        claims: [],
-        trigger: { type: 'ObjectionRaised', payload: objectionEventRecord.payload },
-      });
-      for (const ev of perfExpResponse.events) allNewEvents.push(ev);
-      const expEvent = perfExpResponse.events.find((e) => e.type === 'ExperimentRequested');
-      if (expEvent) {
-        experimentEventRecord = {
-          id: 'pending-experiment',
-          seq: -3,
-          type: 'ExperimentRequested',
-          payload: expEvent.payload,
-          tenantId: org.tenantId,
-          orgId: org.id,
-          actorType: 'agent',
-          actorAgentId: perf.id,
-          scopeType: 'decision',
-          scopeId: decisionId,
-          visibility: 'org',
-          createdAt: new Date().toISOString(),
-        };
-      }
-    }
-
-    // Step 6: Perf runs the benchmark
-    let benchmarkEventRecord: EventRecord | null = null;
-    let benchmarkValue = '0';
-    let benchmarkTarget = '50';
-    if (experimentEventRecord) {
-      const perfBenchResponse = await adapters[perf.id]!.invoke({
-        events: [experimentEventRecord],
-        claims: [],
-        trigger: { type: 'ExperimentRequested', payload: experimentEventRecord.payload },
-      });
-      for (const ev of perfBenchResponse.events) allNewEvents.push(ev);
-      const benchEvent = perfBenchResponse.events.find((e) => e.type === 'BenchmarkReported');
-      if (benchEvent) {
-        const bp = benchEvent.payload as { value: string; target: string };
-        benchmarkValue = bp.value;
-        benchmarkTarget = bp.target;
-        benchmarkEventRecord = {
-          id: 'pending-benchmark',
-          seq: -4,
-          type: 'BenchmarkReported',
-          payload: benchEvent.payload,
-          tenantId: org.tenantId,
-          orgId: org.id,
-          actorType: 'agent',
-          actorAgentId: perf.id,
-          scopeType: 'decision',
-          scopeId: decisionId,
-          visibility: 'org',
-          createdAt: new Date().toISOString(),
-        };
-      }
-    }
-
-    // Step 7: Verifier confirms
-    if (benchmarkEventRecord) {
-      await runAdapter(verifier.id, 'BenchmarkReported', benchmarkEventRecord.payload, [benchmarkEventRecord]);
-    }
-
-    // Step 8: Create the falsified claim + ClaimStatusChanged + RiskFlagged + GateEvaluated + GateBlocked
-    const claimId = `claim-${decisionId}`;
-    const claimStatement = `p99 read latency < ${benchmarkTarget}ms at 10k concurrent readers`;
-    // We'll create the claim in the DB after the events are appended (need the event id for provenance).
-    // For now, queue a ClaimStatusChanged event (system).
-    if (benchmarkEventRecord) {
-      allNewEvents.push({
-        type: 'ClaimStatusChanged',
-        actorType: 'system',
-        scopeType: 'channel',
-        scopeId: channelId,
-        payload: {
-          claimId,
-          from: 'believed' as ClaimStatus,
-          to: 'falsified' as ClaimStatus,
-          reason: `Benchmark refutes: p99=${benchmarkValue}ms vs target=${benchmarkTarget}ms at 10k concurrent readers.`,
-          evidenceEventId: undefined,
-        },
-      });
-      // RiskFlagged (project-scoped)
-      allNewEvents.push({
-        type: 'RiskFlagged',
-        actorType: 'agent',
-        actorAgentId: perf.id,
-        scopeType: 'project',
-        scopeId: project.id,
-        payload: {
-          scopeType: 'project',
-          scopeId: project.id,
-          severity: 'high',
-          description: `Architecture proposal falsified by benchmark. p99=${benchmarkValue}ms exceeds ${benchmarkTarget}ms target. Working set exceeds RAM under current design.`,
-          claimId,
-        },
-      });
-      // GateEvaluated: performance blocked
-      allNewEvents.push({
-        type: 'GateEvaluated',
-        actorType: 'system',
-        scopeType: 'project',
-        scopeId: project.id,
-        payload: {
-          gateId: gates.performance.id,
-          name: 'performance',
-          policy: 'p99 < 50ms at 10k concurrent readers',
-          result: 'blocked',
-          reason: `p99=${benchmarkValue}ms > ${benchmarkTarget}ms target. Claim ${claimId} falsified.`,
-        },
-      });
-      // GateBlocked: release blocked (cascading)
-      allNewEvents.push({
-        type: 'GateBlocked',
-        actorType: 'system',
-        scopeType: 'project',
-        scopeId: project.id,
-        payload: {
-          gateId: gates.release.id,
-          name: 'release',
-          reason: 'Performance gate blocked AND open high-severity RiskFlag on this project.',
-          blockingRiskIds: [claimId],
-        },
-      });
-    }
-
-    // Step 9: Architect records the decision
-    const proposalPayload = proposalEventRecord.payload as { title: string; body: string; alternatives?: Array<{ name: string; rejectedReason: string }> };
-    const decisionRecordedEvent: NewEventInput<'DecisionRecorded'> = {
-      type: 'DecisionRecorded',
-      actorType: 'agent',
-      actorAgentId: architect.id,
-      scopeType: 'decision',
-      scopeId: decisionId,
-      payload: {
-        decisionId,
-        outcome: 'falsified',
-        chosen: proposalPayload.title,
-        rationale: `Architecture proposal falsified by Performance team benchmark. p99 read latency = ${benchmarkValue}ms (target ${benchmarkTarget}ms) at 10k concurrent readers. Working set exceeded RAM. Reopening architecture.`,
-        rejectedAlternatives: [
-          ...(proposalPayload.alternatives ?? []),
-          { name: proposalPayload.title, reason: `Falsified by benchmark — see Claim ${claimId}` },
-        ],
-      },
-    };
-    allNewEvents.push(decisionRecordedEvent);
-
-    // Step 10: HR writes a retrospective note
-    const decisionRecordedRecord: EventRecord = {
-      id: 'pending-decision-recorded',
-      seq: -5,
-      type: 'DecisionRecorded',
-      payload: decisionRecordedEvent.payload,
-      tenantId: org.tenantId,
-      orgId: org.id,
-      actorType: 'agent',
-      actorAgentId: architect.id,
-      scopeType: 'decision',
-      scopeId: decisionId,
-      visibility: 'org',
-      createdAt: new Date().toISOString(),
-    };
-    await runAdapter(hr.id, 'DecisionRecorded', decisionRecordedRecord.payload, [decisionRecordedRecord]);
-
-    // ─── Append all events to the spine atomically ──────────────────────────
-    const createdEvents = await spine.append(allNewEvents);
-
-    // ─── Create the claim in the DB (now we have the event id for provenance) ──
-    const benchmarkDbEvent = createdEvents.find((e) => e.type === 'BenchmarkReported');
-    if (benchmarkDbEvent) {
-      await db.claim.create({
-        data: {
-          id: claimId,
-          tenantId: org.tenantId,
-          orgId: org.id,
-          statement: claimStatement,
-          status: 'falsified',
-          scopeType: 'project',
-          scopeId: project.id,
-          provenanceEventId: createdEvents.find((e) => e.type === 'ProposalOpened')?.id ?? benchmarkDbEvent.id,
-          provenanceActorType: 'agent',
-          provenanceAgentId: architect.id,
-          evidenceIds: JSON.stringify([benchmarkDbEvent.id]),
-          contradictsIds: JSON.stringify([]),
-          statusReason: `Falsified by benchmark: p99=${benchmarkValue}ms vs target=${benchmarkTarget}ms at 10k concurrent readers.`,
-          updatedAt: new Date(),
-        },
-      });
-    }
-
-    // ─── Update gate states in the DB ────────────────────────────────────────
-    if (benchmarkDbEvent) {
-      await db.gate.update({
-        where: { id: gates.performance.id },
-        data: {
-          state: 'blocked',
-          reason: `p99=${benchmarkValue}ms > ${benchmarkTarget}ms target`,
-          evaluatedAt: new Date(),
-        },
-      });
-      await db.gate.update({
-        where: { id: gates.release.id },
-        data: {
-          state: 'blocked',
-          reason: 'Performance gate blocked AND open high-severity RiskFlag on this project',
-          evaluatedAt: new Date(),
-        },
-      });
-      await db.gate.update({
-        where: { id: gates.security.id },
-        data: { state: 'passed', reason: 'No open RiskFlag of severity >= high on this project', evaluatedAt: new Date() },
-      });
-      await db.gate.update({
-        where: { id: gates.qa.id },
-        data: { state: 'passed', reason: 'All unit + integration tests pass', evaluatedAt: new Date() },
-      });
-    }
-
-    // Update the decision state
-    await db.decision.update({
-      where: { id: decisionId },
-      data: { state: 'resolved', outcome: 'falsified', updatedAt: new Date() },
-    });
-
-    // Broadcast channel-scoped events to the realtime service so connected
-    // clients see them appear in real time (not waiting for the 5s poll).
-    // We broadcast each event individually so they stream in one-by-one.
-    for (const evt of createdEvents) {
-      // Only broadcast channel-scoped events (those are what the chat shows)
-      // plus decision-scoped events (those are what the decision page shows).
-      if (evt.scopeType === 'channel' || evt.scopeType === 'decision' || evt.scopeType === 'project') {
+      // Broadcast each event individually so they stream to the UI one-by-one
+      for (const evt of parsed) {
         void broadcastEventAppended({
           channelId: evt.scopeType === 'channel' ? evt.scopeId : undefined,
           scopeType: evt.scopeType,
@@ -510,13 +159,198 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
           event: evt,
         });
       }
+      return parsed;
     }
+
+    // Helper: send a typing indicator for an agent, wait, then stop typing
+    async function sendTyping(agentId: string, agentName: string, channelId: string, durationMs: number) {
+      void broadcastTyping({ channelId, userId: agentId, isTyping: true });
+      await sleep(durationMs);
+      void broadcastTyping({ channelId, userId: agentId, isTyping: false });
+    }
+
+    // Helper: invoke an adapter and stream its events
+    async function invokeAndStream(
+      agentId: string,
+      triggerType: string,
+      triggerPayload: unknown,
+      contextEvents: EventRecord[],
+      agentName: string,
+    ): Promise<EventRecord[]> {
+      const adapter = adapters[agentId];
+      if (!adapter) return [];
+      // Send typing indicator while the agent "thinks"
+      await sendTyping(agentId, agentName, channelId, 400 + Math.random() * 400);
+      const ctx: AgentContext = { events: contextEvents, claims: [], trigger: { type: triggerType, payload: triggerPayload } };
+      const response = await adapter.invoke(ctx);
+      return await streamEvents(response.events);
+    }
+
+    // ─── Phase 1: Architect proposes ────────────────────────────────────────
+    const proposalTriggerPayload = { decisionId, projectId: project.id, title: body.title ?? 'Architecture: simulated proposal' };
+    const architectAdapter = adapters[architect.id]!;
+    const architectCtx: AgentContext = { events: [], claims: [], trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload } };
+    await sendTyping(architect.id, architect.name, channelId, 500 + Math.random() * 300);
+    const architectResponse = await architectAdapter.invoke(architectCtx);
+    const proposalCreated = await streamEvents(architectResponse.events);
+
+    // Build the ProposalOpened event record for downstream context
+    const proposalDbEvent = proposalCreated.find((e) => e.type === 'ProposalOpened');
+    const proposalEventRecord: EventRecord | null = proposalDbEvent
+      ? proposalDbEvent
+      : {
+          id: 'pending-proposal',
+          seq: -1,
+          type: 'ProposalOpened',
+          payload: architectResponse.events.find((e) => e.type === 'ProposalOpened')!.payload,
+          tenantId: org.tenantId, orgId: org.id, actorType: 'agent', actorAgentId: architect.id,
+          scopeType: 'decision', scopeId: decisionId, visibility: 'org', createdAt: new Date().toISOString(),
+        };
+
+    // ─── Phase 2: Role assignments (system events) ──────────────────────────
+    await sleep(200);
+    const roleAssignments: NewEventInput[] = [
+      { type: 'RoleAssigned', actorType: 'system', scopeType: 'decision', scopeId: decisionId,
+        payload: { decisionId, role: 'proposer', agentId: architect.id, agentName: architect.name } },
+      { type: 'RoleAssigned', actorType: 'system', scopeType: 'decision', scopeId: decisionId,
+        payload: { decisionId, role: 'reviewer', agentId: security.id, agentName: security.name } },
+      { type: 'RoleAssigned', actorType: 'system', scopeType: 'decision', scopeId: decisionId,
+        payload: { decisionId, role: 'devils_advocate', agentId: devilsAdvocate.id, agentName: devilsAdvocate.name } },
+      { type: 'RoleAssigned', actorType: 'system', scopeType: 'decision', scopeId: decisionId,
+        payload: { decisionId, role: 'verifier', agentId: perf.id, agentName: perf.name } },
+    ];
+    await streamEvents(roleAssignments);
+
+    // ─── Phase 3: Security + DevilsAdvocate review IN PARALLEL ───────────────
+    // These two agents wake in parallel — they both respond to ProposalOpened
+    // independently, like real colleagues seeing a Slack message and replying.
+    await sleep(300);
+    const [securityCreated, devilsCreated] = await Promise.all([
+      invokeAndStream(security.id, 'ProposalOpened', proposalEventRecord!.payload, [proposalEventRecord!], security.name),
+      invokeAndStream(devilsAdvocate.id, 'ProposalOpened', proposalEventRecord!.payload, [proposalEventRecord!], devilsAdvocate.name),
+    ]);
+
+    // Find the ObjectionRaised event from the devil's advocate
+    const objectionDbEvent = devilsCreated.find((e) => e.type === 'ObjectionRaised');
+    const objectionEventRecord: EventRecord | null = objectionDbEvent
+      ? objectionDbEvent
+      : null;
+
+    // ─── Phase 4: Perf requests an experiment (after objection — sequential) ─
+    let experimentEventRecord: EventRecord | null = null;
+    if (objectionEventRecord) {
+      await sleep(300);
+      const expCreated = await invokeAndStream(perf.id, 'ObjectionRaised', objectionEventRecord.payload, [objectionEventRecord], perf.name);
+      experimentEventRecord = expCreated.find((e) => e.type === 'ExperimentRequested') ?? null;
+    }
+
+    // ─── Phase 5: Perf runs the benchmark (after experiment — sequential) ────
+    let benchmarkEventRecord: EventRecord | null = null;
+    let benchmarkValue = '0';
+    let benchmarkTarget = '50';
+    if (experimentEventRecord) {
+      await sleep(800); // Longer delay — benchmark takes time
+      const benchCreated = await invokeAndStream(perf.id, 'ExperimentRequested', experimentEventRecord.payload, [experimentEventRecord], perf.name);
+      benchmarkEventRecord = benchCreated.find((e) => e.type === 'BenchmarkReported') ?? null;
+      if (benchmarkEventRecord) {
+        const bp = benchmarkEventRecord.payload as { value: string; target: string };
+        benchmarkValue = bp.value;
+        benchmarkTarget = bp.target;
+      }
+    }
+
+    // ─── Phase 6: Verifier confirms (after benchmark) ───────────────────────
+    if (benchmarkEventRecord) {
+      await sleep(300);
+      await invokeAndStream(verifier.id, 'BenchmarkReported', benchmarkEventRecord.payload, [benchmarkEventRecord], verifier.name);
+    }
+
+    // ─── Phase 7: System events (claim falsified, risk, gates) ──────────────
+    const claimId = `claim-${decisionId}`;
+    const claimStatement = `p99 read latency < ${benchmarkTarget}ms at 10k concurrent readers`;
+    if (benchmarkEventRecord) {
+      await sleep(300);
+      // ClaimStatusChanged (channel-scoped — shows in chat)
+      await streamEvents([{
+        type: 'ClaimStatusChanged', actorType: 'system', scopeType: 'channel', scopeId: channelId,
+        payload: { claimId, from: 'believed' as ClaimStatus, to: 'falsified' as ClaimStatus,
+          reason: `Benchmark refutes: p99=${benchmarkValue}ms vs target=${benchmarkTarget}ms at 10k concurrent readers.` },
+      }]);
+      // RiskFlagged (project-scoped)
+      await streamEvents([{
+        type: 'RiskFlagged', actorType: 'agent', actorAgentId: perf.id, scopeType: 'project', scopeId: project.id,
+        payload: { scopeType: 'project', scopeId: project.id, severity: 'high',
+          description: `Architecture proposal falsified by benchmark. p99=${benchmarkValue}ms exceeds ${benchmarkTarget}ms target.`,
+          claimId },
+      }]);
+      // GateEvaluated: performance blocked
+      await streamEvents([{
+        type: 'GateEvaluated', actorType: 'system', scopeType: 'project', scopeId: project.id,
+        payload: { gateId: gates.performance.id, name: 'performance', policy: 'p99 < 50ms at 10k concurrent readers',
+          result: 'blocked', reason: `p99=${benchmarkValue}ms > ${benchmarkTarget}ms target. Claim ${claimId} falsified.` },
+      }]);
+      // GateBlocked: release blocked (cascading)
+      await streamEvents([{
+        type: 'GateBlocked', actorType: 'system', scopeType: 'project', scopeId: project.id,
+        payload: { gateId: gates.release.id, name: 'release',
+          reason: 'Performance gate blocked AND open high-severity RiskFlag on this project.',
+          blockingRiskIds: [claimId] },
+      }]);
+    }
+
+    // ─── Phase 8: DecisionRecorded (after benchmark result) ──────────────────
+    if (benchmarkEventRecord) {
+      await sleep(400);
+      const proposalPayload = proposalEventRecord!.payload as { title: string; body: string; alternatives?: Array<{ name: string; rejectedReason: string }> };
+      const decisionCreated = await streamEvents([{
+        type: 'DecisionRecorded', actorType: 'agent', actorAgentId: architect.id, scopeType: 'decision', scopeId: decisionId,
+        payload: { decisionId, outcome: 'falsified', chosen: proposalPayload.title,
+          rationale: `Architecture proposal falsified by Performance team benchmark. p99=${benchmarkValue}ms (target ${benchmarkTarget}ms) at 10k concurrent readers. Working set exceeded RAM.`,
+          rejectedAlternatives: [
+            ...(proposalPayload.alternatives ?? []),
+            { name: proposalPayload.title, reason: `Falsified by benchmark — see Claim ${claimId}` },
+          ] },
+      }]);
+      const decisionRecordedRecord = decisionCreated[0] ?? null;
+
+      // ─── Phase 9: HR retrospective (after decision recorded) ──────────────────
+      if (decisionRecordedRecord) {
+        await sleep(400);
+        await invokeAndStream(hr.id, 'DecisionRecorded', decisionRecordedRecord.payload, [decisionRecordedRecord], hr.name);
+      }
+    }
+
+    // ─── Create the claim in the DB ──────────────────────────────────────────
+    if (benchmarkEventRecord) {
+      await db.claim.create({
+        data: {
+          id: claimId, tenantId: org.tenantId, orgId: org.id,
+          statement: claimStatement, status: 'falsified',
+          scopeType: 'project', scopeId: project.id,
+          provenanceEventId: proposalDbEvent?.id ?? benchmarkEventRecord.id,
+          provenanceActorType: 'agent', provenanceAgentId: architect.id,
+          evidenceIds: JSON.stringify([benchmarkEventRecord.id]),
+          contradictsIds: JSON.stringify([]),
+          statusReason: `Falsified by benchmark: p99=${benchmarkValue}ms vs target=${benchmarkTarget}ms at 10k concurrent readers.`,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    // ─── Update gate states ──────────────────────────────────────────────────
+    if (benchmarkEventRecord) {
+      await db.gate.update({ where: { id: gates.performance.id }, data: { state: 'blocked', reason: `p99=${benchmarkValue}ms > ${benchmarkTarget}ms target`, evaluatedAt: new Date() } });
+      await db.gate.update({ where: { id: gates.release.id }, data: { state: 'blocked', reason: 'Performance gate blocked AND open high-severity RiskFlag', evaluatedAt: new Date() } });
+      await db.gate.update({ where: { id: gates.security.id }, data: { state: 'passed', reason: 'No open RiskFlag of severity >= high', evaluatedAt: new Date() } });
+      await db.gate.update({ where: { id: gates.qa.id }, data: { state: 'passed', reason: 'All unit + integration tests pass', evaluatedAt: new Date() } });
+    }
+    await db.decision.update({ where: { id: decisionId }, data: { state: 'resolved', outcome: 'falsified', updatedAt: new Date() } });
 
     return NextResponse.json({
       ok: true,
       decisionId,
-      eventsAppended: allNewEvents.length,
-      message: `Debate completed. ${allNewEvents.length} events appended. Claim ${claimId} falsified. Release gate blocked.`,
+      eventsAppended,
+      message: `Debate completed. ${eventsAppended} events streamed. Claim ${claimId} falsified. Release gate blocked.`,
     });
   } catch (err) {
     console.error('Debate orchestration failed:', err);

@@ -70,8 +70,21 @@ export function ChatView() {
     eventsRes.refetch();
   }, [activeChannelId, eventsRes]);
 
+  // Typing indicator state — which agents are currently "typing"
+  const [typingAgents, setTypingAgents] = useState<Set<string>>(new Set());
+  const handleTyping = useCallback((data: { channelId?: string; userId: string; isTyping: boolean }) => {
+    if (data.channelId && data.channelId !== activeChannelId) return;
+    setTypingAgents((prev) => {
+      const next = new Set(prev);
+      if (data.isTyping) next.add(data.userId);
+      else next.delete(data.userId);
+      return next;
+    });
+  }, [activeChannelId]);
+
   const { isConnected, subscribe, unsubscribe } = useRealtime({
     onEventAppended: handleEventAppended,
+    onTyping: handleTyping,
   });
 
   // Subscribe to the active channel for realtime events
@@ -170,6 +183,22 @@ export function ChatView() {
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
+
+      {/* Typing indicator — shows "X is typing..." when agents are responding */}
+      {typingAgents.size > 0 ? (
+        <div className="flex items-center gap-2 border-t border-border/40 px-4 py-1.5 text-xs text-muted-foreground">
+          <span className="flex gap-0.5">
+            <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
+          </span>
+          <span>
+            {Array.from(typingAgents).length === 1
+              ? 'agent is typing…'
+              : `${Array.from(typingAgents).length} agents are typing…`}
+          </span>
+        </div>
+      ) : null}
 
       {/* Composer */}
       <TypedComposer channelId={activeChannelId} />

@@ -758,3 +758,111 @@ Task: Build the real-time transport layer (socket.io mini-service on port 3003).
 - MODIFIED: `src/components/chat/chat-view.tsx` (useRealtime hook, subscribe/unsubscribe, wifi indicator, 10s poll fallback)
 - INSTALLED: `socket.io-client` + `socket.io` (in main project + realtime service)
 
+
+---
+Task ID: 13 (Round 5 — Concurrent agent debate with real-time streaming)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Make agents debate CONCURRENTLY (not sequentially), stream events to the UI one-by-one as they're produced, add typing indicators. Apply the 5-step learning loop + 7 design principles. Multi-role review first.
+
+## 🔍 Research (Step 1) — Multi-role review
+
+### Critic's view
+- ❌ Agents ran SEQUENTIALLY in /api/debate — the orchestrator called agents in a fixed order. The user's headline ("agents debating in real time concurrently like humans in real corporate life") was NOT met.
+- The realtime transport (Round 4) was ready, but agents didn't wake each other or respond in parallel.
+
+### Architect's view
+- Two paths: Path A (Rust substrate with tokio::join_all) vs Path B (TS concurrent agents with Promise.all + streaming).
+- **Path B chosen** because: Simple (uses what we have), Powerful (agents actually run in parallel), Functional (delivers the headline NOW). Rust rewrite deferred to Round 6.
+- The debate chain has natural parallelism: after ProposalOpened, Security + DevilsAdvocate wake IN PARALLEL (both respond to the proposal independently, like real colleagues seeing a Slack message).
+
+### Engineer's view
+- Refactor /api/debate: instead of batching ALL events and appending at the end, append + broadcast EACH event as it's produced
+- Use Promise.all for parallel agent invocations (Security + DevilsAdvocate)
+- Add small delays (300-800ms) between phases for "live conversation" feel
+- Add typing indicators before each agent responds
+
+## 💻 Action (Step 2)
+
+### 1. Rewrote /api/debate for concurrency + streaming
+- `src/app/api/debate/route.ts` (COMPLETE REWRITE, 280 lines):
+  - **streamEvents() helper**: appends events to the spine AND broadcasts each one individually via the realtime service. Events stream to the UI one-by-one, not batched.
+  - **sendTyping() helper**: sends a typing indicator before an agent responds, waits for a duration, then stops typing. Duration is variable (400-800ms) for organic feel.
+  - **invokeAndStream() helper**: combines sendTyping + adapter.invoke + streamEvents into one call.
+  - Phase 1: Architect proposes (sequential — must happen first)
+  - Phase 2: Role assignments (system events)
+  - Phase 3: **Security + DevilsAdvocate review IN PARALLEL** (Promise.all — both wake on ProposalOpened, respond independently)
+  - Phase 4: Perf requests experiment (after ObjectionRaised — sequential dependency)
+  - Phase 5: Perf runs benchmark (after ExperimentRequested — sequential dependency, 800ms delay — benchmark takes time)
+  - Phase 6: Verifier confirms (after BenchmarkReported)
+  - Phase 7: System events (ClaimStatusChanged, RiskFlagged, GateEvaluated, GateBlocked) — streamed one-by-one
+  - Phase 8: DecisionRecorded (after benchmark result)
+  - Phase 9: HR retrospective (after DecisionRecorded)
+  - Small delays (200-800ms) between phases for a "live conversation" feel
+
+### 2. Fixed payload parsing bug
+- The spine's `append()` returns events with `payload` as a JSON string (Prisma stores it stringified). The `replay()` method parses it, but `append()` doesn't.
+- Fix: `streamEvents()` now parses the payload from JSON string → object before returning. Downstream adapters need the parsed object, not the string.
+- Bug manifested as: "Cannot read properties of undefined (reading 'toLowerCase')" — the DevilsAdvocate adapter tried `p.body.toLowerCase()` where `p.body` was undefined (because `p` was a string, not an object).
+
+### 3. Added typing indicator UI
+- `src/components/chat/chat-view.tsx`:
+  - `typingAgents` state (Set<string>) — tracks which agents are currently "typing"
+  - `handleTyping` callback — adds/removes agent IDs from the set
+  - Passed to `useRealtime({ onTyping: handleTyping })`
+  - Typing indicator UI: a small pill above the composer with bouncing dots + "agent is typing…" text
+  - Shows count: "1 agent is typing…" vs "3 agents are typing…"
+
+## 📊 Result (Step 3)
+- Lint: clean (after payload parsing fix)
+- Concurrent debate verified end-to-end:
+  - POST /api/debate → returns "21 events streamed. Claim falsified. Release gate blocked."
+  - Realtime log confirms: events broadcast to channel/decision/project rooms one-by-one
+  - Browser message count went from 27 → 35 during the 10-second debate (8 new messages appeared in real time)
+- VLM analysis: 7.5/10 — "significant architectural leap forward... concurrent turn-taking"
+
+## 💡 Information (Step 4)
+
+### What worked
+- Promise.all for Security + DevilsAdvocate — true parallel agent invocation
+- Streaming events one-by-one — the user sees the debate unfold live, not all at once
+- Typing indicators — the bouncing dots + "agent is typing…" pill mimics real chat app behavior
+- Variable delays (400-800ms) — more organic than fixed delays
+
+### What failed (and was fixed)
+1. **Payload parsing bug**: spine.append() returns payload as JSON string, but adapters need parsed object. Fix: parse in streamEvents() before returning.
+2. **Error: "Cannot read properties of undefined (reading 'toLowerCase')"**: caused by the above — DevilsAdvocate adapter tried to access .body on a string. Fixed by the payload parsing fix.
+
+### VLM feedback for future rounds (the "messy human timing" gap)
+1. **No interruption/overlap** — need per-agent streams that render simultaneously (not waiting for Promise.all resolution)
+2. **No thread hijacking** — need priority-based preemption where Devil's Advocate can interrupt
+3. **No "talking over each other"** — need partial message rendering + cross-referencing
+4. **Latency feels synthetic** — need variable cognitive load per agent role (Security: 1.2s, Devil's Advocate: 600ms, Researcher: 2s+)
+5. **No side conversations / whisper protocol** — @mentions, reaction emojis, thread forks
+6. **No emotional state indicators** — frustration, agreement, dominance
+
+## 🔧 Adjustment (Step 5)
+- All bugs fixed. Lint clean. Concurrent debate + streaming + typing verified end-to-end.
+- Deferred: the VLM "messy human timing" suggestions are future-round work (interruption, partial rendering, variable cognitive load, emotional states). The core concurrent + streaming + typing foundation is solid.
+
+## Design principles assessment
+| Principle | How this round delivers |
+|---|---|
+| **Simple** | TS Promise.all + streaming — no Rust rewrite needed |
+| **Powerful** | Agents wake in parallel, events stream live, typing indicators |
+| **Performant** | Events appended + broadcast as produced (not batched) |
+| **Scalable** | Promise.all for parallel agents; can swap to tokio::join_all in Rust later |
+| **Efficient** | No wasted work — each event is produced once, broadcast once |
+| **Beautiful** | Typing indicators + streaming + variable delays = live conversation feel |
+| **Functional** | Delivers the user's headline: "agents debating in real time concurrently" |
+
+## Unresolved issues / next steps
+1. **Rust substrate service** (Round 6) — new `mini-services/vuno-substrate/` Rust project. Owns the event spine writer. Next.js API routes proxy to it.
+2. **Concurrent agent runtime in Rust** (Round 7) — move the concurrent debate from TS to Rust with tokio. Foundation for real LLM agents.
+3. **"Messy human timing"** (VLM feedback) — interruption, partial rendering, variable cognitive load, emotional states. This is the last 20% to make it feel truly alive.
+4. **Real-LLM agent adapter via MCP** (Round 8) — implement AgentAdapter in Rust using the rmcp crate.
+5. **ACP for agent-to-agent comms** (Round 9).
+
+### Files created/modified this round
+- REWRITTEN: `src/app/api/debate/route.ts` (280 lines — concurrent + streaming + typing)
+- MODIFIED: `src/components/chat/chat-view.tsx` (typing indicator state + UI, onTyping callback)
+
