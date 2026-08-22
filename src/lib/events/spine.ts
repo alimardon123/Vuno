@@ -1,4 +1,4 @@
-// AI Org OS — Event spine writer
+// Vuno — Event spine writer
 // Per ADR-0004: append-only. The ONLY way to insert events.
 // Assigns monotonic seq, persists, returns full EventRecord[].
 // Never call db.event.update or db.event.delete from application code.

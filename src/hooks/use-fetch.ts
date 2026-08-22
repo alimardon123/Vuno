@@ -1,4 +1,4 @@
-// AI Org OS — minimal fetch hook for GET endpoints with abort + refetch.
+// Vuno — minimal fetch hook for GET endpoints with abort + refetch.
 
 'use client';
 

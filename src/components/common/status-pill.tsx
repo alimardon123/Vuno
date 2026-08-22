@@ -1,4 +1,4 @@
-// AI Org OS — Status pill
+// Vuno — Status pill
 // Small, monochrome background with the status color at 12% opacity, text in the status color.
 // No border. Per DESIGN_SYSTEM.md §5.
 

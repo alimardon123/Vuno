@@ -1,4 +1,4 @@
-// AI Org OS — POST /api/messages
+// Vuno — POST /api/messages
 // Post a MessagePosted event to a channel scope.
 
 import { NextResponse } from 'next/server';

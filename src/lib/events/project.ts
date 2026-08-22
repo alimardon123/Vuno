@@ -1,4 +1,4 @@
-// AI Org OS — Projections
+// Vuno — Projections
 // The chat surface and the ledger view are projections of the event spine.
 
 import type { EventRecord, EventType, ClaimStatus } from './types';

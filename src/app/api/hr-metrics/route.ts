@@ -1,4 +1,4 @@
-// AI Org OS — HR / Meta metrics API
+// Vuno — HR / Meta metrics API
 // Per the vision doc §5: HR agents measure objection precision, proposal survival
 // rate, gate-block accuracy, cost per resolved decision, catch rate on other
 // agents' errors. This endpoint computes those metrics from the event spine +

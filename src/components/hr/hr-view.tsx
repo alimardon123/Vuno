@@ -1,4 +1,4 @@
-// AI Org OS — HR / Meta dashboard
+// Vuno — HR / Meta dashboard
 // Per the vision doc §5: "HR agents are ordinary agents whose work objects
 // happen to be agents and teams. They read the ledger, file proposals, and
 // pass through the same debate and gates as any other work."

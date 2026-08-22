@@ -1,4 +1,4 @@
-// AI Org OS — /api/debate POST endpoint
+// Vuno — /api/debate POST endpoint
 // Per ADR-0002 and the live-debate-slice goal: lets the user trigger a new
 // simulated debate. The orchestrator runs the AgentAdapter chain in sequence:
 //   1. architect.invoke(ProposalRequested) → ProposalOpened + MessagePosted

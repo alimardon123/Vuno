@@ -1,4 +1,4 @@
-// AI Org OS — Agent adapter interface
+// Vuno — Agent adapter interface
 // Per ADR-0002 and ADR-0006. The ONLY way the substrate talks to agents.
 // v1 ships simulated adapters; v2 drops in real LLM adapters — same interface.
 

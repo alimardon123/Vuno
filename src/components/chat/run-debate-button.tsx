@@ -1,4 +1,4 @@
-// AI Org OS — Run debate button
+// Vuno — Run debate button
 // Triggers a fresh simulated falsification arc via POST /api/debate.
 // Per the live-debate-slice goal: makes the killer demo interactive.
 

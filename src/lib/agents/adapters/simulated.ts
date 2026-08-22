@@ -1,4 +1,4 @@
-// AI Org OS — Simulated agent adapters (v1)
+// Vuno — Simulated agent adapters (v1)
 // Per ADR-0002: v1 ships simulated adapters that implement the AgentAdapter
 // interface. Each adapter returns canned AgentResponses per trigger type,
 // parameterized by the agent's role. The substrate, ledger, gates, and debate

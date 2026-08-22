@@ -1,4 +1,4 @@
-// AI Org OS — Agents view
+// Vuno — Agents view
 // Per SCREENS.md §5: grid of agent cards. "+ Install Agent" button at top.
 
 'use client';

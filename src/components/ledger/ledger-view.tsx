@@ -1,4 +1,4 @@
-// AI Org OS — Ledger view (the distinctive surface)
+// Vuno — Ledger view (the distinctive surface)
 // Per SCREENS.md §4. Dense table. Filterable by project (dropdown), status (multi-select),
 // actor (dropdown). Sorted by updatedAt desc.
 

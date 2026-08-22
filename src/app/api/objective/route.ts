@@ -1,4 +1,4 @@
-// AI Org OS — POST /api/objective
+// Vuno — POST /api/objective
 // File a new objective: validate body (zod), create Objective row, append
 // ObjectiveFiled event to the spine (scopeType=channel, scopeId=ch-storage)
 // so the chat projection picks it up.

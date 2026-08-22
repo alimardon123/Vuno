@@ -1,4 +1,4 @@
-// AI Org OS — Top bar
+// Vuno — Top bar
 // Logo, tenant switcher, org switcher, theme toggle, help.
 
 'use client';
@@ -35,7 +35,7 @@ export function TopBar({ tenantName, orgName, onHelp }: TopBarProps) {
         </div>
         <div className="flex flex-col leading-none">
           <span className="text-sm font-semibold tracking-tight">
-            AI Org OS
+            Vuno
           </span>
           <span className="text-[0.625rem] text-muted-foreground uppercase tracking-widest">
             v0.1

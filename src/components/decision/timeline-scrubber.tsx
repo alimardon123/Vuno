@@ -1,4 +1,4 @@
-// AI Org OS — Timeline scrubber for the decision page
+// Vuno — Timeline scrubber for the decision page
 // Per ADR-0004 thesis: "replay, audit, time-travel for free".
 // Lets the user scrub through the event spine for this decision and see the
 // state at any point in time. Each event is a tick; the slider sets a cutoff

@@ -1,4 +1,4 @@
-// AI Org OS — Agent card
+// Vuno — Agent card
 // Per SCREENS.md §5: avatar (lucide icon by role), name, role label, model/harness mono,
 // team name, status badge, green health dot.
 

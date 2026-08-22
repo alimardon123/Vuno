@@ -1,4 +1,4 @@
-// AI Org OS — Decision view (GitHub-PR-style)
+// Vuno — Decision view (GitHub-PR-style)
 // Per SCREENS.md §3. Left column = proposal text + rejected alternatives + open risks.
 // Right column = status checks (gates) + participants.
 // Bottom = anchored discussion (events scoped to this decision).

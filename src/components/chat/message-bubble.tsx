@@ -1,4 +1,4 @@
-// AI Org OS — Message bubble
+// Vuno — Message bubble
 // Renders a single chat message projection. Typed events get a left-border accent
 // in their statusHint color + an uppercase typeLabel. Per VLM QA feedback:
 // - More vertical rhythm (alternating hover, better internal spacing)
@@ -9,7 +9,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { AgentAvatar } from '@/components/common/agent-avatar';
+import { MemberAvatar, MemberBadge, type MemberKind } from '@/components/common/agent-avatar';
 import { ROLE_LABELS } from '@/lib/agents/types';
 import type { ChatMessageProjection } from '@/lib/events/project';
 import type { ClaimStatus, EventPayloadMap } from '@/lib/events/types';
@@ -25,14 +25,25 @@ interface Agent {
   id: string;
   name: string;
   role: string;
-  kind: string;
+  kind: string; // 'independent' | 'personal_assistant'
   teamId: string | null;
   status: string;
-  avatarGlyph?: string | null;
+  ownerHumanId: string | null;
+}
+
+interface User {
+  id: string;
+  name: string | null;
+  email: string;
+  isOrgOwner: boolean;
 }
 
 interface AgentsResponse {
   agents: Agent[];
+}
+
+interface UsersResponse {
+  users: User[];
 }
 
 interface MessageBubbleProps {
@@ -68,28 +79,51 @@ export function MessageBubble({
   onOpenDecision,
 }: MessageBubbleProps) {
   const agentsRes = useFetch<AgentsResponse>('/api/agents');
+  const usersRes = useFetch<UsersResponse>('/api/users');
   const agents = useMemo(
     () => agentsRes.data?.agents ?? [],
     [agentsRes.data?.agents],
   );
+  const users = useMemo(
+    () => usersRes.data?.users ?? [],
+    [usersRes.data?.users],
+  );
 
-  const actorName = useMemo(() => {
-    if (message.actorType === 'system') return 'system';
-    if (message.actorType === 'human') return 'Kai';
+  // Resolve the actor — human, independent agent, or personal assistant
+  const { actorName, actorKind, actorRole, ownerName } = useMemo(() => {
+    if (message.actorType === 'system') {
+      return { actorName: 'system', actorKind: 'human' as MemberKind, actorRole: 'system', ownerName: undefined };
+    }
+    if (message.actorType === 'human') {
+      const u = users.find((x) => x.id === message.actorUserId);
+      const name = u?.name ?? u?.email ?? 'Kai';
+      return {
+        actorName: name,
+        actorKind: 'human' as MemberKind,
+        actorRole: u?.isOrgOwner ? 'Org Owner' : undefined,
+        ownerName: undefined,
+      };
+    }
+    // agent
     const a = agents.find((x) => x.id === message.actorAgentId);
-    return a?.name ?? 'Agent';
-  }, [agents, message.actorAgentId, message.actorType]);
-
-  const actorRole = useMemo(() => {
-    if (message.actorType === 'system') return 'system';
-    if (message.actorType === 'human') return 'Org Owner';
-    const a = agents.find((x) => x.id === message.actorAgentId);
-    return a?.role ?? '';
-  }, [agents, message.actorAgentId, message.actorType]);
+    const kind: MemberKind =
+      a?.kind === 'personal_assistant' ? 'personal_assistant' : 'independent';
+    const owner = a?.ownerHumanId
+      ? users.find((u) => u.id === a.ownerHumanId)?.name ?? users.find((u) => u.id === a.ownerHumanId)?.email
+      : undefined;
+    return {
+      actorName: a?.name ?? 'Agent',
+      actorKind: kind,
+      actorRole: a?.role ?? '',
+      ownerName: owner,
+    };
+  }, [agents, users, message.actorAgentId, message.actorUserId, message.actorType]);
 
   const isTyped = Boolean(message.typeLabel && message.type !== 'MessagePosted');
   const accent = hintColor(message.statusHint);
   const isSystem = message.actorType === 'system';
+  const isAgent = actorKind !== 'human';
+  const showBadge = isAgent && !isSystem; // show agent/personal badge for non-system agents
 
   // Extract decision id from payload if available, for the "Open decision" link.
   const decisionId = useMemo(() => {
@@ -112,9 +146,9 @@ export function MessageBubble({
       aria-label={`Message from ${actorName} at ${time}`}
     >
       <div className="mt-0.5">
-        <AgentAvatar
+        <MemberAvatar
           name={actorName}
-          role={actorRole}
+          kind={actorKind}
           size="md"
           health={isSystem ? 'warn' : 'ok'}
         />
@@ -125,14 +159,16 @@ export function MessageBubble({
           <span className="text-sm font-semibold leading-none tracking-tight">
             {actorName}
           </span>
-          {actorRole && !isSystem ? (
-            <span
-              className="rounded px-1.5 py-0.5 text-[0.625rem] font-medium uppercase tracking-wider"
-              style={{
-                backgroundColor: 'oklch(0.30 0.005 250 / 50%)',
-                color: 'oklch(0.80 0.01 250)',
-              }}
-            >
+          {showBadge ? (
+            <MemberBadge kind={actorKind} ownerName={ownerName} />
+          ) : null}
+          {actorRole && !isSystem && actorKind === 'human' ? (
+            <span className="text-[0.6875rem] text-muted-foreground">
+              {actorRole}
+            </span>
+          ) : null}
+          {actorRole && !isSystem && actorKind !== 'human' ? (
+            <span className="text-[0.6875rem] text-muted-foreground">
               {ROLE_LABELS[actorRole] ?? actorRole}
             </span>
           ) : null}

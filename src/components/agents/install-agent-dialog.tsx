@@ -1,4 +1,4 @@
-// AI Org OS — Install Agent dialog
+// Vuno — Install Agent dialog
 // Per ADR-0006: Name, Kind, Role, Model (simulated/echo-1 only in v1),
 // Harness (simulated only in v1), Tools checkboxes, Permissions checkboxes,
 // Team dropdown. On submit POSTs to /api/install.

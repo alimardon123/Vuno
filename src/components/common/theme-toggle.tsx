@@ -1,4 +1,4 @@
-// AI Org OS — Theme toggle (dark ↔ light).
+// Vuno — Theme toggle (dark ↔ light).
 
 'use client';
 

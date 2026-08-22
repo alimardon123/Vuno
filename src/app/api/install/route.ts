@@ -1,4 +1,4 @@
-// AI Org OS — POST /api/install
+// Vuno — POST /api/install
 // Install a new agent: validate body (zod), create Agent row, append AgentInstalled
 // event to the spine (actorType='human', scopeType='org', scopeId=org.id).
 

@@ -1,4 +1,4 @@
-// AI Org OS — Status checks (the gate panel)
+// Vuno — Status checks (the gate panel)
 // Per SCREENS.md §3: ✓ passed / ✗ blocked / ○ pending, using gate-state colors.
 
 'use client';

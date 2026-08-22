@@ -1,4 +1,4 @@
-// AI Org OS — Claim row (ledger)
+// Vuno — Claim row (ledger)
 // Each row: claim statement / status pill / provenance / evidence count / contradicts count.
 // Filterable; row expands to show provenance chain.
 

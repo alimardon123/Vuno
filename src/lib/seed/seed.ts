@@ -1,4 +1,4 @@
-// AI Org OS — Seed script
+// Vuno — Seed script
 // Populates the sample org with the full falsification arc end-to-end:
 // objective → proposal → debate → benchmark → falsified claim → blocked gate.
 // This is the killer demo content. Idempotent — clears and re-seeds.
@@ -33,6 +33,7 @@ const IDS = {
   agentSam: 'agent-sam',       // verifier (QA)
   agentHana: 'agent-hana',     // HR / meta
   agentRavi: 'agent-ravi',     // research
+  agentBob: 'agent-bob',       // Bob — Kai's personal assistant
   // work objects
   objective: 'obj-17',
   project: 'proj-storage-engine',
@@ -197,6 +198,15 @@ async function createTenantOrgAndAgents() {
       id: IDS.agentRavi, name: 'Ravi', role: 'research', kind: 'independent',
       teamId: IDS.teamProduct, harnessName: 'simulated', modelName: 'simulated/echo-1',
       tools: ['web.search', 'papers.read'], permissions: ['repo.read'],
+    },
+    // Bob — Kai's personal assistant. Personal assistants are owned by a human,
+    // live in their private chat, and enter channels via @-mention. Pinned at
+    // the top of Kai's chat list.
+    {
+      id: IDS.agentBob, name: 'Bob', role: 'product', kind: 'personal_assistant',
+      teamId: null, harnessName: 'simulated', modelName: 'simulated/echo-1',
+      tools: ['web.search', 'github.read'], permissions: ['repo.read'],
+      ownerHumanId: IDS.userCeo,
     },
   ];
 

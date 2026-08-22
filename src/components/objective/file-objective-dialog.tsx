@@ -1,4 +1,4 @@
-// AI Org OS — File Objective dialog
+// Vuno — File Objective dialog
 // Per SCREENS.md §6: Title, Success Criteria, Constraints, Budget,
 // Autonomy Level (L1-L4), Routing (owningDepartment).
 // On submit POSTs to /api/objective.

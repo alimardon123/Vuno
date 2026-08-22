@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Org OS — An organization of specialized intelligences",
+  title: "Vuno — a working organization of agents and humans",
   description:
     "A communication app on the surface. A working company underneath. Specialized AI agents and humans that debate, build, test, and improve — with traceable, falsifiable reasoning.",
-  keywords: ["AI organization", "multi-agent", "falsification", "ledger", "Slack-like"],
-  authors: [{ name: "AI Org OS" }],
+  keywords: ["Vuno", "AI organization", "multi-agent", "falsification", "ledger", "Slack-like"],
+  authors: [{ name: "Vuno" }],
   icons: {
     icon: "/logo.svg",
   },

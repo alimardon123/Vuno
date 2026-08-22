@@ -1,10 +1,13 @@
-// AI Org OS — Top-level UI state (Zustand).
+// Vuno — Top-level UI state (Zustand).
 // Per ADR-0001: ephemeral client UI state (active view, channel, decision, ledger filters, dialog open-states).
 
 import { create } from 'zustand';
 import type { ClaimStatus } from '@/lib/events/types';
 
 export type ActiveView = 'chat' | 'decision' | 'ledger' | 'agents' | 'wiki' | 'hr';
+
+// Left-rail panel switcher (Teams-style: Chats / Org / Settings)
+export type LeftPanel = 'chats' | 'org' | 'settings';
 
 export interface LedgerFilters {
   status: ClaimStatus[]; // multi-select; empty = all
@@ -17,6 +20,9 @@ interface AppState {
   activeView: ActiveView;
   activeChannelId: string | null;
   activeDecisionId: string | null;
+
+  // left-rail panel (Chats / Org / Settings)
+  leftPanel: LeftPanel;
 
   // ledger filters
   ledgerFilters: LedgerFilters;
@@ -36,6 +42,7 @@ interface AppState {
   setView: (v: ActiveView) => void;
   setActiveChannel: (id: string) => void;
   setActiveDecision: (id: string) => void;
+  setLeftPanel: (p: LeftPanel) => void;
   setLedgerFilter: <K extends keyof LedgerFilters>(
     key: K,
     value: LedgerFilters[K],
@@ -60,6 +67,8 @@ export const useAppStore = create<AppState>((set) => ({
   activeChannelId: null,
   activeDecisionId: null,
 
+  leftPanel: 'chats',
+
   ledgerFilters: DEFAULT_LEDGER_FILTERS,
 
   leftRailOpen: false,
@@ -75,6 +84,7 @@ export const useAppStore = create<AppState>((set) => ({
     set({ activeChannelId: id, activeView: 'chat', activeDecisionId: null }),
   setActiveDecision: (id) =>
     set({ activeDecisionId: id, activeView: 'decision' }),
+  setLeftPanel: (p) => set({ leftPanel: p }),
   setLedgerFilter: (key, value) =>
     set((s) => ({
       ledgerFilters: { ...s.ledgerFilters, [key]: value },

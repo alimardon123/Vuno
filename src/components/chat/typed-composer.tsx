@@ -1,4 +1,4 @@
-// AI Org OS — Typed composer
+// Vuno — Typed composer
 // Per SCREENS.md §2: composer with a type dropdown
 // (Message / Proposal / Objection / Evidence / Benchmark / Decision).
 // v1: only Message is fully wired; the others render the structured form

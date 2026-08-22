@@ -1,4 +1,4 @@
-// AI Org OS — Chat view
+// Vuno — Chat view
 // Fetches /api/events?scopeType=channel&scopeId=<id>&project=true and renders
 // the projected chat messages. Includes a typed composer.
 

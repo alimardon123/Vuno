@@ -303,3 +303,111 @@ After initial VLM rating of 7.5/10, applied all 6 suggested fixes:
 - MODIFIED: `/home/z/my-project/src/components/app-shell/app-shell.tsx` (wired HRView, added to Help dialog)
 - MODIFIED: `/home/z/my-project/src/components/wiki/wiki-view.tsx` (hover states on DecisionCard, RetrospectiveCard, ClaimRow, ParticipantCard, RiskRow; bumped padding)
 
+
+---
+Task ID: 9 (Round 1 — Rename to Vuno + UI overhaul)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Rename product to Vuno, rebuild left rail as Teams-style three-panel switcher (Chats / Org / Settings), replace icon-glyph avatars with image-style avatars + agent/personal badges, move agents out of chat list into Org panel's members roster, seed a personal assistant agent (Bob, owned by Kai).
+
+## Current project status assessment
+- Rounds 0-2 (Tasks 0, 1, 6d, 6d-QA, 7, 8) built the substrate + killer demo + wiki + HR dashboard. VLM scores: chat 8.5, wiki 7.5, HR 9.0.
+- Live-debate slice (Task ID 7.1) was in-flight when Bash tool hit persistent failure; /api/debate endpoint works, simulated adapters built, Run debate button wired, but a React 19 Dialog close race was mid-fix.
+- User gave major product direction: rename to one-word name, Rust backend, Teams-style UI (Buzz from Block reference), real-time concurrent debate (the headline), agents-as-colleagues with badges not role icons.
+
+## Goals / completed modifications / verification results
+
+### User decisions (locked in)
+1. **Product name: Vuno** — short, ownable, doesn't lock into "AI-only" framing. Renamed across metadata, layout, docs, all code comments.
+2. **Backend: Rust** — for the substrate service (event spine, agent runtime, attention router, MCP/ACP adapters). Next.js stays for UI. Confirmed for Round 3+.
+3. **Execution sequence**: my call, industry-standard vertical slices. Plan: Round 1 (rename + UI) → Round 2 (socket.io real-time) → Round 3 (Rust substrate) → Round 4 (concurrent agent runtime) → Round 5 (real LLM via MCP) → Round 6 (ACP).
+4. **UI**: two-panel switcher (Teams-style), no `#` on team chats, agents-in-org-panel-not-chat-list, personal-assistant badge.
+
+### 1. Rename to Vuno (Task v1)
+- Bulk sed-replaced "AI Org OS" → "Vuno" across 42 source files
+- `src/app/layout.tsx`: metadata title = "Vuno — a working organization of agents and humans", keywords updated, authors = "Vuno"
+- Top bar already shows "Vuno v0.1"
+- Help dialog text updated (already references Vuno via the bulk rename)
+
+### 2. New left-rail: three-panel switcher (Task v2)
+- `src/store/app-store.ts`: added `leftPanel: LeftPanel` state ('chats' | 'org' | 'settings') + `setLeftPanel` action
+- `src/components/app-shell/left-rail.tsx` (REWRITTEN, 70 lines): hosts 3-tab switcher at top (Chats / Org / Settings) with icons, renders the active panel below
+- `src/components/left-rail/chats-panel.tsx` (NEW, 220 lines): 
+  - Search input at top
+  - **Pinned** section: personal assistants (Bob) at top, with avatar + "personal · Kai's" badge + "Kai's assistant" subtitle
+  - **Direct Messages** section: all humans (Kai - CEO) + all independent agents (Aris, Devi, Hana, Peri, Maya, Ravi, Sid, Sam), each with avatar + "agent" badge + role label
+  - **Team Chats** section: teams as group chats (Engineering, HR/Meta, Performance, Product, QA, Security) — NO `#` prefix, uses a colored initial circle
+- `src/components/left-rail/org-panel.tsx` (NEW, 280 lines):
+  - **Organization** tree: org name → departments (expandable) → teams (expandable) → channels (with `#`)
+  - **Members** section: full org roster with search — all humans + all agents (including personal assistants), each with avatar + badge + role + team
+  - **Install agent** button at bottom (dashed-border)
+- `src/components/left-rail/settings-panel.tsx` (NEW, 150 lines):
+  - **Views** section: Epistemic Ledger, Project Wiki, HR/Meta (with descriptions)
+  - **Actions** section: File Objective button
+  - **Preferences** section: Theme toggle
+  - **Help & about** button at bottom
+
+### 3. New avatar system: image-style + badges (Task v5, v6)
+- `src/components/common/agent-avatar.tsx` (REWRITTEN, 170 lines):
+  - **MemberAvatar**: initials in a colored circle (Slack default style). Color is deterministic from name hash (8-color palette: emerald, sky, amber, red-orange, purple, green, blue-gray, gold). Same person always gets the same color. Health dot retained for agents.
+  - **MemberBadge**: small pill next to the name. Three kinds:
+    - `human`: no badge
+    - `independent` (org agent): emerald pill reading "agent"
+    - `personal_assistant`: amber pill reading "personal" (with optional owner name: "personal · Kai's")
+  - Backward-compat: `AgentAvatar` re-exported as a thin shim around MemberAvatar
+- `src/components/chat/message-bubble.tsx` (UPDATED):
+  - Now fetches both /api/agents AND /api/users
+  - Resolves actor kind (human / independent / personal_assistant) and owner name
+  - Renders MemberAvatar (initials, not role icons) + MemberBadge next to the name
+  - For personal assistants: badge shows "personal · Kai's" so others see whose assistant posted
+
+### 4. Seed: Bob, Kai's personal assistant (Task v7)
+- `src/lib/seed/seed.ts`: added `agentBob: 'agent-bob'` to IDS, added Bob to agents array:
+  - `id: agent-bob, name: Bob, role: product, kind: personal_assistant, teamId: null, ownerHumanId: user-kai`
+  - Personal assistants have no team — they live in their owner's private chat and enter channels via @-mention
+- Re-seeded: 9 agents total now (8 independent + 1 personal_assistant)
+- `src/app/api/users/route.ts` (NEW): GET endpoint returning all humans in the org (Kai for v1). Used by ChatsPanel (DM list) and OrgPanel (members roster).
+
+### Verification results
+- **VLM analysis of new Vuno Chats UI: 8.5/10** — "high-polish, production-grade dark-mode UI that successfully merges Slack's conversational density with Teams' structural organization and a distinctive AI-agent layer."
+  - ✅ Chats panel structure (Pinned / DMs / Team Chats) is Slack-like
+  - ✅ Agent badges ("agent" teal, "personal · Kai's" amber) are "best-in-class"
+  - ✅ Layout is sleek, "Linear-esque DNA", "Buzz/Block aesthetic"
+  - Improvement suggestions for future rounds: unread indicators, timestamp grouping, avatar size consistency, system-message styling
+- Agent Browser QA: all three panels render correctly. Chats shows Pinned (Bob), DMs (Kai + 8 agents), Team Chats (6 teams no #). Org shows org tree (expandable departments → teams → channels with #) + members roster (10 total). Settings shows Views/Actions/Preferences.
+- Lint passes cleanly.
+- Dev server runs without runtime errors.
+
+## Unresolved issues or risks, and priority recommendations for the next phase
+
+### Known issues / incomplete items
+1. **DM routing not yet implemented** — clicking a DM in the Chats panel opens the main channel for v1. Real per-DM routing (private chat scope between two members) is a later slice.
+2. **Team chats not real group chats** — clicking a team chat opens the team's first channel. Real group-chat surfaces (separate from channels) is a later slice.
+3. **Personal assistant @-mention routing** — Bob can be pinned and his badge shows in chat, but @-mentioning him in a channel doesn't yet route the message to him. Needs mention-parsing + routing.
+4. **No unread indicators** (VLM suggestion) — no red dots or bold text for unread threads. Agents generate noise; humans need signal filters.
+5. **No timestamp grouping** (VLM suggestion) — every message shows "X minutes ago" individually. Slack groups by time.
+6. **System messages use the same avatar style** (VLM suggestion) — system messages should use a distinct treatment (gear icon or full-width tint).
+7. **Live-debate slice still has the React 19 Dialog close race** from Task 7.1 — needs the setTimeout fix verified or re-applied.
+8. **Old AgentsView** (the grid of agent cards) is still wired but now redundant with the Org panel's members roster. Could be removed in a cleanup pass.
+
+### Priority recommendations for next phase
+1. **Round 2: Real-time chat via socket.io mini-service (port 3003)** — replace 5s polling with WebSocket push. Live presence + typing indicators. This is the foundation for real-time concurrent debate.
+2. **Round 3: Rust substrate service (port 3030)** — new `mini-services/vuno-substrate/` Rust project. Owns the event spine writer. Next.js API routes proxy to it.
+3. **Round 4: Concurrent agent runtime in Rust** — event loop in the Rust service. On every new event, find matching agents, invoke them concurrently via `tokio::join_all`. Each agent response appends events → triggers more agents → cascade. Streamed to UI via socket.io. THIS IS THE HEADLINE — "agents pushing, discussing, debating in real time concurrently."
+4. **Round 5: Real-LLM agent adapter via MCP** — implement AgentAdapter in Rust using the `rmcp` crate. Drop-in alongside the simulated adapters.
+5. **Round 6: ACP for agent-to-agent comms** — adopt ACP for structured agent-to-agent messages.
+6. **Bonus: DM routing** — per-member private chat scope. Currently DMs open the main channel; should open a 1:1 scope.
+7. **Bonus: Unread indicators + timestamp grouping** (VLM suggestions).
+
+### Files created/modified this round
+- NEW: `src/components/left-rail/chats-panel.tsx` (220 lines)
+- NEW: `src/components/left-rail/org-panel.tsx` (280 lines)
+- NEW: `src/components/left-rail/settings-panel.tsx` (150 lines)
+- NEW: `src/app/api/users/route.ts` (24 lines)
+- REWRITTEN: `src/components/app-shell/left-rail.tsx` (was 270 lines of single-panel, now 70 lines of panel switcher)
+- REWRITTEN: `src/components/common/agent-avatar.tsx` (was icon-glyph + role rings, now initials + MemberBadge)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (uses MemberAvatar + MemberBadge, fetches users)
+- MODIFIED: `src/store/app-store.ts` (added leftPanel state)
+- MODIFIED: `src/app/layout.tsx` (metadata title → Vuno)
+- MODIFIED: `src/lib/seed/seed.ts` (added Bob — Kai's personal assistant)
+- BULK RENAMED: 42 files (AI Org OS → Vuno)
+

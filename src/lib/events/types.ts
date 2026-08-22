@@ -1,4 +1,4 @@
-// AI Org OS — Event spine types
+// Vuno — Event spine types
 // Per ADR-0004: append-only typed events. The chat surface is a projection.
 
 export type EventType =

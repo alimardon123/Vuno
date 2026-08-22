@@ -1,4 +1,4 @@
-// AI Org OS — Project Wiki view
+// Vuno — Project Wiki view
 // Per ADR-0005: the wiki is GENERATED from the ledger, not maintained beside it.
 // Pure projection of /api/wiki — no separate WikiPage table. Always current.
 

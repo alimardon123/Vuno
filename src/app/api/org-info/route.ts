@@ -1,4 +1,4 @@
-// AI Org OS — /api/org-info
+// Vuno — /api/org-info
 // Returns the current tenant and org name (v1: first tenant + first org).
 
 import { NextResponse } from 'next/server';

@@ -1,4 +1,4 @@
-// AI Org OS — Anchored discussion
+// Vuno — Anchored discussion
 // Discussion timeline scoped to this decision: ProposalOpened, ObjectionRaised,
 // ExperimentRequested, ExperimentCompleted, BenchmarkReported, DecisionRecorded,
 // ClaimStatusChanged, RoleAssigned, etc.

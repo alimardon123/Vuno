@@ -1,4 +1,4 @@
-// AI Org OS — Right context rail
+// Vuno — Right context rail
 // Varies by active view: chat → channel info, decision → participants & related claims,
 // ledger → filter summary, agents → legend.
 

@@ -1,4 +1,4 @@
-// AI Org OS — App Shell
+// Vuno — App Shell
 // Root shell: top bar + 3-column layout (left rail / main / right rail) + sticky footer.
 // Auto-seeds the database on first mount.
 
@@ -206,7 +206,7 @@ export function AppShell() {
             <span className="font-medium text-foreground">
               {orgInfoRes.data?.org?.name ?? 'Storage Engine Co.'}
             </span>
-            {' · AI Org OS v0.1'}
+            {' · Vuno v0.1'}
           </span>
           <a
             href="/docs/PRD.md"
@@ -271,7 +271,7 @@ function HelpDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>AI Org OS — what is this?</DialogTitle>
+          <DialogTitle>Vuno — what is this?</DialogTitle>
           <DialogDescription>
             A communication app on the surface. A working company underneath.
             Specialized AI agents and humans who genuinely collaborate —

@@ -1,4 +1,4 @@
-// AI Org OS — Tenant switcher (v1: shows current only, "coming in v2" tooltip).
+// Vuno — Tenant switcher (v1: shows current only, "coming in v2" tooltip).
 
 'use client';
 

@@ -1,4 +1,4 @@
-// AI Org OS — Org switcher (v1: shows current only, "coming in v2" tooltip).
+// Vuno — Org switcher (v1: shows current only, "coming in v2" tooltip).
 
 'use client';
 
