@@ -1,0 +1,932 @@
+     1→// Vuno — Message bubble
+     2→// Renders a single chat message projection. Typed events get a left-border accent
+     3→// in their statusHint color + an uppercase typeLabel. Per VLM QA feedback:
+     4→// - More vertical rhythm (alternating hover, better internal spacing)
+     5→// - Higher-contrast muted text
+     6→// - Role-colored avatar rings
+     7→// - Refined typed-message cards (not just a left-border)
+     8→
+     9→'use client';
+    10→
+    11→import { cn } from '@/lib/utils';
+    12→import { MemberAvatar, MemberBadge, type MemberKind } from '@/components/common/agent-avatar';
+    13→import { ROLE_LABELS } from '@/lib/agents/types';
+    14→import type { ChatMessageProjection } from '@/lib/events/project';
+    15→import type { ClaimStatus, EventPayloadMap } from '@/lib/events/types';
+    16→import { format, formatDistanceToNow } from 'date-fns';
+    17→import {
+    18→  ArrowUpRight,
+    19→  ChevronRight,
+    20→  FileText,
+    21→  Link as LinkIcon,
+    22→  Image as ImageIcon,
+    23→  Code2,
+    24→  BarChart3,
+    25→  File,
+    26→  ExternalLink,
+    27→  Reply,
+    28→  SmilePlus,
+    29→} from 'lucide-react';
+    30→import type { LucideIcon } from 'lucide-react';
+    31→import { useFetch } from '@/hooks/use-fetch';
+    32→import { useMemo, useState } from 'react';
+    33→
+    34→interface Agent {
+    35→  id: string;
+    36→  name: string;
+    37→  role: string;
+    38→  kind: string; // 'independent' | 'personal_assistant'
+    39→  teamId: string | null;
+    40→  status: string;
+    41→  ownerHumanId: string | null;
+    42→}
+    43→
+    44→interface User {
+    45→  id: string;
+    46→  name: string | null;
+    47→  email: string;
+    48→  isOrgOwner: boolean;
+    49→}
+    50→
+    51→interface AgentsResponse {
+    52→  agents: Agent[];
+    53→}
+    54→
+    55→interface UsersResponse {
+    56→  users: User[];
+    57→}
+    58→
+    59→interface MessageBubbleProps {
+    60→  message: ChatMessageProjection;
+    61→  onOpenDecision?: (decisionId: string) => void;
+    62→}
+    63→
+    64→// Map a statusHint to its CSS variable.
+    65→function hintColor(hint?: ChatMessageProjection['statusHint']): string | null {
+    66→  if (!hint) return null;
+    67→  switch (hint) {
+    68→    case 'asserted':
+    69→      return 'var(--status-asserted)';
+    70→    case 'believed':
+    71→      return 'var(--status-believed)';
+    72→    case 'tested':
+    73→      return 'var(--status-tested)';
+    74→    case 'falsified':
+    75→      return 'var(--status-falsified)';
+    76→    case 'uncertain':
+    77→      return 'var(--status-uncertain)';
+    78→    case 'blocked':
+    79→      return 'var(--status-falsified)';
+    80→    case 'passed':
+    81→      return 'var(--status-tested)';
+    82→    default:
+    83→      return null;
+    84→  }
+    85→}
+    86→
+    87→export function MessageBubble({
+    88→  message,
+    89→  onOpenDecision,
+    90→}: MessageBubbleProps) {
+    91→  const agentsRes = useFetch<AgentsResponse>('/api/agents');
+    92→  const usersRes = useFetch<UsersResponse>('/api/users');
+    93→  const agents = useMemo(
+    94→    () => agentsRes.data?.agents ?? [],
+    95→    [agentsRes.data?.agents],
+    96→  );
+    97→  const users = useMemo(
+    98→    () => usersRes.data?.users ?? [],
+    99→    [usersRes.data?.users],
+   100→  );
+   101→
+   102→  // Resolve the actor — human, independent agent, or personal assistant
+   103→  const { actorName, actorKind, actorRole, ownerName } = useMemo(() => {
+   104→    if (message.actorType === 'system') {
+   105→      return { actorName: 'system', actorKind: 'human' as MemberKind, actorRole: 'system', ownerName: undefined };
+   106→    }
+   107→    if (message.actorType === 'human') {
+   108→      const u = users.find((x) => x.id === message.actorUserId);
+   109→      const name = u?.name ?? u?.email ?? 'Kai';
+   110→      return {
+   111→        actorName: name,
+   112→        actorKind: 'human' as MemberKind,
+   113→        actorRole: u?.isOrgOwner ? 'Org Owner' : undefined,
+   114→        ownerName: undefined,
+   115→      };
+   116→    }
+   117→    // agent
+   118→    const a = agents.find((x) => x.id === message.actorAgentId);
+   119→    const kind: MemberKind =
+   120→      a?.kind === 'personal_assistant' ? 'personal_assistant' : 'independent';
+   121→    const owner = a?.ownerHumanId
+   122→      ? users.find((u) => u.id === a.ownerHumanId)?.name ?? users.find((u) => u.id === a.ownerHumanId)?.email
+   123→      : undefined;
+   124→    return {
+   125→      actorName: a?.name ?? 'Agent',
+   126→      actorKind: kind,
+   127→      actorRole: a?.role ?? '',
+   128→      ownerName: owner,
+   129→    };
+   130→  }, [agents, users, message.actorAgentId, message.actorUserId, message.actorType]);
+   131→
+   132→  const isTyped = Boolean(message.typeLabel && message.type !== 'MessagePosted');
+   133→  const accent = hintColor(message.statusHint);
+   134→  const isSystem = message.actorType === 'system';
+   135→  const isAgent = actorKind !== 'human';
+   136→  const showBadge = isAgent && !isSystem; // show agent/personal badge for non-system agents
+   137→
+   138→  // Extract decision id from payload if available, for the "Open decision" link.
+   139→  const decisionId = useMemo(() => {
+   140→    const p = message.payload as { decisionId?: string };
+   141→    return p?.decisionId ?? null;
+   142→  }, [message.payload]);
+   143→
+   144→  const time = formatDistanceToNow(new Date(message.createdAt), {
+   145→    addSuffix: true,
+   146→  });
+   147→  const timeTitle = format(new Date(message.createdAt), 'PPpp');
+   148→
+   149→  // Post a reaction (emoji) to this message
+   150→  const postReaction = async (emoji: string) => {
+   151→    try {
+   152→      await fetch('/api/events', {
+   153→        method: 'POST',
+   154→        headers: { 'Content-Type': 'application/json' },
+   155→        body: JSON.stringify({
+   156→          type: 'ReactionAdded',
+   157→          payload: { emoji, targetEventId: message.id },
+   158→          channelId: message.scopeType === 'channel' ? message.scopeId : undefined,
+   159→        }),
+   160→      });
+   161→    } catch (e) {
+   162→      console.error('[reaction] failed:', e);
+   163→    }
+   164→  };
+   165→
+   166→  // Post a reply to this message
+   167→  const postReply = async (body: string) => {
+   168→    try {
+   169→      await fetch('/api/events', {
+   170→        method: 'POST',
+   171→        headers: { 'Content-Type': 'application/json' },
+   172→        body: JSON.stringify({
+   173→          type: 'ThreadReplyPosted',
+   174→          payload: { body, parentId: message.id },
+   175→          channelId: message.scopeType === 'channel' ? message.scopeId : undefined,
+   176→        }),
+   177→      });
+   178→    } catch (e) {
+   179→      console.error('[reply] failed:', e);
+   180→    }
+   181→  };
+   182→
+   183→  // Local reply input state
+   184→  const [showReplyInput, setShowReplyInput] = useState(false);
+   185→  const [replyBody, setReplyBody] = useState('');
+   186→
+   187→  return (
+   188→    <article
+   189→      className={cn(
+   190→        'group relative flex gap-3 px-4 py-2.5 transition-colors hover:bg-accent/40',
+   191→        isSystem && 'bg-muted/30',
+   192→        isTyped && 'bg-muted/20',
+   193→      )}
+   194→      aria-label={`Message from ${actorName} at ${time}`}
+   195→    >
+   196→      {/* Hover actions — appear on message hover (top-right) */}
+   197→      <div className="absolute right-2 top-1 hidden gap-0.5 rounded-md border border-border/40 bg-card/80 px-0.5 py-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 md:flex">
+   198→        <button
+   199→          type="button"
+   200→          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+   201→          aria-label="Reply"
+   202→          title="Reply to this message"
+   203→          onClick={() => setShowReplyInput(!showReplyInput)}
+   204→        >
+   205→          <Reply className="size-3" aria-hidden />
+   206→        </button>
+   207→        <button
+   208→          type="button"
+   209→          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+   210→          aria-label="React"
+   211→          title="React"
+   212→          onClick={() => {
+   213→            // Post a thumbs-up reaction
+   214→            void postReaction('👍');
+   215→          }}
+   216→        >
+   217→          <SmilePlus className="size-3" aria-hidden />
+   218→        </button>
+   219→        {/* Quick reactions */}
+   220→        <div className="flex gap-0.5">
+   221→          {['👍', '❤️', '🚀', '⚠️'].map((emoji) => (
+   222→            <button
+   223→              key={emoji}
+   224→              type="button"
+   225→              className="rounded p-0.5 text-xs hover:bg-accent"
+   226→              onClick={() => void postReaction(emoji)}
+   227→              aria-label={`React with ${emoji}`}
+   228→            >
+   229→              {emoji}
+   230→            </button>
+   231→          ))}
+   232→        </div>
+   233→      </div>
+   234→      <div className="mt-0.5">
+   235→        <MemberAvatar
+   236→          name={actorName}
+   237→          kind={actorKind}
+   238→          size="md"
+   239→          health={isSystem ? 'warn' : 'ok'}
+   240→        />
+   241→      </div>
+   242→
+   243→      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+   244→        <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+   245→          <span className="text-sm font-semibold leading-none tracking-tight">
+   246→            {actorName}
+   247→          </span>
+   248→          {showBadge ? (
+   249→            <MemberBadge kind={actorKind} ownerName={ownerName} />
+   250→          ) : null}
+   251→          {actorRole && !isSystem && actorKind === 'human' ? (
+   252→            <span className="text-[0.6875rem] text-muted-foreground">
+   253→              {actorRole}
+   254→            </span>
+   255→          ) : null}
+   256→          {actorRole && !isSystem && actorKind !== 'human' ? (
+   257→            <span className="text-[0.6875rem] text-muted-foreground">
+   258→              {ROLE_LABELS[actorRole] ?? actorRole}
+   259→            </span>
+   260→          ) : null}
+   261→          {isTyped && message.typeLabel ? (
+   262→            <span
+   263→              className="rounded px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-widest"
+   264→              style={
+   265→                accent
+   266→                  ? {
+   267→                      backgroundColor: `color-mix(in oklch, ${accent} 16%, transparent)`,
+   268→                      color: accent,
+   269→                    }
+   270→                  : undefined
+   271→              }
+   272→            >
+   273→              {message.typeLabel}
+   274→            </span>
+   275→          ) : null}
+   276→          <time
+   277→            className="ml-auto text-[0.6875rem] text-muted-foreground/90"
+   278→            style={{ color: 'oklch(0.72 0.01 250)' }}
+   279→            title={timeTitle}
+   280→            dateTime={message.createdAt}
+   281→          >
+   282→            {time}
+   283→          </time>
+   284→        </header>
+   285→
+   286→        <MessageBody
+   287→          message={message}
+   288→          onOpenDecision={onOpenDecision}
+   289→          decisionId={decisionId}
+   290→          accent={accent}
+   291→        />
+   292→
+   293→        {/* Inline reply input — shown when Reply is clicked */}
+   294→        {showReplyInput ? (
+   295→          <div className="mt-1.5 flex items-center gap-1.5">
+   296→            <input
+   297→              type="text"
+   298→              value={replyBody}
+   299→              onChange={(e) => setReplyBody(e.target.value)}
+   300→              placeholder={`Reply to ${actorName}…`}
+   301→              className="h-7 flex-1 rounded-md border border-border/60 bg-card/60 px-2 text-xs placeholder:text-muted-foreground/60 focus:border-primary/40 focus:outline-none"
+   302→              onKeyDown={(e) => {
+   303→                if (e.key === 'Enter' && replyBody.trim()) {
+   304→                  void postReply(replyBody.trim());
+   305→                  setReplyBody('');
+   306→                  setShowReplyInput(false);
+   307→                }
+   308→                if (e.key === 'Escape') {
+   309→                  setShowReplyInput(false);
+   310→                  setReplyBody('');
+   311→                }
+   312→              }}
+   313→              autoFocus
+   314→            />
+   315→            <button
+   316→              type="button"
+   317→              className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+   318→              disabled={!replyBody.trim()}
+   319→              onClick={() => {
+   320→                if (replyBody.trim()) {
+   321→                  void postReply(replyBody.trim());
+   322→                  setReplyBody('');
+   323→                  setShowReplyInput(false);
+   324→                }
+   325→              }}
+   326→            >
+   327→              Send
+   328→            </button>
+   329→          </div>
+   330→        ) : null}
+   331→      </div>
+   332→    </article>
+   333→  );
+   334→}
+   335→
+   336→// ─── Message body — typed renderer per event payload ────────────────────────
+   337→function MessageBody({
+   338→  message,
+   339→  onOpenDecision,
+   340→  decisionId,
+   341→  accent,
+   342→}: {
+   343→  message: ChatMessageProjection;
+   344→  onOpenDecision?: (id: string) => void;
+   345→  decisionId: string | null;
+   346→  accent: string | null;
+   347→}) {
+   348→  const p = message.payload as
+   349→    | (EventPayloadMap[keyof EventPayloadMap] & { body?: string })
+   350→    | null;
+   351→
+   352→  // For typed messages with an accent color, wrap in a subtle bordered card.
+   353→  // Inlined as a fragment wrapper (not a component) to satisfy react-hooks lint.
+   354→  const cardStyle: React.CSSProperties = accent
+   355→    ? { borderColor: accent }
+   356→    : undefined;
+   357→  const cardClass =
+   358→    'flex flex-col gap-1.5 rounded-md border-l-2 bg-card/40 px-3 py-2.5';
+   359→
+   360→  switch (message.type) {
+   361→    case 'MessagePosted':
+   362→      return <p className="text-sm leading-relaxed text-foreground">{p?.body}</p>;
+   363→
+   364→    case 'ThreadReplyPosted':
+   365→      return (
+   366→        <p className="text-sm leading-relaxed text-foreground">{p?.body}</p>
+   367→      );
+   368→
+   369→    case 'ObjectiveFiled': {
+   370→      const o = p as EventPayloadMap['ObjectiveFiled'];
+   371→      return (
+   372→        <div className={cardClass} style={cardStyle}>
+   373→          <div className="text-sm font-semibold leading-snug">{o.title}</div>
+   374→          <div className="rounded bg-muted/60 px-2 py-1 font-mono text-xs text-foreground/90">
+   375→            <span className="text-[0.625rem] uppercase tracking-wider text-muted-foreground">
+   376→              success criteria:{' '}
+   377→            </span>
+   378→            {o.successCriteria}
+   379→          </div>
+   380→          {o.constraints ? (
+   381→            <div className="text-xs text-foreground/80">
+   382→              <span className="text-[0.625rem] uppercase tracking-wider text-muted-foreground">
+   383→                constraints:{' '}
+   384→              </span>
+   385→              {o.constraints}
+   386→            </div>
+   387→          ) : null}
+   388→          <div className="mt-0.5 flex flex-wrap gap-3 text-[0.6875rem] text-muted-foreground">
+   389→            {o.budget ? <span>budget: <span className="font-mono text-foreground/80">{o.budget}</span></span> : null}
+   390→            <span>autonomy: <span className="font-mono text-foreground/80">{o.autonomyLevel}</span></span>
+   391→            {o.owningDepartment ? (
+   392→              <span>routed: <span className="font-mono text-foreground/80">{o.owningDepartment}</span></span>
+   393→            ) : null}
+   394→          </div>
+   395→        </div>
+   396→      );
+   397→    }
+   398→
+   399→    case 'ProposalOpened': {
+   400→      const pp = p as EventPayloadMap['ProposalOpened'];
+   401→      return (
+   402→        <div className={cardClass} style={cardStyle}>
+   403→          <div className="text-sm font-semibold leading-snug">{pp.title}</div>
+   404→          <p className="text-sm leading-relaxed text-foreground">{pp.body}</p>
+   405→          {pp.alternatives && pp.alternatives.length > 0 ? (
+   406→            <div className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+   407→              <span className="text-[0.625rem] uppercase tracking-widest">
+   408→                Rejected alternatives
+   409→              </span>
+   410→              {pp.alternatives.map((a, i) => (
+   411→                <div key={i} className="flex gap-1.5">
+   412→                  <span className="font-mono text-muted-foreground/80">{i + 1}.</span>
+   413→                  <span>
+   414→                    <span className="font-medium text-foreground/90">
+   415→                      {a.name}
+   416→                    </span>{' '}
+   417→                    — {a.rejectedReason}
+   418→                  </span>
+   419→                </div>
+   420→              ))}
+   421→            </div>
+   422→          ) : null}
+   423→          {decisionId && onOpenDecision ? (
+   424→            <button
+   425→              type="button"
+   426→              onClick={() => onOpenDecision(decisionId)}
+   427→              className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+   428→            >
+   429→              Open decision page <ArrowUpRight className="size-3" aria-hidden />
+   430→            </button>
+   431→          ) : null}
+   432→        </div>
+   433→      );
+   434→    }
+   435→
+   436→    case 'ObjectionRaised': {
+   437→      const o = p as EventPayloadMap['ObjectionRaised'];
+   438→      return (
+   439→        <div className={cardClass} style={cardStyle}>
+   440→          <p className="text-sm leading-relaxed text-foreground">{o.claimText}</p>
+   441→          <div className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
+   442→            <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 font-mono">
+   443→              severity: {o.severity}
+   444→            </span>
+   445→            {o.evidenceEventId ? (
+   446→              <span className="text-[var(--status-tested)]">with evidence</span>
+   447→            ) : (
+   448→              <span className="text-[var(--status-asserted)]">no evidence attached</span>
+   449→            )}
+   450→          </div>
+   451→          {decisionId && onOpenDecision ? (
+   452→            <button
+   453→              type="button"
+   454→              onClick={() => onOpenDecision(decisionId)}
+   455→              className="mt-0.5 inline-flex items-center gap-1 self-start rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+   456→            >
+   457→              Open decision <ArrowUpRight className="size-3" aria-hidden />
+   458→            </button>
+   459→          ) : null}
+   460→        </div>
+   461→      );
+   462→    }
+   463→
+   464→    case 'AlternativeProposed': {
+   465→      const a = p as EventPayloadMap['AlternativeProposed'];
+   466→      return (
+   467→        <div className={cardClass} style={cardStyle}>
+   468→          <div className="text-sm font-semibold leading-snug">{a.name}</div>
+   469→          <p className="text-sm leading-relaxed text-foreground">{a.body}</p>
+   470→        </div>
+   471→      );
+   472→    }
+   473→
+   474→    case 'ExperimentRequested': {
+   475→      const e = p as EventPayloadMap['ExperimentRequested'];
+   476→      return (
+   477→        <div className={cardClass} style={cardStyle}>
+   478→          <div className="flex items-center gap-2">
+   479→            <span className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-xs">
+   480→              {e.kind}
+   481→            </span>
+   482→          </div>
+   483→          <p className="text-sm leading-relaxed text-foreground">{e.purpose}</p>
+   484→          {e.targetClaimId ? (
+   485→            <div className="text-[0.6875rem] text-muted-foreground">
+   486→              target claim: <span className="font-mono text-foreground/80">{e.targetClaimId}</span>
+   487→            </div>
+   488→          ) : null}
+   489→        </div>
+   490→      );
+   491→    }
+   492→
+   493→    case 'ExperimentCompleted': {
+   494→      const e = p as EventPayloadMap['ExperimentCompleted'];
+   495→      const outcomeColor =
+   496→        e.outcome === 'supports'
+   497→          ? 'var(--status-tested)'
+   498→          : e.outcome === 'refutes'
+   499→            ? 'var(--status-falsified)'
+   500→            : 'var(--status-uncertain)';
+   501→      return (
+   502→        <div className={cardClass} style={cardStyle}>
+   503→          <div className="flex items-center gap-2">
+   504→            <span className="text-[0.625rem] uppercase tracking-widest text-muted-foreground">
+   505→              outcome:
+   506→            </span>
+   507→            <span
+   508→              className="rounded px-1.5 py-0.5 font-mono text-xs font-semibold"
+   509→              style={{
+   510→                backgroundColor: `color-mix(in oklch, ${outcomeColor} 16%, transparent)`,
+   511→                color: outcomeColor,
+   512→              }}
+   513→            >
+   514→              {e.outcome}
+   515→            </span>
+   516→          </div>
+   517→          <p className="text-sm leading-relaxed text-foreground">{e.result}</p>
+   518→        </div>
+   519→      );
+   520→    }
+   521→
+   522→    case 'BenchmarkReported': {
+   523→      const b = p as EventPayloadMap['BenchmarkReported'];
+   524→      return (
+   525→        <div className={cardClass} style={cardStyle}>
+   526→          <div className="flex flex-wrap items-baseline gap-2">
+   527→            <span className="font-mono text-lg font-semibold leading-none">
+   528→              {b.value}
+   529→              <span className="ml-0.5 text-xs text-muted-foreground">
+   530→                {b.unit}
+   531→              </span>
+   532→            </span>
+   533→            <span className="text-xs text-muted-foreground">
+   534→              vs target <span className="font-mono text-foreground/80">{b.target}{b.unit}</span>
+   535→            </span>
+   536→            <span
+   537→              className="rounded px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider"
+   538→              style={{
+   539→                backgroundColor: `color-mix(in oklch, ${b.passed ? 'var(--status-tested)' : 'var(--status-falsified)'} 16%, transparent)`,
+   540→                color: b.passed ? 'var(--status-tested)' : 'var(--status-falsified)',
+   541→              }}
+   542→            >
+   543→              {b.passed ? 'passed' : 'failed'}
+   544→            </span>
+   545→          </div>
+   546→          <div className="text-[0.6875rem] text-muted-foreground">
+   547→            metric: <span className="font-mono text-foreground/80">{b.metric}</span>
+   548→          </div>
+   549→          {b.targetClaimId ? (
+   550→            <div className="text-[0.6875rem] text-muted-foreground">
+   551→              {b.passed ? 'supports' : 'falsifies'} claim:{' '}
+   552→              <span className="font-mono text-[var(--status-falsified)]">{b.targetClaimId}</span>
+   553→            </div>
+   554→          ) : null}
+   555→        </div>
+   556→      );
+   557→    }
+   558→
+   559→    case 'RiskFlagged': {
+   560→      const r = p as EventPayloadMap['RiskFlagged'];
+   561→      const sevColor =
+   562→        r.severity === 'high' || r.severity === 'critical'
+   563→          ? 'var(--status-falsified)'
+   564→          : 'var(--status-asserted)';
+   565→      return (
+   566→        <div className={cardClass} style={cardStyle}>
+   567→          <div className="flex items-center gap-2 text-[0.6875rem]">
+   568→            <span
+   569→              className="rounded px-1.5 py-0.5 font-mono font-semibold uppercase"
+   570→              style={{
+   571→                backgroundColor: `color-mix(in oklch, ${sevColor} 16%, transparent)`,
+   572→                color: sevColor,
+   573→              }}
+   574→            >
+   575→              {r.severity}
+   576→            </span>
+   577→            <span className="text-muted-foreground">
+   578→              scope: <span className="font-mono">{r.scopeType}/{r.scopeId}</span>
+   579→            </span>
+   580→          </div>
+   581→          <p className="text-sm leading-relaxed text-foreground">{r.description}</p>
+   582→        </div>
+   583→      );
+   584→    }
+   585→
+   586→    case 'DecisionRecorded': {
+   587→      const d = p as EventPayloadMap['DecisionRecorded'];
+   588→      return (
+   589→        <div className={cardClass} style={cardStyle}>
+   590→          <div className="flex items-center gap-2">
+   591→            <span
+   592→              className="rounded px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider"
+   593→              style={{
+   594→                backgroundColor: 'color-mix(in oklch, var(--status-falsified) 16%, transparent)',
+   595→                color: 'var(--status-falsified)',
+   596→              }}
+   597→            >
+   598→              {d.outcome}
+   599→            </span>
+   600→          </div>
+   601→          <div className="text-sm font-medium leading-snug">Chosen: {d.chosen}</div>
+   602→          <p className="text-sm leading-relaxed text-foreground">{d.rationale}</p>
+   603→          {d.rejectedAlternatives.length > 0 ? (
+   604→            <div className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+   605→              <span className="text-[0.625rem] uppercase tracking-widest">
+   606→                Rejected alternatives
+   607→              </span>
+   608→              {d.rejectedAlternatives.map((a, i) => (
+   609→                <div key={i} className="flex gap-1.5">
+   610→                  <ChevronRight className="size-3 opacity-50" aria-hidden />
+   611→                  <span>
+   612→                    <span className="font-medium text-foreground/90">
+   613→                      {a.name}
+   614→                    </span>{' '}
+   615→                    — {a.reason}
+   616→                  </span>
+   617→                </div>
+   618→              ))}
+   619→            </div>
+   620→          ) : null}
+   621→          {decisionId && onOpenDecision ? (
+   622→            <button
+   623→              type="button"
+   624→              onClick={() => onOpenDecision(decisionId)}
+   625→              className="mt-1 inline-flex items-center gap-1 self-start rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+   626→            >
+   627→              Open decision <ArrowUpRight className="size-3" aria-hidden />
+   628→            </button>
+   629→          ) : null}
+   630→        </div>
+   631→      );
+   632→    }
+   633→
+   634→    case 'ClaimStatusChanged': {
+   635→      const c = p as EventPayloadMap['ClaimStatusChanged'];
+   636→      const fromColor =
+   637→        c.from === 'believed'
+   638→          ? 'var(--status-believed)'
+   639→          : c.from === 'tested'
+   640→            ? 'var(--status-tested)'
+   641→            : 'var(--status-asserted)';
+   642→      const toColor =
+   643→        c.to === 'falsified'
+   644→          ? 'var(--status-falsified)'
+   645→          : c.to === 'tested'
+   646→            ? 'var(--status-tested)'
+   647→            : 'var(--status-uncertain)';
+   648→      return (
+   649→        <div className={cardClass} style={cardStyle}>
+   650→          <div className="flex flex-wrap items-center gap-2">
+   651→            <span className="font-mono text-[0.6875rem] text-muted-foreground">
+   652→              {c.claimId}
+   653→            </span>
+   654→            <span
+   655→              className="rounded px-1.5 py-0.5 font-mono text-xs font-semibold"
+   656→              style={{
+   657→                backgroundColor: `color-mix(in oklch, ${fromColor} 16%, transparent)`,
+   658→                color: fromColor,
+   659→              }}
+   660→            >
+   661→              {c.from}
+   662→            </span>
+   663→            <ChevronRight className="size-3 text-muted-foreground" aria-hidden />
+   664→            <span
+   665→              className="rounded px-1.5 py-0.5 font-mono text-xs font-semibold"
+   666→              style={{
+   667→                backgroundColor: `color-mix(in oklch, ${toColor} 16%, transparent)`,
+   668→                color: toColor,
+   669→              }}
+   670→            >
+   671→              {c.to}
+   672→            </span>
+   673→          </div>
+   674→          <p className="text-sm leading-relaxed text-foreground">{c.reason}</p>
+   675→        </div>
+   676→      );
+   677→    }
+   678→
+   679→    case 'GateBlocked': {
+   680→      const g = p as EventPayloadMap['GateBlocked'];
+   681→      return (
+   682→        <div className={cardClass} style={cardStyle}>
+   683→          <div className="flex items-center gap-2">
+   684→            <span
+   685→              className="rounded px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider animate-status-pulse"
+   686→              style={{
+   687→                backgroundColor: 'color-mix(in oklch, var(--status-falsified) 18%, transparent)',
+   688→                color: 'var(--status-falsified)',
+   689→              }}
+   690→            >
+   691→              ✗ blocked
+   692→            </span>
+   693→            <span className="text-sm font-semibold">{g.name} gate</span>
+   694→          </div>
+   695→          <p className="text-sm leading-relaxed text-foreground">{g.reason}</p>
+   696→        </div>
+   697→      );
+   698→    }
+   699→
+   700→    case 'GatePassed': {
+   701→      const g = p as EventPayloadMap['GatePassed'];
+   702→      return (
+   703→        <div className={cardClass} style={cardStyle}>
+   704→          <div className="flex items-center gap-2">
+   705→            <span
+   706→              className="rounded px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider"
+   707→              style={{
+   708→                backgroundColor: 'color-mix(in oklch, var(--status-tested) 18%, transparent)',
+   709→                color: 'var(--status-tested)',
+   710→              }}
+   711→            >
+   712→              ✓ passed
+   713→            </span>
+   714→            <span className="text-sm font-semibold">{g.name} gate</span>
+   715→          </div>
+   716→        </div>
+   717→      );
+   718→    }
+   719→
+   720→    case 'RoleAssigned': {
+   721→      const r = p as EventPayloadMap['RoleAssigned'];
+   722→      return (
+   723→        <p className="text-sm leading-relaxed text-muted-foreground">
+   724→          <span className="font-medium text-foreground">{r.agentName}</span>{' '}
+   725→          assigned as{' '}
+   726→          <span className="font-mono text-[var(--status-believed)]">{r.role}</span>.
+   727→        </p>
+   728→      );
+   729→    }
+   730→
+   731→    case 'AgentInstalled': {
+   732→      const a = p as EventPayloadMap['AgentInstalled'];
+   733→      return (
+   734→        <p className="text-sm leading-relaxed text-muted-foreground">
+   735→          <span className="font-medium text-foreground">{a.name}</span>{' '}
+   736→          installed as <span className="font-mono">{a.role}</span>{' '}
+   737→          ({a.modelName}/{a.harnessName}).
+   738→          {a.teamName ? ` Assigned to ${a.teamName}.` : ''}
+   739→        </p>
+   740→      );
+   741→    }
+   742→
+   743→    case 'EvidenceAttached': {
+   744→      const e = p as EventPayloadMap['EvidenceAttached'];
+   745→      return (
+   746→        <div className={cardClass} style={cardStyle}>
+   747→          <div className="text-sm font-medium leading-snug">{e.label}</div>
+   748→          <p className="text-sm leading-relaxed text-foreground">{e.summary}</p>
+   749→          <div className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
+   750→            <span className="rounded bg-muted/60 px-1.5 py-0.5 font-mono">
+   751→              {e.evidenceType}
+   752→            </span>
+   753→            <span
+   754→              style={{
+   755→                color:
+   756→                  e.supportsOrRefutes === 'supports'
+   757→                    ? 'var(--status-tested)'
+   758→                    : e.supportsOrRefutes === 'refutes'
+   759→                      ? 'var(--status-falsified)'
+   760→                      : 'var(--status-uncertain)',
+   761→              }}
+   762→            >
+   763→              {e.supportsOrRefutes}
+   764→            </span>
+   765→          </div>
+   766→        </div>
+   767→      );
+   768→    }
+   769→
+   770→    case 'AgentThought': {
+   771→      const t = p as EventPayloadMap['AgentThought'];
+   772→      const thoughtColor =
+   773→        t.thoughtType === 'doubt' ? 'var(--status-asserted)' :
+   774→        t.thoughtType === 'question' ? 'var(--status-uncertain)' :
+   775→        t.thoughtType === 'hypothesis' ? 'var(--status-believed)' :
+   776→        t.thoughtType === 'conclusion' ? 'var(--status-tested)' :
+   777→        'var(--muted-foreground)';
+   778→      return (
+   779→        <div
+   780→          className="flex items-start gap-2 rounded-md border-l-2 bg-muted/20 px-3 py-2 italic"
+   781→          style={{ borderColor: `color-mix(in oklch, ${thoughtColor} 40%, transparent)` }}
+   782→        >
+   783→          <span
+   784→            className="rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider not-italic"
+   785→            style={{
+   786→              backgroundColor: `color-mix(in oklch, ${thoughtColor} 14%, transparent)`,
+   787→              color: thoughtColor,
+   788→            }}
+   789→          >
+   790→            {t.thoughtType}
+   791→          </span>
+   792→          <div className="flex-1">
+   793→            <p className="text-sm leading-relaxed text-muted-foreground">
+   794→              {t.content}
+   795→            </p>
+   796→            {t.relatedThoughtId ? (
+   797→              <p className="mt-0.5 text-[0.625rem] not-italic text-muted-foreground/60">
+   798→                ↳ replying to: <span className="font-mono">{t.relatedThoughtId.slice(0, 12)}…</span>
+   799→              </p>
+   800→            ) : null}
+   801→          </div>
+   802→        </div>
+   803→      );
+   804→    }
+   805→
+   806→    case 'SharedItem': {
+   807→      const s = p as EventPayloadMap['SharedItem'];
+   808→      // Map item type to icon + accent color
+   809→      const itemConfig: Record<string, { icon: LucideIcon; color: string }> = {
+   810→        file: { icon: File, color: 'var(--status-believed)' },
+   811→        report: { icon: FileText, color: 'var(--status-tested)' },
+   812→        url: { icon: LinkIcon, color: 'var(--status-believed)' },
+   813→        image: { icon: ImageIcon, color: 'var(--status-asserted)' },
+   814→        code: { icon: Code2, color: 'var(--status-uncertain)' },
+   815→        data: { icon: BarChart3, color: 'var(--status-tested)' },
+   816→      };
+   817→      const cfg = itemConfig[s.itemType] ?? { icon: File, color: 'var(--muted-foreground)' };
+   818→      return (
+   819→        <div className={cardClass} style={{ ...cardStyle, borderColor: `color-mix(in oklch, ${cfg.color} 40%, transparent)` }}>
+   820→          <div className="flex items-start gap-2">
+   821→            <div
+   822→              className="grid size-8 shrink-0 place-items-center rounded-md"
+   823→              style={{ backgroundColor: `color-mix(in oklch, ${cfg.color} 14%, transparent)` }}
+   824→            >
+   825→              <cfg.icon className="size-4" style={{ color: cfg.color }} aria-hidden />
+   826→            </div>
+   827→            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+   828→              <div className="flex items-center gap-2">
+   829→                <span className="text-sm font-medium">{s.title}</span>
+   830→                <span
+   831→                  className="rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider"
+   832→                  style={{ backgroundColor: `color-mix(in oklch, ${cfg.color} 14%, transparent)`, color: cfg.color }}
+   833→                >
+   834→                  {s.itemType}
+   835→                </span>
+   836→              </div>
+   837→              {s.description ? (
+   838→                <p className="text-xs leading-relaxed text-muted-foreground">{s.description}</p>
+   839→              ) : null}
+   840→              {s.fileName ? (
+   841→                <div className="text-[0.6875rem] text-muted-foreground">
+   842→                  file: <span className="font-mono text-foreground/80">{s.fileName}</span>
+   843→                  {s.mimeType ? <span className="ml-2">· {s.mimeType}</span> : null}
+   844→                </div>
+   845→              ) : null}
+   846→              {s.content ? (
+   847→                <pre className="mt-1 overflow-x-auto rounded-md bg-muted/30 p-2 text-xs leading-relaxed text-foreground/80 scrollbar-sleek">
+   848→                  {s.content.length > 300 ? s.content.slice(0, 300) + '…' : s.content}
+   849→                </pre>
+   850→              ) : null}
+   851→              {s.url ? (
+   852→                <a
+   853→                  href={s.url}
+   854→                  target="_blank"
+   855→                  rel="noreferrer"
+   856→                  className="mt-0.5 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+   857→                >
+   858→                  <ExternalLink className="size-3" aria-hidden />
+   859→                  {s.url.length > 60 ? s.url.slice(0, 60) + '…' : s.url}
+   860→                </a>
+   861→              ) : null}
+   862→              {s.meta ? (
+   863→                <div className="flex flex-wrap gap-2 text-[0.6875rem] text-muted-foreground/70">
+   864→                  {Object.entries(s.meta).map(([k, v]) => (
+   865→                    <span key={k}>{k}: <span className="font-mono">{v}</span></span>
+   866→                  ))}
+   867→                </div>
+   868→              ) : null}
+   869→            </div>
+   870→          </div>
+   871→        </div>
+   872→      );
+   873→    }
+   874→
+   875→    case 'ReactionAdded': {
+   876→      const r = p as EventPayloadMap['ReactionAdded'];
+   877→      return (
+   878→        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   879→          <span className="text-base">{r.emoji}</span>
+   880→          <span>reacted to <span className="font-mono text-foreground/60">{r.targetEventId.slice(0, 12)}…</span></span>
+   881→        </div>
+   882→      );
+   883→    }
+   884→
+   885→    case 'PreemptIssued': {
+   886→      const pre = p as EventPayloadMap['PreemptIssued'];
+   887→      const urgencyColor = pre.urgency === 'high' ? 'var(--status-falsified)' : pre.urgency === 'medium' ? 'var(--status-asserted)' : 'var(--status-uncertain)';
+   888→      return (
+   889→        <div
+   890→          className="flex items-start gap-2 rounded-md border-l-2 bg-[var(--status-falsified)]/[0.06] px-3 py-2"
+   891→          style={{ borderColor: urgencyColor }}
+   892→        >
+   893→          <span
+   894→            className="rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider animate-status-pulse"
+   895→            style={{ backgroundColor: `color-mix(in oklch, ${urgencyColor} 14%, transparent)`, color: urgencyColor }}
+   896→          >
+   897→            ⚡ preempt
+   898→          </span>
+   899→          <div className="flex-1">
+   900→            <p className="text-sm leading-relaxed text-foreground/90">
+   901→              <span className="font-medium">{pre.interruptingAgentName}</span> interrupted{' '}
+   902→              <span className="font-medium">{pre.targetAgentName}</span>
+   903→            </p>
+   904→            <p className="text-xs leading-relaxed text-muted-foreground">{pre.reason}</p>
+   905→          </div>
+   906→        </div>
+   907→      );
+   908→    }
+   909→
+   910→    case 'ThreadReplyPosted': {
+   911→      const t = p as EventPayloadMap['ThreadReplyPosted'];
+   912→      return (
+   913→        <div className="flex flex-col gap-1 border-l-2 border-border/40 pl-3">
+   914→          <span className="text-[0.5625rem] uppercase tracking-widest text-muted-foreground/60">reply</span>
+   915→          <p className="text-sm leading-relaxed text-foreground">{t.body}</p>
+   916→        </div>
+   917→      );
+   918→    }
+   919→
+   920→    default:
+   921→      // generic fallback
+   922→      return (
+   923→        <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 text-xs leading-relaxed text-muted-foreground">
+   924→          {JSON.stringify(message.payload, null, 2)}
+   925→        </pre>
+   926→      );
+   927→  }
+   928→}
+   929→
+   930→// Re-export hint for downstream status colors.
+   931→export type { ClaimStatus };
+   932→

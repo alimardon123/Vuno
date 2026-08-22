@@ -188,8 +188,44 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         // then the proposal, then the chat message.
         return { events: [...thoughts, sharedUrl, event, chatEvent], claims: [] };
       },
+      AttentionTriggered: (ctx: AgentContext): AgentResponse => {
+        // Auto-woken brief observation — NOT a full proposal. Just a quick
+        // architectural glance at the message. Per the design principle
+        // "Beautiful": agents should feel like colleagues glancing at Slack.
+        const trigger = ctx.trigger.payload as { body: string; topic: string; matchedKeywords: string[]; channelId: string };
+        const observation = pickArchitectObservation(trigger.topic, trigger.body);
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
+}
+
+// Brief architectural observations for the attention router. Per role:
+// short, conversational, references the matched topic.
+const ARCHITECT_OBSERVATIONS: Record<string, string[]> = {
+  architecture: [
+    "Quick architectural take — if we're touching this, worth sketching the data flow first. ADR-style diagram would help align the team before any code lands.",
+    "Architecture note — this sounds like a refactor opportunity. Worth checking whether the existing module boundaries already support what you're proposing, or if we need a new seam.",
+  ],
+  performance: [
+    "From an architecture angle — perf changes usually ripple. Worth thinking about where the bottleneck actually lives (CPU, IO, lock contention) before optimizing blind.",
+  ],
+  risk: [
+    "Architecturally — if there's risk here, let's make sure we have a rollback path drawn out. Reversible decisions are cheaper than irreversible ones.",
+  ],
+};
+
+function pickArchitectObservation(topic: string, _body: string): string {
+  const pool = ARCHITECT_OBSERVATIONS[topic] ?? ARCHITECT_OBSERVATIONS.architecture;
+  return pool[Math.abs(hashString(_body)) % pool.length]!;
 }
 
 // ─── Devil's Advocate (objection raiser) ────────────────────────────────────
@@ -298,8 +334,41 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
         };
         return { events: [...thoughts, event, chatEvent], claims: [] };
       },
+      AttentionTriggered: (ctx: AgentContext): AgentResponse => {
+        // Devil's Advocate auto-woken — quick counterpoint, not a formal objection.
+        const trigger = ctx.trigger.payload as { body: string; topic: string; matchedKeywords: string[]; channelId: string };
+        const observation = pickDevilsAdvocateObservation(trigger.topic, trigger.body);
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
+}
+
+// Brief counterpoints for the Devil's Advocate attention router.
+const DEVILS_ADVOCATE_OBSERVATIONS: Record<string, string[]> = {
+  risk: [
+    "Counterpoint — what's the worst case if this goes wrong? Worth writing down the failure mode before committing.",
+    "Pushback — have we considered the opposite? Sometimes the 'obvious' answer is the trap.",
+  ],
+  architecture: [
+    "Devil's advocate hat on — what's the second-best option here, and why aren't we picking it?",
+  ],
+  security: [
+    "Counterpoint — security and usability are usually a tradeoff. Are we sure we're not over-correcting?",
+  ],
+};
+
+function pickDevilsAdvocateObservation(topic: string, _body: string): string {
+  const pool = DEVILS_ADVOCATE_OBSERVATIONS[topic] ?? DEVILS_ADVOCATE_OBSERVATIONS.risk;
+  return pool[Math.abs(hashString(_body)) % pool.length]!;
 }
 
 // ─── Performance (verifier + benchmark runner) ──────────────────────────────
@@ -446,8 +515,38 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         };
         return { events: [completed, benchmark, sharedReport, teamThought, chatEvent], claims: [] };
       },
+      AttentionTriggered: (ctx: AgentContext): AgentResponse => {
+        // Perf auto-woken — quick perf observation, not a full benchmark run.
+        const trigger = ctx.trigger.payload as { body: string; topic: string; matchedKeywords: string[]; channelId: string };
+        const observation = pickPerfObservation(trigger.topic, trigger.body);
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
+}
+
+// Brief perf observations for the attention router.
+const PERF_OBSERVATIONS: Record<string, string[]> = {
+  performance: [
+    "Perf glance — worth measuring before assuming. I can spin up a quick benchmark if you want hard numbers instead of intuition.",
+    "Quick perf note — p99 is what bites you, not the average. Worth instrumenting the tail before any optimization claim.",
+  ],
+  architecture: [
+    "Perf angle on this — architecture choices usually have perf fingerprints. Worth sketching the expected latency profile before committing.",
+  ],
+};
+
+function pickPerfObservation(topic: string, _body: string): string {
+  const pool = PERF_OBSERVATIONS[topic] ?? PERF_OBSERVATIONS.performance;
+  return pool[Math.abs(hashString(_body)) % pool.length]!;
 }
 
 // ─── Security (reviewer) ────────────────────────────────────────────────────
@@ -486,8 +585,38 @@ export class SimulatedSecurityAdapter extends SimulatedBaseAdapter {
         };
         return { events: [chatEvent], claims: [] };
       },
+      AttentionTriggered: (ctx: AgentContext): AgentResponse => {
+        // Security auto-woken — quick security observation.
+        const trigger = ctx.trigger.payload as { body: string; topic: string; matchedKeywords: string[]; channelId: string };
+        const observation = pickSecurityObservation(trigger.topic, trigger.body, trigger.matchedKeywords);
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
+}
+
+// Brief security observations for the attention router.
+const SECURITY_OBSERVATIONS: Record<string, string[]> = {
+  security: [
+    "Security glance — worth threat-modeling this before it ships. Who's the attacker, what's the asset, what's the trust boundary?",
+    "Quick security note — if this touches auth or credentials, I'd want to see a review on token lifetime and replay protection before merge.",
+  ],
+  risk: [
+    "Security angle — risk here probably has a blast radius. Worth writing down what gets compromised if this goes wrong.",
+  ],
+};
+
+function pickSecurityObservation(topic: string, _body: string, _kw: string[]): string {
+  const pool = SECURITY_OBSERVATIONS[topic] ?? SECURITY_OBSERVATIONS.security;
+  return pool[Math.abs(hashString(_body)) % pool.length]!;
 }
 
 // ─── Verifier (QA — runs tests) ──────────────────────────────────────────────
@@ -526,8 +655,35 @@ export class SimulatedVerifierAdapter extends SimulatedBaseAdapter {
         };
         return { events: [chatEvent], claims: [] };
       },
+      AttentionTriggered: (ctx: AgentContext): AgentResponse => {
+        // Verifier auto-woken — quick QA observation.
+        const trigger = ctx.trigger.payload as { body: string; topic: string; matchedKeywords: string[]; channelId: string };
+        const observation = pickVerifierObservation(trigger.topic, trigger.body);
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
+}
+
+// Brief QA observations for the attention router.
+const VERIFIER_OBSERVATIONS: Record<string, string[]> = {
+  quality: [
+    "QA glance — worth a test plan before this lands. What's the happy path, what's the failure mode, what's the regression surface?",
+    "Quick QA note — if there's a test gap here, now's the time to flag it. Cheap to fix in design, expensive in prod.",
+  ],
+};
+
+function pickVerifierObservation(topic: string, _body: string): string {
+  const pool = VERIFIER_OBSERVATIONS[topic] ?? VERIFIER_OBSERVATIONS.quality;
+  return pool[Math.abs(hashString(_body)) % pool.length]!;
 }
 
 // ─── HR / Meta (retrospective author) ───────────────────────────────────────
@@ -565,8 +721,35 @@ export class SimulatedHrAdapter extends SimulatedBaseAdapter {
         };
         return { events: [chatEvent], claims: [] };
       },
+      AttentionTriggered: (ctx: AgentContext): AgentResponse => {
+        // HR auto-woken — quick org/meta observation.
+        const trigger = ctx.trigger.payload as { body: string; topic: string; matchedKeywords: string[]; channelId: string };
+        const observation = pickHrObservation(trigger.topic, trigger.body);
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
+}
+
+// Brief HR / meta observations for the attention router.
+const HR_OBSERVATIONS: Record<string, string[]> = {
+  org: [
+    "HR glance — I'll log this for the next retro. Worth tracking whether this becomes a pattern across the team.",
+    "Quick HR note — if this is objective-shaped, I can help file it as an OKR. Otherwise, noting it as a one-off.",
+  ],
+};
+
+function pickHrObservation(topic: string, _body: string): string {
+  const pool = HR_OBSERVATIONS[topic] ?? HR_OBSERVATIONS.org;
+  return pool[Math.abs(hashString(_body)) % pool.length]!;
 }
 
 // ─── Helper: stable string hash ─────────────────────────────────────────────

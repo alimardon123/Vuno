@@ -29,7 +29,8 @@ export type EventType =
   | 'AgentThought'
   | 'SharedItem'
   | 'ReactionAdded'
-  | 'PreemptIssued';
+  | 'PreemptIssued'
+  | 'AttentionWakeup';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -201,6 +202,15 @@ export interface EventPayloadMap {
     targetAgentName: string;
     reason: string;           // why the interruption
     urgency: 'low' | 'medium' | 'high';  // how urgent
+  };
+  AttentionWakeup: {
+    agentId: string;
+    agentName: string;
+    role: string;                          // 'security' | 'perf' | 'verifier' | 'hr' | 'architect' | 'devils_advocate'
+    triggerEventId: string;                // the message event that woke this agent
+    topic: string;                          // what topic matched (e.g. "security", "perf")
+    matchedKeywords: string[];              // which keywords triggered the wake-up
+    confidence: number;                     // 0-1 — how relevant the agent thinks this is
   };
 }
 

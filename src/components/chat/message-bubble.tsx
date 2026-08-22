@@ -26,6 +26,8 @@ import {
   ExternalLink,
   Reply,
   SmilePlus,
+  Eye,
+  Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
@@ -902,6 +904,59 @@ function MessageBody({
               <span className="font-medium">{pre.targetAgentName}</span>
             </p>
             <p className="text-xs leading-relaxed text-muted-foreground">{pre.reason}</p>
+          </div>
+        </div>
+      );
+    }
+
+    case 'AttentionWakeup': {
+      // The "magic moment" — an agent noticed this message and is engaging.
+      // Rendered as a subtle, animated "noticed this" badge with confidence + matched keywords.
+      const w = p as EventPayloadMap['AttentionWakeup'];
+      const confidencePct = Math.round(w.confidence * 100);
+      const highConfidence = confidencePct >= 70;
+      const accentColor = 'var(--status-believed)'; // sky-blue — calm, not alarming
+      return (
+        <div
+          className="flex items-start gap-2 rounded-md border-l-2 bg-[var(--status-believed)]/[0.06] px-3 py-2"
+          style={{ borderColor: accentColor }}
+        >
+          <span
+            className="mt-0.5 inline-flex size-4 items-center justify-center text-[var(--status-believed)] animate-status-pulse"
+            aria-hidden
+          >
+            <Eye className="size-3.5" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm leading-relaxed text-foreground/90">
+              <span className="font-medium">{w.agentName}</span>{' '}
+              <span className="text-muted-foreground">
+                noticed this — topic: <span className="font-mono text-foreground/70">{w.topic}</span>
+              </span>
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {w.matchedKeywords.slice(0, 4).map((kw) => (
+                <span
+                  key={kw}
+                  className="rounded bg-muted/70 px-1.5 py-0 font-mono text-[0.625rem] text-muted-foreground"
+                >
+                  {kw}
+                </span>
+              ))}
+              <span
+                className={cn(
+                  'ml-1 inline-flex items-center gap-0.5 rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider',
+                  highConfidence ? 'text-[var(--status-believed)]' : 'text-muted-foreground',
+                )}
+                title={`confidence: ${confidencePct}%`}
+              >
+                <Sparkles className="size-2.5" aria-hidden />
+                {confidencePct}%
+              </span>
+            </div>
+            <p className="mt-1 text-[0.6875rem] italic text-muted-foreground/80">
+              engaging — typing a brief observation…
+            </p>
           </div>
         </div>
       );

@@ -2169,3 +2169,140 @@ Task: Variable cognitive load + concurrent interruption (PreemptIssued). Per VLM
 - MODIFIED: `src/app/api/debate/route.ts` (COGNITIVE_LOAD map, getThinkTime, invokeAndStream role param, Phase 2.5 PREEMPT)
 - MODIFIED: `src/components/chat/message-bubble.tsx` (PreemptIssued rendering with ⚡ badge + pulse)
 
+
+
+---
+Task ID: 31
+Agent: autonomous-cron
+Task: Attention Router — the "magic moment" feature. When a user posts a message in any channel, agents auto-wake based on keyword pattern matching and post brief, conversational observations within ~1s. Per the design principle "Powerful": agents don't just wait for debates — they monitor chatter and engage when content matches their domain. Per "Beautiful": a subtle "noticed this" badge with pulse animation + matched keywords + confidence %.
+
+## 🔍 Research (Step 1)
+- Read worklog: Round 22 (Task ID 30) added variable cognitive load + PreemptIssued. The debate now feels alive inside orchestrated debates, but agents are still passive in normal chat — they only respond when summoned.
+- Multi-role review:
+  - **Critic**: "The killer gap is that agents don't react to user messages. A real org has people glancing at Slack and chiming in. Vuno's agents wait to be summoned."
+  - **Architect**: "We need a deterministic trigger that fires AFTER MessagePosted, runs pattern matching, and wakes relevant agents. Async fire-and-forget so the user's POST isn't blocked."
+  - **Engineer**: "Use the existing adapter interface. Add an `AttentionTriggered` script handler to each adapter — different from `ProposalRequested` (full debate) — agents post a single brief MessagePosted, not a full event chain."
+  - **Designer**: "The wake-up itself should be visible — a pulsing 'noticed this' badge with confidence + matched keywords. Like watching a colleague's eyes light up."
+- Picked from the next-steps list: "Attention router — deterministic triggers (a benchmark event auto-wakes the perf agent; a security-related file change auto-wakes the security agent)."
+
+## 💻 Action (Step 2)
+
+### 1. New event type: `AttentionWakeup` (types.ts)
+- Payload: `{agentId, agentName, role, triggerEventId, topic, matchedKeywords, confidence}`
+- Added to TYPED_MESSAGE_EVENTS + TYPE_LABELS ('ATTENTION') in project.ts
+
+### 2. Attention router config + matcher (`src/lib/agents/attention-router.ts`)
+- 6 patterns, one per agent role:
+  - **security**: security, vulnerab, cve, exploit, auth, injection, xss, csrf, token, credential, tls, crypto, encrypt, decrypt, rbac, permission (weight 0.7)
+  - **perf**: perf, latency, p99, p95, throughput, benchmark, slow, fast, qps, rps, memory, cpu, cache, ram, heap (weight 0.7)
+  - **verifier**: test, qa, regression, coverage, unit test, integration, bug, flaky, ci, cd, pipeline (weight 0.65)
+  - **hr**: objective, okr, goal, team, hiring, onboard, performance review, retro, retrospective, headcount (weight 0.65)
+  - **architect**: architecture, design, system, structure, refactor, scale, scalab, distributed, consensus, partition (weight 0.6)
+  - **devils_advocate**: risk, concern, alternative, downside, drawback, problem with, issue with, worried, unsure, uncertain (weight 0.55)
+- `matchAttention(body, threshold=0.3)` returns top 2 matches by confidence (caps at 2 to avoid bursty channel noise — Simple principle)
+- Confidence = base weight × (0.6 + matches × 0.2), capped at 1.0
+
+### 3. New `/api/attention-router` route
+- POST `{messageEventId, body, channelId}`
+- Flow per match (sequential — agents wake one-by-one, organic):
+  1. Append + broadcast `AttentionWakeup` event
+  2. Send typing indicator for ~variable cognitive load per role (250-1200ms)
+  3. Invoke adapter with `AttentionTriggered` trigger
+  4. Stream adapter's MessagePosted observation
+  5. Pause 150-400ms between agents
+- Skips messages < 8 chars (avoid waking on "ok" / emoji)
+- Uses Rust substrate (port 3030) for spine appends, Prisma fallback
+
+### 4. AttentionTriggered script handlers (simulated.ts)
+- Added to ALL 6 adapters (architect, devils_advocate, perf, security, verifier, hr)
+- Each returns ONE MessagePosted event with a brief, conversational observation
+- Per-role observation pools (e.g. architect on architecture: "Quick architectural take — if we're touching this, worth sketching the data flow first…")
+- Deterministic pick via `hashString(body)` so the same message always gets the same observation
+
+### 5. Async trigger in /api/events POST
+- After appending a `MessagePosted` event (Rust success path + Prisma fallback), fires `triggerAttentionRouter(eventId, body, channelId)` — fire-and-forget, never blocks the user's response
+
+### 6. AttentionWakeup rendering (message-bubble.tsx)
+- New `case 'AttentionWakeup'` in the renderContent switch
+- Sky-blue border (var(--status-believed)) + animated Eye icon (animate-status-pulse)
+- Shows: agent name, topic, matched keywords (as mono chips), confidence % (with Sparkles icon, colored if ≥70%)
+- Italic "engaging — typing a brief observation…" hint
+- Imported `Eye` + `Sparkles` from lucide-react
+
+### 7. AttentionRouterView (settings panel)
+- New view added to settings navItems (Radar icon, between Thought Graph and HR / Meta)
+- Renders all 6 patterns as cards with:
+  - Role-colored left border (security=red-orange, perf=emerald, verifier=sky, hr=amber, architect=gray, devils_advocate=amber)
+  - First letter of role icon glyph as a colored badge
+  - Italic description
+  - Keyword chips (mono font)
+  - Confidence bar (width = weight %)
+- "Magic moment" summary banner explaining how it works
+- Footer with technical detail (threshold, max 2 agents, fire-and-forget)
+- Added 'attention' to ActiveView union type in app-store.ts
+- Wired into app-shell.tsx
+
+## 📊 Result (Step 3)
+- Lint: clean
+- End-to-end test 1 (security message): "I am worried about the security implications of the new auth token flow — could be a vulnerability"
+  - seq=255: User message posted
+  - seq=256: AttentionWakeup from Sid (Security Architect), confidence=0.84, keywords=[security, vulnerab, auth]
+  - seq=257: Sid posted "Quick security note — if this touches auth or credentials, I'd want to see a review on token lifetime and replay protection before merge."
+  - seq=258: AttentionWakeup from Devi (Devil's Advocate), confidence=0.44, keywords=[worried]
+  - seq=259: Devi posted "Pushback — have we considered the opposite? Sometimes the 'obvious' answer is the trap."
+- End-to-end test 2 (perf message): "The p99 latency on the new benchmark is way too slow — need to investigate the cache and memory overhead"
+  - seq=260: User message posted
+  - seq=261: AttentionWakeup from Peri (Performance Engineer), confidence=0.84, keywords=[latency, p99, benchmark]
+  - seq=262: Peri posted "Quick perf note — p99 is what bites you, not the average. Worth instrumenting the tail before any optimization claim."
+- /api/attention-router endpoint: 200 in 2.7s (including all typing indicators + sleeps + adapter invocations)
+- No errors in dev.log
+- AttentionRouterView renders via the Settings → Attention Router nav item
+
+## 💡 Information (Step 4)
+- The "magic moment" works: a user posts about "security" and within ~2-3s sees two agents (Security + Devil's Advocate) wake up and post brief observations — sequentially, not bursty
+- The sequential wake-up (with 150-400ms pauses between agents) makes it feel like colleagues noticing a Slack message one-by-one, not a bot stampede
+- Capping at 2 agents per message keeps the channel calm — the whole org doesn't pile on every message
+- The router correctly skips very short messages ("ok", emoji-only) — no spam
+- Different topics trigger different agents — security message woke Security + DevAdv, perf message woke only Peri
+- The AttentionRouterView gives users transparency into the mechanism — they can see exactly what each agent listens for, building trust
+
+## 🔧 Adjustment (Step 5)
+- All features implemented + verified end-to-end.
+- Next high-impact step recommendations (in priority order):
+  1. **Personal assistant memory evolution** — Bob updates his model of Kai based on Kai's actions (the natural complement to the attention router — agents learning, not just reacting)
+  2. **ACP (agent-to-agent comms)** — now that agents wake up on their own, let them message each other directly (not just on the shared spine)
+  3. **MCP integration in Rust** — replace simulated adapter calls in the Rust concurrent demo with real LLM calls via reqwest to z-ai API. Makes Rust the brain, not just the spine.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One config object (ATTENTION_PATTERNS). One matcher function. One new event type. One new route. Fire-and-forget — no extra infrastructure. |
+| **Powerful** | Agents now monitor channel chatter and auto-engage. This is the "magic moment" — no other multi-agent product has agents that wake up based on conversation content. |
+| **Performant** | Async fire-and-forget — never blocks user's POST. Pattern matching is O(n×k) substring — fast even with thousands of keywords. Top-2 cap avoids spam. |
+| **Scalable** | Adding a new agent role = one new entry in ATTENTION_PATTERNS + one new AttentionTriggered handler in the adapter. Same interface. |
+| **Efficient** | Reuses existing EventSpine, broadcast, adapter infrastructure. No new tables, no new services, no new dependencies. |
+| **Beautiful** | Sky-blue "noticed this" badge with pulsing Eye icon, matched keywords as mono chips, confidence %. Settings view has warm cream cards with role-colored borders + italic descriptions like a colleague's notebook. |
+| **Functional** | Verified end-to-end with two real messages. Security message woke Sid (0.84) + Devi (0.44). Perf message woke Peri (0.84). Brief observations posted. No errors. |
+
+### Files modified this round
+- MODIFIED: `src/lib/events/types.ts` (AttentionWakeup event type + payload)
+- MODIFIED: `src/lib/events/project.ts` (AttentionWakeup in TYPED_MESSAGE_EVENTS + TYPE_LABELS)
+- MODIFIED: `src/app/api/events/route.ts` (AttentionWakeup in ALLOWED_TYPES + triggerAttentionRouter helper + async trigger on MessagePosted in both Rust + Prisma paths)
+- MODIFIED: `src/lib/agents/adapters/simulated.ts` (AttentionTriggered script handler added to ALL 6 adapters + per-role observation pools)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (AttentionWakeup rendering — Eye icon, sky-blue border, keyword chips, confidence %, italic "engaging" hint)
+- MODIFIED: `src/store/app-store.ts` (added 'attention' to ActiveView union)
+- MODIFIED: `src/components/app-shell/app-shell.tsx` (AttentionRouterView import + render branch)
+- MODIFIED: `src/components/left-rail/settings-panel.tsx` (Attention Router nav item + Radar icon)
+- CREATED: `src/lib/agents/attention-router.ts` (ATTENTION_PATTERNS config + matchAttention function)
+- CREATED: `src/app/api/attention-router/route.ts` (POST endpoint — analyzes message, fires wakeups, invokes adapters)
+- CREATED: `src/components/attention/attention-router-view.tsx` (Settings view showing pattern rules per agent)
+
+### Verification artifacts (events created during testing)
+- evt-255: MessagePosted (user, security message)
+- evt-256: AttentionWakeup (Sid/security, conf=0.84, kw=[security, vulnerab, auth])
+- evt-257: MessagePosted (Sid's brief observation)
+- evt-258: AttentionWakeup (Devi/devils_advocate, conf=0.44, kw=[worried])
+- evt-259: MessagePosted (Devi's brief counterpoint)
+- evt-260: MessagePosted (user, perf message)
+- evt-261: AttentionWakeup (Peri/perf, conf=0.84, kw=[latency, p99, benchmark])
+- evt-262: MessagePosted (Peri's brief observation)

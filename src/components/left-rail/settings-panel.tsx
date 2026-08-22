@@ -18,8 +18,11 @@ import {
   HelpCircle,
   PanelLeftClose,
   Brain,
+  Radar,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/common/theme-toggle';
+import { ATTENTION_PATTERNS } from '@/lib/agents/attention-router';
+import { ROLE_LABELS } from '@/lib/agents/types';
 
 export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const { activeView, setView, setFileObjectiveOpen } = useAppStore();
@@ -27,7 +30,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const navItems: Array<{
     label: string;
     icon: typeof BookOpen;
-    view: 'ledger' | 'wiki' | 'hr' | 'thoughts';
+    view: 'ledger' | 'wiki' | 'hr' | 'thoughts' | 'attention';
     description: string;
   }> = [
     {
@@ -47,6 +50,12 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       icon: Brain,
       view: 'thoughts',
       description: 'The cognitive web — how agents\' reasoning connects.',
+    },
+    {
+      label: 'Attention Router',
+      icon: Radar,
+      view: 'attention',
+      description: 'What each agent listens for in channel chatter.',
     },
     {
       label: 'HR / Meta',

@@ -101,6 +101,7 @@ const ALLOWED_TYPES = new Set([
   'ReactionAdded',
   'ThreadReplyPosted',
   'PreemptIssued',
+  'AttentionWakeup',
 ]);
 
 interface PostBody {
@@ -110,6 +111,23 @@ interface PostBody {
   scopeId?: string;
   channelId?: string;
   decisionId?: string;
+}
+
+// Async trigger: after a user posts a MessagePosted in a channel, fire the
+// attention router in the background. This is the "magic moment" — agents
+// auto-wake if the message matches their domain of expertise.
+// Per the "Performant" principle: fire-and-forget, never block the response.
+function triggerAttentionRouter(eventId: string, body: string | undefined, channelId: string): void {
+  if (!body) return;
+  // Fire-and-forget — don't await, don't block the response
+  void fetch('http://localhost:3000/api/attention-router', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messageEventId: eventId, body, channelId }),
+  }).catch((err) => {
+    // Silent failure — attention router is best-effort, never blocks user
+    console.warn('[events] attention router trigger failed:', err);
+  });
 }
 
 export async function POST(req: Request) {
@@ -185,6 +203,14 @@ export async function POST(req: Request) {
               scopeId,
               event,
             });
+            // Attention router — async fire-and-forget. Wakes agents if the
+            // message matches their domain of expertise.
+            if (body.type === 'MessagePosted' && scopeType === 'channel') {
+              const bodyText = (body.payload as { body?: string }).body;
+              if (typeof event.id === 'string' && typeof bodyText === 'string') {
+                triggerAttentionRouter(event.id, bodyText, scopeId);
+              }
+            }
             return NextResponse.json({ ok: true, event });
           }
         }
@@ -202,6 +228,13 @@ export async function POST(req: Request) {
       scopeId,
       event: created[0],
     });
+    // Attention router — async fire-and-forget (Prisma path)
+    if (body.type === 'MessagePosted' && scopeType === 'channel') {
+      const bodyText = (body.payload as { body?: string }).body;
+      if (typeof created[0]?.id === 'string' && typeof bodyText === 'string') {
+        triggerAttentionRouter(created[0].id, bodyText, scopeId);
+      }
+    }
     return NextResponse.json({ ok: true, event: created[0] });
   } catch (err) {
     console.error('POST /api/events failed:', err);

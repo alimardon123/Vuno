@@ -16,6 +16,7 @@ import { AgentsView } from '@/components/agents/agents-view';
 import { WikiView } from '@/components/wiki/wiki-view';
 import { HRView } from '@/components/hr/hr-view';
 import { ThoughtGraphView } from '@/components/thoughts/thought-graph-view';
+import { AttentionRouterView } from '@/components/attention/attention-router-view';
 import { InstallAgentDialog } from '@/components/agents/install-agent-dialog';
 import { FileObjectiveDialog } from '@/components/objective/file-objective-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -159,6 +160,7 @@ export function AppShell() {
           {activeView === 'wiki' ? <WikiView /> : null}
           {activeView === 'hr' ? <HRView /> : null}
           {activeView === 'thoughts' ? <ThoughtGraphView /> : null}
+          {activeView === 'attention' ? <AttentionRouterView /> : null}
         </main>
 
         {/* Right rail — hidden on mobile; sheet-triggered */}
