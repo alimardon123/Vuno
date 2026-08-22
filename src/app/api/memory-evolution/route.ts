@@ -31,6 +31,7 @@ import { detectMemoryFacts, appendToListValue, valueInList, type DetectedFact } 
 import { generateProactiveNote } from '@/lib/agents/proactive-note-generator';
 import { findHandoffTarget, buildHandoffContext } from '@/lib/agents/handoff-router';
 import { ROLE_TO_ADAPTER } from '@/lib/agents/adapters/simulated';
+import { generateLLMHandoffResponse } from '@/lib/agents/llm-brief';
 import type { NewEventInput, EventRecord } from '@/lib/events/types';
 import type { AgentContext, AgentAdapter } from '@/lib/agents/types';
 
@@ -43,6 +44,7 @@ interface MemoryEvolutionRequest {
   body: string;
   channelId: string;
   ownerUserId: string;  // the human who posted (Kai)
+  useRealLLM?: boolean; // if true, use z-ai-web-dev-sdk for the handoff expert response
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -351,32 +353,56 @@ export async function POST(req: Request): Promise<NextResponse> {
 
         // 2. Trigger the target agent's adapter with the AgentHandoff trigger.
         // The target agent posts a DEEPER review that references Bob's context.
+        // When useRealLLM is enabled, use the real LLM instead of the simulated adapter.
         const AdapterClass = ROLE_TO_ADAPTER[targetAgent.role];
-        if (AdapterClass) {
+        if (AdapterClass || body.useRealLLM) {
           // Typing indicator for the target agent — they're "reviewing"
           const thinkTime = 600 + Math.random() * 600;
           void broadcastTyping({ channelId: body.channelId, userId: targetAgent.id, isTyping: true });
           await sleep(thinkTime);
           void broadcastTyping({ channelId: body.channelId, userId: targetAgent.id, isTyping: false });
 
-          const adapter: AgentAdapter = new AdapterClass(targetAgent.id);
-          const ctx: AgentContext = {
-            events: [],
-            claims: [],
-            trigger: {
-              type: 'AgentHandoff',
-              payload: {
-                request: handoffCtx.request,
-                contextSummary: handoffCtx.contextSummary,
-                fromAgentName: pa.name,
-                channelId: body.channelId,
-                focusArea: handoffTarget.focusArea,
-                ownerName,
+          let handoffEvents: NewEventInput[];
+          if (body.useRealLLM) {
+            // Use the real LLM to generate a genuine deeper review
+            const llmBody = await generateLLMHandoffResponse(
+              targetAgent.role,
+              handoffCtx.request,
+              handoffCtx.contextSummary,
+              pa.name,
+              handoffTarget.focusArea,
+              ownerName,
+            );
+            handoffEvents = [{
+              type: 'MessagePosted',
+              actorType: 'agent',
+              actorAgentId: targetAgent.id,
+              scopeType: 'channel',
+              scopeId: body.channelId,
+              payload: { body: llmBody },
+            }];
+          } else {
+            // Simulated adapter — canned context-aware response
+            const adapter: AgentAdapter = new AdapterClass(targetAgent.id);
+            const ctx: AgentContext = {
+              events: [],
+              claims: [],
+              trigger: {
+                type: 'AgentHandoff',
+                payload: {
+                  request: handoffCtx.request,
+                  contextSummary: handoffCtx.contextSummary,
+                  fromAgentName: pa.name,
+                  channelId: body.channelId,
+                  focusArea: handoffTarget.focusArea,
+                  ownerName,
+                },
               },
-            },
-          };
-          const response = await adapter.invoke(ctx);
-          await streamEvents(response.events, org, useRust);
+            };
+            const response = await adapter.invoke(ctx);
+            handoffEvents = response.events;
+          }
+          await streamEvents(handoffEvents, org, useRust);
         }
       }
     }

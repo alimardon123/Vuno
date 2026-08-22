@@ -114,19 +114,20 @@ interface PostBody {
   scopeId?: string;
   channelId?: string;
   decisionId?: string;
+  useRealLLM?: boolean; // forwarded to attention-router + memory-evolution triggers
 }
 
 // Async trigger: after a user posts a MessagePosted in a channel, fire the
 // attention router in the background. This is the "magic moment" — agents
 // auto-wake if the message matches their domain of expertise.
 // Per the "Performant" principle: fire-and-forget, never block the response.
-function triggerAttentionRouter(eventId: string, body: string | undefined, channelId: string): void {
+function triggerAttentionRouter(eventId: string, body: string | undefined, channelId: string, useRealLLM?: boolean): void {
   if (!body) return;
   // Fire-and-forget — don't await, don't block the response
   void fetch('http://localhost:3000/api/attention-router', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messageEventId: eventId, body, channelId }),
+    body: JSON.stringify({ messageEventId: eventId, body, channelId, useRealLLM }),
   }).catch((err) => {
     // Silent failure — attention router is best-effort, never blocks user
     console.warn('[events] attention router trigger failed:', err);
@@ -143,13 +144,14 @@ function triggerMemoryEvolution(
   body: string | undefined,
   channelId: string,
   ownerUserId: string,
+  useRealLLM?: boolean,
 ): void {
   if (!body) return;
   // Fire-and-forget — don't await, don't block the response
   void fetch('http://localhost:3000/api/memory-evolution', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messageEventId: eventId, body, channelId, ownerUserId }),
+    body: JSON.stringify({ messageEventId: eventId, body, channelId, ownerUserId, useRealLLM }),
   }).catch((err) => {
     // Silent failure — memory evolution is best-effort, never blocks user
     console.warn('[events] memory evolution trigger failed:', err);
@@ -241,11 +243,11 @@ export async function POST(req: Request) {
             if (body.type === 'MessagePosted' && scopeType === 'channel') {
               const bodyText = (body.payload as { body?: string }).body;
               if (typeof event.id === 'string' && typeof bodyText === 'string') {
-                triggerAttentionRouter(event.id, bodyText, scopeId);
+                triggerAttentionRouter(event.id, bodyText, scopeId, body.useRealLLM);
                 // Memory evolution — PA silently learns from the owner's messages.
                 // Fires alongside the attention router (react + learn in parallel).
                 if (ownerUser) {
-                  triggerMemoryEvolution(event.id, bodyText, scopeId, ownerUser.id);
+                  triggerMemoryEvolution(event.id, bodyText, scopeId, ownerUser.id, body.useRealLLM);
                 }
               }
             }
@@ -270,10 +272,10 @@ export async function POST(req: Request) {
     if (body.type === 'MessagePosted' && scopeType === 'channel') {
       const bodyText = (body.payload as { body?: string }).body;
       if (typeof created[0]?.id === 'string' && typeof bodyText === 'string') {
-        triggerAttentionRouter(created[0].id, bodyText, scopeId);
+        triggerAttentionRouter(created[0].id, bodyText, scopeId, body.useRealLLM);
         // Memory evolution — PA silently learns (Prisma path)
         if (ownerUser) {
-          triggerMemoryEvolution(created[0].id, bodyText, scopeId, ownerUser.id);
+          triggerMemoryEvolution(created[0].id, bodyText, scopeId, ownerUser.id, body.useRealLLM);
         }
       }
     }

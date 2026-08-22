@@ -28,6 +28,7 @@ import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
 import { matchAttention } from '@/lib/agents/attention-router';
 import { ROLE_TO_ADAPTER } from '@/lib/agents/adapters/simulated';
+import { generateLLMAttentionObservation } from '@/lib/agents/llm-brief';
 import type { NewEventInput, EventRecord } from '@/lib/events/types';
 import type { AgentContext, AgentAdapter } from '@/lib/agents/types';
 
@@ -39,6 +40,7 @@ interface AttentionRouterRequest {
   messageEventId: string;
   body: string;
   channelId: string;
+  useRealLLM?: boolean; // if true, use z-ai-web-dev-sdk for genuine LLM responses
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -179,27 +181,48 @@ export async function POST(req: Request): Promise<NextResponse> {
       await sleep(thinkTime);
       void broadcastTyping({ channelId: body.channelId, userId: agent.id, isTyping: false });
 
-      // 3. Invoke the adapter with AttentionTriggered
-      const AdapterClass = ROLE_TO_ADAPTER[agent.role];
-      if (!AdapterClass) continue;
-      const adapter: AgentAdapter = new AdapterClass(agent.id);
-      const ctx: AgentContext = {
-        events: [],
-        claims: [],
-        trigger: {
-          type: 'AttentionTriggered',
-          payload: {
-            body: body.body,
-            topic: match.pattern.topic,
-            matchedKeywords: match.matchedKeywords,
-            channelId: body.channelId,
-            confidence: match.confidence,
+      // 3. Invoke the adapter with AttentionTriggered — or use real LLM if enabled
+      let observationEvents: NewEventInput[];
+      if (body.useRealLLM) {
+        // Use the real LLM to generate a genuine brief observation
+        const llmBody = await generateLLMAttentionObservation(
+          agent.role,
+          body.body,
+          match.pattern.topic,
+          match.matchedKeywords,
+        );
+        observationEvents = [{
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: agent.id,
+          scopeType: 'channel',
+          scopeId: body.channelId,
+          payload: { body: llmBody },
+        }];
+      } else {
+        // Simulated adapter — canned response based on keyword matching
+        const AdapterClass = ROLE_TO_ADAPTER[agent.role];
+        if (!AdapterClass) continue;
+        const adapter: AgentAdapter = new AdapterClass(agent.id);
+        const ctx: AgentContext = {
+          events: [],
+          claims: [],
+          trigger: {
+            type: 'AttentionTriggered',
+            payload: {
+              body: body.body,
+              topic: match.pattern.topic,
+              matchedKeywords: match.matchedKeywords,
+              channelId: body.channelId,
+              confidence: match.confidence,
+            },
           },
-        },
-      };
-      const response = await adapter.invoke(ctx);
-      // Stream the adapter's events (a single MessagePosted observation)
-      await streamEvents(response.events, org, useRust);
+        };
+        const response = await adapter.invoke(ctx);
+        observationEvents = response.events;
+      }
+      // Stream the observation (a single MessagePosted event)
+      await streamEvents(observationEvents, org, useRust);
 
       woken.push({
         agentId: agent.id,

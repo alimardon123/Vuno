@@ -90,7 +90,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: text }),
+          body: JSON.stringify({ body: text, useRealLLM }),
         },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -402,8 +402,8 @@ function TypedForm(props: TypedFormProps) {
           <span>· appends to spine</span>
         )}
       </div>
-      {/* Real LLM toggle — only shown for Proposal type */}
-      {props.type === 'Proposal' && props.useRealLLM !== undefined ? (
+      {/* Real LLM toggle — shown for Proposal (debate) and Message (collaboration loop) */}
+      {(props.type === 'Proposal' || props.type === 'Message') && props.useRealLLM !== undefined ? (
         <label className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -411,7 +411,9 @@ function TypedForm(props: TypedFormProps) {
             onChange={(e) => props.setUseRealLLM?.(e.target.checked)}
             className="size-3 rounded border-border"
           />
-          Use real LLM agents (z-ai-web-dev-sdk) instead of simulated
+          {props.type === 'Proposal'
+            ? 'Use real LLM agents (z-ai-web-dev-sdk) for the debate'
+            : 'Use real LLM for agent reactions + handoffs (attention router + ACP)'}
         </label>
       ) : null}
       <div className="grid gap-2">
