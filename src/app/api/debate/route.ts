@@ -137,21 +137,52 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     }
 
     // ─── Streaming helper: append + broadcast events as they're produced ─────
-    const spine = new EventSpine(org.tenantId, org.id);
     let eventsAppended = 0;
+
+    // streamEvents: append events to the spine via the Rust substrate (port 3030).
+    // Falls back to Prisma (EventSpine) if Rust is unavailable.
+    // Per the user's explicit request: "I still want Rust backend for things."
+    // The Rust substrate owns the event spine — this is the core of the product.
+    const RUST_URL = 'http://localhost:3030';
+    const useRust = await (async () => {
+      try {
+        const res = await fetch(`${RUST_URL}/health`, { signal: AbortSignal.timeout(1000) });
+        return res.ok;
+      } catch { return false; }
+    })();
 
     async function streamEvents(events: NewEventInput[]): Promise<EventRecord[]> {
       if (events.length === 0) return [];
-      const created = await spine.append(events);
+
+      let created: EventRecord[];
+
+      if (useRust) {
+        // Use the Rust substrate — the user's explicit ask
+        const res = await fetch(`${RUST_URL}/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events }),
+        });
+        if (!res.ok) throw new Error(`Rust append failed: ${res.status}`);
+        const data = await res.json() as { events: EventRecord[] };
+        created = data.events.map((e) => ({
+          ...e,
+          payload: typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload,
+          createdAt: typeof e.createdAt === 'number' ? new Date(e.createdAt).toISOString() : e.createdAt,
+        }));
+      } else {
+        // Fallback: Prisma
+        const spine = new EventSpine(org.tenantId, org.id);
+        const raw = await spine.append(events);
+        created = raw.map((e) => ({
+          ...e,
+          payload: typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload,
+        })) as EventRecord[];
+      }
+
       eventsAppended += created.length;
-      // Parse the payload from JSON string → object (Prisma stores it stringified,
-      // but downstream adapters need the parsed object)
-      const parsed = created.map((e) => ({
-        ...e,
-        payload: typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload,
-      })) as EventRecord[];
       // Broadcast each event individually so they stream to the UI one-by-one
-      for (const evt of parsed) {
+      for (const evt of created) {
         void broadcastEventAppended({
           channelId: evt.scopeType === 'channel' ? evt.scopeId : undefined,
           scopeType: evt.scopeType,
@@ -159,7 +190,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
           event: evt,
         });
       }
-      return parsed;
+      return created;
     }
 
     // Helper: send a typing indicator for an agent, wait, then stop typing

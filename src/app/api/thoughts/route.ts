@@ -95,5 +95,20 @@ export async function GET(req: Request) {
       };
     });
 
-  return NextResponse.json({ thoughts, count: thoughts.length });
+  // Build bidirectional edge counts: for each thought, count how many other
+  // thoughts reference it via relatedThoughtId. This gives the "N replies" badge
+  // on parent thoughts — making the graph bidirectional.
+  const replyCountMap = new Map<string, number>();
+  for (const t of thoughts) {
+    if (t.relatedThoughtId) {
+      replyCountMap.set(t.relatedThoughtId, (replyCountMap.get(t.relatedThoughtId) ?? 0) + 1);
+    }
+  }
+  // Enrich each thought with its reply count
+  const enrichedThoughts = thoughts.map((t) => ({
+    ...t,
+    replyCount: replyCountMap.get(t.id) ?? 0,
+  }));
+
+  return NextResponse.json({ thoughts: enrichedThoughts, count: enrichedThoughts.length });
 }
