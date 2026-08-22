@@ -473,6 +473,8 @@ function TopologyView({
   thoughts: Thought[];
   thoughtById: Map<string, Thought>;
 }) {
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const orgThoughts = thoughts.filter((t) => t.visibility !== 'team' && t.visibility !== 'agent');
   const edges = orgThoughts
     .filter((t) => t.relatedThoughtId && thoughtById.has(t.relatedThoughtId))
@@ -488,6 +490,15 @@ function TopologyView({
     const xOffset = hasOutgoing && hasIncoming ? 350 : hasOutgoing ? 400 : 200;
     positions.set(t.id, { x: xOffset + (i % 3) * 20, y: 40 + i * nodeSpacing });
   });
+  // Highlight edges connected to the hovered/selected node
+  const activeNode = hoveredNode ?? selectedNode;
+  const isEdgeActive = (edge: { from: string; to: string }) =>
+    activeNode && (edge.from === activeNode || edge.to === activeNode);
+  const isNodeActive = (id: string) =>
+    activeNode && (
+      id === activeNode ||
+      edges.some((e) => (e.from === activeNode && e.to === id) || (e.to === activeNode && e.from === id))
+    );
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
@@ -499,7 +510,7 @@ function TopologyView({
           </Badge>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Structural view — circles = thoughts (colored by type), lines = graph edges.
+          Structural view — hover or click a node to highlight connected edges.
         </p>
       </CardHeader>
       <CardContent className="overflow-x-auto scrollbar-sleek">
@@ -510,9 +521,15 @@ function TopologyView({
             if (!from || !to) return null;
             const midY = (from.y + to.y) / 2;
             const midX = (from.x + to.x) / 2 - 30;
+            const active = isEdgeActive(edge);
             return (
               <path key={`edge-${i}`} d={`M ${from.x} ${from.y + nodeRadius} Q ${midX} ${midY} ${to.x} ${to.y - nodeRadius}`}
-                fill="none" stroke="oklch(0.50 0.01 60 / 40%)" strokeWidth={1.5} strokeDasharray="4 3" />
+                fill="none"
+                stroke={active ? 'var(--primary)' : 'oklch(0.50 0.01 60 / 40%)'}
+                strokeWidth={active ? 2.5 : 1.5}
+                strokeDasharray={active ? '0' : '4 3'}
+                style={{ transition: 'all 0.2s ease' }}
+              />
             );
           })}
           {orgThoughts.map((t) => {
@@ -520,22 +537,46 @@ function TopologyView({
             if (!pos) return null;
             const color = THOUGHT_COLORS[t.thoughtType] ?? 'var(--muted-foreground)';
             const initials = t.agentName.substring(0, 2).toUpperCase();
+            const active = isNodeActive(t.id);
+            const dimmed = activeNode && !active;
             return (
-              <g key={t.id}>
+              <g
+                key={t.id}
+                style={{ cursor: 'pointer', opacity: dimmed ? 0.35 : 1, transition: 'opacity 0.2s ease' }}
+                onMouseEnter={() => setHoveredNode(t.id)}
+                onMouseLeave={() => setHoveredNode(null)}
+                onClick={() => setSelectedNode(selectedNode === t.id ? null : t.id)}
+              >
                 {t.replyCount > 0 ? (
                   <>
                     <circle cx={pos.x + nodeRadius - 4} cy={pos.y - nodeRadius + 4} r={8} fill="var(--primary)" stroke="var(--background)" strokeWidth={1.5} />
                     <text x={pos.x + nodeRadius - 4} y={pos.y - nodeRadius + 8} textAnchor="middle" fontSize={9} fill="var(--primary-foreground)" fontWeight="bold">{t.replyCount}</text>
                   </>
                 ) : null}
-                <circle cx={pos.x} cy={pos.y} r={nodeRadius}
-                  fill={`color-mix(in oklch, ${color} 20%, var(--card))`} stroke={color} strokeWidth={2} />
+                <circle cx={pos.x} cy={pos.y} r={nodeRadius + (active ? 2 : 0)}
+                  fill={`color-mix(in oklch, ${color} ${active ? 30 : 20}%, var(--card))`}
+                  stroke={color} strokeWidth={active ? 3 : 2}
+                  style={{ transition: 'all 0.2s ease' }}
+                />
                 <text x={pos.x} y={pos.y + 2} textAnchor="middle" fontSize={10} fontWeight="bold" fill={color}>{initials}</text>
                 <text x={pos.x} y={pos.y + nodeRadius + 14} textAnchor="middle" fontSize={9} fill="var(--muted-foreground)">{t.thoughtType}</text>
                 <text x={pos.x + nodeRadius + 10} y={pos.y - 4} fontSize={11} fill="var(--foreground)">
                   {t.content.length > 50 ? t.content.substring(0, 50) + '\u2026' : t.content}
                 </text>
                 <text x={pos.x + nodeRadius + 10} y={pos.y + 10} fontSize={9} fill="var(--muted-foreground)">{t.agentName}</text>
+                {/* Hover tooltip */}
+                {hoveredNode === t.id ? (
+                  <g>
+                    <rect x={pos.x + nodeRadius + 8} y={pos.y + 14} width={Math.min(t.content.length * 4 + 16, 280)} height={36} rx={4}
+                      fill="var(--popover)" stroke="var(--border)" strokeWidth={1} />
+                    <text x={pos.x + nodeRadius + 14} y={pos.y + 28} fontSize={10} fill="var(--foreground)">
+                      {t.content.length > 60 ? t.content.substring(0, 60) + '\u2026' : t.content}
+                    </text>
+                    <text x={pos.x + nodeRadius + 14} y={pos.y + 42} fontSize={8} fill="var(--muted-foreground)">
+                      {t.agentName} · {t.thoughtType} · {t.replyCount} replies
+                    </text>
+                  </g>
+                ) : null}
               </g>
             );
           })}
