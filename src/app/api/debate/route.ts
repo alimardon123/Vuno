@@ -212,18 +212,38 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       void broadcastTyping({ channelId, userId: agentId, isTyping: false });
     }
 
-    // Helper: invoke an adapter and stream its events
+    // Variable cognitive load — different agents "think" for different durations.
+    // This makes the debate feel organic, not synthetic. Per VLM feedback:
+    // "Security checks should take longer when querying constraints. Devil's Advocate
+    // should be faster at objections but slower when fabricating alternatives."
+    const COGNITIVE_LOAD: Record<string, { min: number; max: number }> = {
+      architect: { min: 600, max: 1200 },     // thinks longer — big design decisions
+      security: { min: 800, max: 1400 },      // thorough — checks constraints carefully
+      devils_advocate: { min: 300, max: 700 }, // quick to object — that's the role
+      perf: { min: 500, max: 900 },           // medium — runs benchmarks
+      verifier: { min: 400, max: 800 },       // medium — checks methodology
+      hr: { min: 200, max: 500 },              // fast — just logs retrospective
+    };
+
+    function getThinkTime(role: string): number {
+      const load = COGNITIVE_LOAD[role] ?? { min: 400, max: 800 };
+      return load.min + Math.random() * (load.max - load.min);
+    }
+
+    // Helper: invoke an adapter and stream its events with variable cognitive load
     async function invokeAndStream(
       agentId: string,
       triggerType: string,
       triggerPayload: unknown,
       contextEvents: EventRecord[],
       agentName: string,
+      role: string,
     ): Promise<EventRecord[]> {
       const adapter = adapters[agentId];
       if (!adapter) return [];
-      // Send typing indicator while the agent "thinks"
-      await sendTyping(agentId, agentName, channelId, 400 + Math.random() * 400);
+      // Variable thinking time based on role
+      const thinkTime = getThinkTime(role);
+      await sendTyping(agentId, agentName, channelId, thinkTime);
       const ctx: AgentContext = { events: contextEvents, claims: [], trigger: { type: triggerType, payload: triggerPayload } };
       const response = await adapter.invoke(ctx);
       return await streamEvents(response.events);
@@ -233,7 +253,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     const proposalTriggerPayload = { decisionId, projectId: project.id, title: body.title ?? 'Architecture: simulated proposal' };
     const architectAdapter = adapters[architect.id]!;
     const architectCtx: AgentContext = { events: [], claims: [], trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload } };
-    await sendTyping(architect.id, architect.name, channelId, 500 + Math.random() * 300);
+    await sendTyping(architect.id, architect.name, channelId, getThinkTime('architect'));
     const architectResponse = await architectAdapter.invoke(architectCtx);
     const proposalCreated = await streamEvents(architectResponse.events);
 
@@ -264,6 +284,28 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     ];
     await streamEvents(roleAssignments);
 
+    // ─── Phase 2.5: Devil's Advocate PREEMPT — interrupts before formal review ──
+    // Per VLM feedback: "you need concurrent interruption with social friction"
+    // The Devil's Advocate fires a PREEMPT event that breaks the normal flow —
+    // a quick, urgent interruption before the formal review phase begins.
+    // This makes the debate feel messy and alive, not polite turn-taking.
+    await sleep(150); // Short delay — the DA is quick to interrupt (low cognitive load for preemption)
+    await streamEvents([{
+      type: 'PreemptIssued',
+      actorType: 'agent',
+      actorAgentId: devilsAdvocate.id,
+      scopeType: 'channel',
+      scopeId: channelId,
+      payload: {
+        interruptingAgentId: devilsAdvocate.id,
+        interruptingAgentName: devilsAdvocate.name,
+        targetAgentId: architect.id,
+        targetAgentName: architect.name,
+        reason: `Wait — before we review this, I need to flag a concern about memory overhead. The bloom filter approach has unverified cost implications. Let me raise a formal objection.`,
+        urgency: 'high',
+      },
+    }]);
+
     // ─── Phase 3: Security + DevilsAdvocate review IN PARALLEL ───────────────
     // These two agents wake in parallel — they both respond to ProposalOpened
     // independently, like real colleagues seeing a Slack message and replying.
@@ -273,8 +315,8 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     await sleep(300);
     const allContextEvents = [...proposalCreated, proposalEventRecord!].filter(Boolean);
     const [securityCreated, devilsCreated] = await Promise.all([
-      invokeAndStream(security.id, 'ProposalOpened', proposalEventRecord!.payload, allContextEvents, security.name),
-      invokeAndStream(devilsAdvocate.id, 'ProposalOpened', proposalEventRecord!.payload, allContextEvents, devilsAdvocate.name),
+      invokeAndStream(security.id, "ProposalOpened", proposalEventRecord!.payload, allContextEvents, security.name, "security"),
+      invokeAndStream(devilsAdvocate.id, "ProposalOpened", proposalEventRecord!.payload, allContextEvents, devilsAdvocate.name, "devils_advocate"),
     ]);
 
     // Find the ObjectionRaised event from the devil's advocate
@@ -288,7 +330,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     if (objectionEventRecord) {
       await sleep(300);
       const perfContext = [...allContextEvents, ...devilsCreated, objectionEventRecord].filter(Boolean);
-      const expCreated = await invokeAndStream(perf.id, 'ObjectionRaised', objectionEventRecord.payload, perfContext, perf.name);
+      const expCreated = await invokeAndStream(perf.id, "ObjectionRaised", objectionEventRecord.payload, perfContext, perf.name, "perf");
       experimentEventRecord = expCreated.find((e) => e.type === 'ExperimentRequested') ?? null;
     }
 
@@ -298,7 +340,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     let benchmarkTarget = '50';
     if (experimentEventRecord) {
       await sleep(800); // Longer delay — benchmark takes time
-      const benchCreated = await invokeAndStream(perf.id, 'ExperimentRequested', experimentEventRecord.payload, [experimentEventRecord], perf.name);
+      const benchCreated = await invokeAndStream(perf.id, "ExperimentRequested", experimentEventRecord.payload, [experimentEventRecord], perf.name, "perf");
       benchmarkEventRecord = benchCreated.find((e) => e.type === 'BenchmarkReported') ?? null;
       if (benchmarkEventRecord) {
         const bp = benchmarkEventRecord.payload as { value: string; target: string };
@@ -310,7 +352,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     // ─── Phase 6: Verifier confirms (after benchmark) ───────────────────────
     if (benchmarkEventRecord) {
       await sleep(300);
-      await invokeAndStream(verifier.id, 'BenchmarkReported', benchmarkEventRecord.payload, [benchmarkEventRecord], verifier.name);
+      await invokeAndStream(verifier.id, "BenchmarkReported", benchmarkEventRecord.payload, [benchmarkEventRecord], verifier.name, "verifier");
     }
 
     // ─── Phase 7: System events (claim falsified, risk, gates) ──────────────
@@ -364,7 +406,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       // ─── Phase 9: HR retrospective (after decision recorded) ──────────────────
       if (decisionRecordedRecord) {
         await sleep(400);
-        await invokeAndStream(hr.id, 'DecisionRecorded', decisionRecordedRecord.payload, [decisionRecordedRecord], hr.name);
+        await invokeAndStream(hr.id, "DecisionRecorded", decisionRecordedRecord.payload, [decisionRecordedRecord], hr.name, "hr");
       }
     }
 

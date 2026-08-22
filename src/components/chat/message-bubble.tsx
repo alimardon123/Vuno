@@ -882,6 +882,31 @@ function MessageBody({
       );
     }
 
+    case 'PreemptIssued': {
+      const pre = p as EventPayloadMap['PreemptIssued'];
+      const urgencyColor = pre.urgency === 'high' ? 'var(--status-falsified)' : pre.urgency === 'medium' ? 'var(--status-asserted)' : 'var(--status-uncertain)';
+      return (
+        <div
+          className="flex items-start gap-2 rounded-md border-l-2 bg-[var(--status-falsified)]/[0.06] px-3 py-2"
+          style={{ borderColor: urgencyColor }}
+        >
+          <span
+            className="rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider animate-status-pulse"
+            style={{ backgroundColor: `color-mix(in oklch, ${urgencyColor} 14%, transparent)`, color: urgencyColor }}
+          >
+            ⚡ preempt
+          </span>
+          <div className="flex-1">
+            <p className="text-sm leading-relaxed text-foreground/90">
+              <span className="font-medium">{pre.interruptingAgentName}</span> interrupted{' '}
+              <span className="font-medium">{pre.targetAgentName}</span>
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">{pre.reason}</p>
+          </div>
+        </div>
+      );
+    }
+
     case 'ThreadReplyPosted': {
       const t = p as EventPayloadMap['ThreadReplyPosted'];
       return (

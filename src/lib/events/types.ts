@@ -28,7 +28,8 @@ export type EventType =
   | 'WikiSectionAuthored'
   | 'AgentThought'
   | 'SharedItem'
-  | 'ReactionAdded';
+  | 'ReactionAdded'
+  | 'PreemptIssued';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -192,6 +193,14 @@ export interface EventPayloadMap {
   ReactionAdded: {
     emoji: string;           // e.g. "👍", "❤️", "🚀"
     targetEventId: string;   // which message this reaction is on
+  };
+  PreemptIssued: {
+    interruptingAgentId: string;
+    interruptingAgentName: string;
+    targetAgentId: string;
+    targetAgentName: string;
+    reason: string;           // why the interruption
+    urgency: 'low' | 'medium' | 'high';  // how urgent
   };
 }
 

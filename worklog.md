@@ -2126,3 +2126,46 @@ Task: Set up updated cron job for autonomous iterative development. Implement re
 - CREATED: new cron job (333234) — full updated context with 5-step framework + 7 principles + 20 next steps
 - MODIFIED: `src/components/chat/message-bubble.tsx` (postReply function, showReplyInput + replyBody state, inline reply input with Enter/Escape/Send)
 
+
+---
+Task ID: 30
+Agent: autonomous-cron
+Task: Variable cognitive load + concurrent interruption (PreemptIssued). Per VLM: "you need concurrent interruption with social friction." Different agents think for different durations. Devil's Advocate fires a PREEMPT event before the formal review phase.
+
+## 🔍 Research
+- Read worklog (Round 21 = Task ID 29). Reply-to-message routing + cron setup were the last items.
+- Multi-role review: the debate feels too polite — agents take turns cleanly. VLM said "you need concurrent interruption with social friction." Variable cognitive load + preempt = highest impact for making agents feel alive.
+- The debate endpoint had a fixed `sendTyping()` delay of 400-800ms for all agents. No role-specific variation. No interruption mechanism.
+
+## 💻 Action
+1. Added `PreemptIssued` event type to types.ts + project.ts + events route ALLOWED_TYPES
+2. Added `COGNITIVE_LOAD` map in debate route — per-role thinking durations:
+   - architect: 600-1200ms (big design decisions)
+   - security: 800-1400ms (thorough constraint checking)
+   - devils_advocate: 300-700ms (quick to object)
+   - perf: 500-900ms (runs benchmarks)
+   - verifier: 400-800ms (checks methodology)
+   - hr: 200-500ms (fast retrospective)
+3. Updated `invokeAndStream` to take a `role` parameter and use `getThinkTime(role)` instead of fixed `400 + Math.random() * 400`
+4. Updated all 7 `invokeAndStream` calls to pass the role parameter
+5. Added Phase 2.5: Devil's Advocate PREEMPT — fires a `PreemptIssued` event with `urgency: 'high'` BEFORE the formal review phase. The DA interrupts with "Wait — before we review this, I need to flag a concern about memory overhead..."
+6. Added `PreemptIssued` rendering in message-bubble.tsx — "⚡ preempt" badge (pulsing), urgency-colored border, interrupt reason text
+
+## 📊 Result
+- Lint: clean
+- Debate with 30 events (up from 28) — includes 1 PreemptIssued event
+- PreemptIssued event: urgency=high, reason="Wait — before we review this, I need to flag a concern about memory overhead..."
+- Variable cognitive load: each agent role now has different thinking durations — debate feels organic, not synthetic
+
+## Stage Summary
+- Variable cognitive load implemented per role (architect slow, DA fast, security thorough)
+- PreemptIssued event type + rendering + debate integration — agents can now interrupt
+- Next: MCP in Rust, ACP, more preempt scenarios (security interrupts perf, verifier interrupts decision)
+
+### Files modified
+- MODIFIED: `src/lib/events/types.ts` (PreemptIssued event type + payload)
+- MODIFIED: `src/lib/events/project.ts` (PreemptIssued in projection + type label)
+- MODIFIED: `src/app/api/events/route.ts` (PreemptIssued in ALLOWED_TYPES)
+- MODIFIED: `src/app/api/debate/route.ts` (COGNITIVE_LOAD map, getThinkTime, invokeAndStream role param, Phase 2.5 PREEMPT)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (PreemptIssued rendering with ⚡ badge + pulse)
+

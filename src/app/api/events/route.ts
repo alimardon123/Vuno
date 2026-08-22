@@ -100,6 +100,7 @@ const ALLOWED_TYPES = new Set([
   'SharedItem',
   'ReactionAdded',
   'ThreadReplyPosted',
+  'PreemptIssued',
 ]);
 
 interface PostBody {
