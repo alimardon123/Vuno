@@ -97,6 +97,7 @@ const ALLOWED_TYPES = new Set([
   'DecisionRecorded',
   'RiskFlagged',
   'AgentThought',
+  'SharedItem',
 ]);
 
 interface PostBody {

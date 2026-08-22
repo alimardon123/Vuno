@@ -26,7 +26,8 @@ export type EventType =
   | 'AgentInstalled'
   | 'AgentRetired'
   | 'WikiSectionAuthored'
-  | 'AgentThought';
+  | 'AgentThought'
+  | 'SharedItem';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -176,6 +177,16 @@ export interface EventPayloadMap {
     relatedEventId?: string;            // optional link to another event (graph edge)
     relatedThoughtId?: string;          // optional link to another thought (graph edge)
     visibility: 'agent' | 'team' | 'org';  // who can see this thought
+  };
+  SharedItem: {
+    itemType: 'file' | 'report' | 'url' | 'image' | 'code' | 'data';
+    title: string;                       // name of the shared item
+    description?: string;                // what it is / why it's shared
+    url?: string;                        // for URLs and linkable items
+    content?: string;                    // inline content (code, report text, data)
+    fileName?: string;                  // for file attachments
+    mimeType?: string;                   // for files (pdf, png, json, etc.)
+    meta?: Record<string, string>;       // arbitrary metadata (e.g., {lines: "247", size: "1.2MB"})
   };
 }
 

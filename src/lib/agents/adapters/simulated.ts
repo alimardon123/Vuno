@@ -144,6 +144,22 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
           },
         ];
 
+        // Share a prior-art reference URL — just like a real colleague
+        // sharing a link in a Slack channel
+        const sharedUrl: NewEventInput<'SharedItem'> = {
+          type: 'SharedItem',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: 'ch-storage',
+          payload: {
+            itemType: 'url',
+            title: 'Prior art: LSM-tree storage engines',
+            description: 'RocksDB, LevelDB, Pebble — all use LSM-trees. None hit 50ms p99 at 10k concurrent readers without tuning.',
+            url: 'https://github.com/facebook/rocksdb/wiki/Performance-Benchmarks',
+          },
+        };
+
         const event: NewEventInput<'ProposalOpened'> = {
           type: 'ProposalOpened',
           actorType: 'agent',
@@ -168,9 +184,9 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
             body: `Proposal opened: ${proposal.title}. Awaiting review from Security, Performance, and Devil's Advocate.`,
           },
         };
-        // Thoughts FIRST (so they appear before the proposal in the chat),
+        // Thoughts + shared URL FIRST (so they appear before the proposal in the chat),
         // then the proposal, then the chat message.
-        return { events: [...thoughts, event, chatEvent], claims: [] };
+        return { events: [...thoughts, sharedUrl, event, chatEvent], claims: [] };
       },
     };
   }
@@ -372,7 +388,35 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
             body: `Benchmark complete. p99 = ${value}ms at 10k concurrent readers — falsifies the believed claim of < ${target}ms. Working set exceeded RAM.`,
           },
         };
-        return { events: [completed, benchmark, chatEvent], claims: [] };
+        // Share the benchmark report as a file — just like a colleague
+        // dropping a results file in the channel
+        const sharedReport: NewEventInput<'SharedItem'> = {
+          type: 'SharedItem',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: 'ch-storage',
+          payload: {
+            itemType: 'report',
+            title: `Benchmark report — ${e.experimentId}`,
+            description: `p99 read latency benchmark at 10k concurrent readers. Result: ${value}ms vs target ${target}ms. FAILED.`,
+            fileName: `benchmark-${e.experimentId}.json`,
+            mimeType: 'application/json',
+            content: JSON.stringify({
+              experimentId: e.experimentId,
+              metric: 'p99 read latency',
+              value: `${value}ms`,
+              target: `${target}ms`,
+              passed: false,
+              concurrency: 10000,
+              samples: 10000,
+              warmupSeconds: 30,
+              notes: 'Working set exceeded RAM; SSTable reads from disk dominated tail latency.',
+            }, null, 2),
+            meta: { samples: '10000', duration: '30s', result: 'FAIL' },
+          },
+        };
+        return { events: [completed, benchmark, sharedReport, chatEvent], claims: [] };
       },
     };
   }

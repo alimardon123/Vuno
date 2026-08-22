@@ -17,7 +17,15 @@ import { format, formatDistanceToNow } from 'date-fns';
 import {
   ArrowUpRight,
   ChevronRight,
+  FileText,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Code2,
+  BarChart3,
+  File,
+  ExternalLink,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
 import { useMemo } from 'react';
 
@@ -670,6 +678,75 @@ function MessageBody({
           <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
             {t.content}
           </p>
+        </div>
+      );
+    }
+
+    case 'SharedItem': {
+      const s = p as EventPayloadMap['SharedItem'];
+      // Map item type to icon + accent color
+      const itemConfig: Record<string, { icon: LucideIcon; color: string }> = {
+        file: { icon: File, color: 'var(--status-believed)' },
+        report: { icon: FileText, color: 'var(--status-tested)' },
+        url: { icon: LinkIcon, color: 'var(--status-believed)' },
+        image: { icon: ImageIcon, color: 'var(--status-asserted)' },
+        code: { icon: Code2, color: 'var(--status-uncertain)' },
+        data: { icon: BarChart3, color: 'var(--status-tested)' },
+      };
+      const cfg = itemConfig[s.itemType] ?? { icon: File, color: 'var(--muted-foreground)' };
+      return (
+        <div className={cardClass} style={{ ...cardStyle, borderColor: `color-mix(in oklch, ${cfg.color} 40%, transparent)` }}>
+          <div className="flex items-start gap-2">
+            <div
+              className="grid size-8 shrink-0 place-items-center rounded-md"
+              style={{ backgroundColor: `color-mix(in oklch, ${cfg.color} 14%, transparent)` }}
+            >
+              <cfg.icon className="size-4" style={{ color: cfg.color }} aria-hidden />
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{s.title}</span>
+                <span
+                  className="rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider"
+                  style={{ backgroundColor: `color-mix(in oklch, ${cfg.color} 14%, transparent)`, color: cfg.color }}
+                >
+                  {s.itemType}
+                </span>
+              </div>
+              {s.description ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">{s.description}</p>
+              ) : null}
+              {s.fileName ? (
+                <div className="text-[0.6875rem] text-muted-foreground">
+                  file: <span className="font-mono text-foreground/80">{s.fileName}</span>
+                  {s.mimeType ? <span className="ml-2">· {s.mimeType}</span> : null}
+                </div>
+              ) : null}
+              {s.content ? (
+                <pre className="mt-1 overflow-x-auto rounded-md bg-muted/30 p-2 text-xs leading-relaxed text-foreground/80 scrollbar-sleek">
+                  {s.content.length > 300 ? s.content.slice(0, 300) + '…' : s.content}
+                </pre>
+              ) : null}
+              {s.url ? (
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-0.5 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <ExternalLink className="size-3" aria-hidden />
+                  {s.url.length > 60 ? s.url.slice(0, 60) + '…' : s.url}
+                </a>
+              ) : null}
+              {s.meta ? (
+                <div className="flex flex-wrap gap-2 text-[0.6875rem] text-muted-foreground/70">
+                  {Object.entries(s.meta).map(([k, v]) => (
+                    <span key={k}>{k}: <span className="font-mono">{v}</span></span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       );
     }

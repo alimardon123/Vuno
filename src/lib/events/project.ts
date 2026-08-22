@@ -29,6 +29,7 @@ export const TYPED_MESSAGE_EVENTS: EventType[] = [
   'AgentInstalled',
   'AgentRetired',
   'AgentThought',
+  'SharedItem',
 ];
 
 export interface ChatMessageProjection {
@@ -66,6 +67,7 @@ const TYPE_LABELS: Partial<Record<EventType, string>> = {
   AgentInstalled: 'AGENT INSTALLED',
   AgentRetired: 'AGENT RETIRED',
   AgentThought: 'THOUGHT',
+  SharedItem: 'SHARED',
 };
 
 const STATUS_HINTS: Partial<Record<EventType, ClaimStatus | 'blocked' | 'passed'>> = {

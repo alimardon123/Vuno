@@ -1248,3 +1248,75 @@ Task: Fix the chat scrolling bug (user reported "I can't scroll in inside the ch
 ### Files modified this round
 - 13 files updated with `min-h-0` on ScrollArea instances (bulk sed)
 
+
+---
+Task ID: 18 (Round 10 — SharedItem: agents share files, reports, URLs in chat)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Add the ability for agents to send files, reports, URLs, etc. in chats and channels — just like humans. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- User asked: "agents can even send files, reports, urls and etc just like humans in chats and channels"
+- Current state: agents produce typed events (ProposalOpened, ObjectionRaised, BenchmarkReported, AgentThought) but can't share arbitrary attachments
+- Design: add a `SharedItem` event type that agents produce during debates — files, reports, URLs, code, data — rendered as rich cards in the chat
+
+## 💻 Action (Step 2)
+
+### 1. Added SharedItem event type
+- `src/lib/events/types.ts`: added `SharedItem` to EventType union + EventPayloadMap
+  - `itemType`: 'file' | 'report' | 'url' | 'image' | 'code' | 'data'
+  - `title`, `description?`, `url?`, `content?` (inline), `fileName?`, `mimeType?`, `meta?` (arbitrary metadata)
+- `src/lib/events/project.ts`: added to TYPED_MESSAGE_EVENTS + type label 'SHARED'
+- `src/app/api/events/route.ts`: added 'SharedItem' to ALLOWED_TYPES
+
+### 2. Rich card rendering in chat
+- `src/components/chat/message-bubble.tsx`: new `case 'SharedItem'`
+  - Icon by type: File (file), FileText (report), LinkIcon (url), ImageIcon (image), Code2 (code), BarChart3 (data)
+  - Color-coded left-border accent
+  - Title + type pill + description + inline content (truncated at 300 chars in a `<pre>`)
+  - Clickable URL link with ExternalLink icon
+  - File name + mime type + metadata badges
+  - All within the typed-message card style
+
+### 3. Updated simulated adapters to produce SharedItem events
+- `src/lib/agents/adapters/simulated.ts`:
+  - **Architect**: shares a prior-art URL ("Prior art: LSM-tree storage engines" → https://github.com/facebook/rocksdb/wiki/Performance-Benchmarks) BEFORE proposing
+  - **Performance agent**: shares a benchmark report file ("Benchmark report — exp-XXX" with inline JSON content, fileName, mimeType, metadata) AFTER running the benchmark
+  - These appear in the chat as rich cards — just like a colleague dropping a link or a file in a Slack channel
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Triggered a debate: 28 events streamed, 2 SharedItem events produced:
+  - URL: "Prior art: LSM-tree storage engines" (by Aris)
+  - Report: "Benchmark report — exp-mt4qwfid" (by Peri, with inline JSON content + metadata)
+- Verified in chat: 2 "SHARED" labeled items render as rich cards with icon + title + description + clickable URL
+- VLM: 9/10 — "the feature described is exactly what the user asked for (a 10/10 solution to the problem)"
+
+## 💡 Information (Step 4)
+- The SharedItem event type is general-purpose — supports files, reports, URLs, images, code, data
+- Agents share items naturally during the debate — not as a separate "upload" action, but as part of their workflow
+- The rich card rendering with type-specific icons + colors makes shared items visually distinct from regular messages
+- The inline content (for reports/code) is truncated at 300 chars — full content is in the event payload
+- The channel-details-content sheet (shared things panel) can now use these SharedItem events directly (instead of regex-scanning message bodies) — a future cleanup
+
+## 🔧 Adjustment (Step 5)
+- All working. Lint clean. SharedItem events verified in chat.
+- Next: thought-to-thought edges, argument graph visualization, memory tiers 2-3, concurrent runtime in Rust.
+
+## Design principles assessment
+| Principle | How this round delivers |
+|---|---|
+| **Simple** | One new event type on the existing spine — no new storage |
+| **Powerful** | Agents share files, reports, URLs, code — full multi-modal chat |
+| **Performant** | Shared items are just events — same append/broadcast pipeline |
+| **Scalable** | Any number of shared items per channel |
+| **Efficient** | No file upload infrastructure needed — items are inline in the event payload |
+| **Beautiful** | Rich cards with type-specific icons + colors — visually distinct |
+| **Functional** | Delivers the user's explicit ask: "agents can send files, reports, URLs just like humans" |
+
+### Files modified this round
+- MODIFIED: `src/lib/events/types.ts` (added SharedItem event type + payload)
+- MODIFIED: `src/lib/events/project.ts` (added to chat projection + type label)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (SharedItem rich card rendering + new icon imports)
+- MODIFIED: `src/lib/agents/adapters/simulated.ts` (architect shares prior-art URL, perf shares benchmark report)
+- MODIFIED: `src/app/api/events/route.ts` (added SharedItem to allowed types)
+
