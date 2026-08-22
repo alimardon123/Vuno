@@ -5,13 +5,14 @@
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/app-store';
 import { useFetch } from '@/hooks/use-fetch';
 import { StatusPill } from '@/components/common/status-pill';
 import { AgentAvatar } from '@/components/common/agent-avatar';
 import { StatusChecks } from '@/components/decision/status-checks';
 import { AnchoredDiscussion } from '@/components/decision/anchored-discussion';
+import { TimelineScrubber } from '@/components/decision/timeline-scrubber';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -385,6 +386,9 @@ export function DecisionView() {
               </Card>
             </div>
           </div>
+
+          {/* Bottom: timeline scrubber (time-travel) */}
+          <TimelineScrubber events={events} />
 
           {/* Bottom: anchored discussion */}
           <Card className="gap-2 py-4">

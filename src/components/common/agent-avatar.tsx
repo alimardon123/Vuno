@@ -56,6 +56,22 @@ const HEALTH_DOT_CLASS: Record<string, string> = {
   down: 'bg-[var(--status-falsified)]',
 };
 
+// Role-colored ring (subtle 1px outer ring) — per VLM QA suggestion #7.
+// Aids scanning the member list. Uses status colors that are aligned with role semantics.
+const ROLE_RING_CLASS: Record<string, string> = {
+  architect: 'ring-[var(--status-believed)]/40',
+  engineer: 'ring-[var(--status-believed)]/40',
+  security: 'ring-[var(--status-falsified)]/40',
+  perf: 'ring-[var(--status-believed)]/40',
+  qa: 'ring-[var(--status-asserted)]/40',
+  devils_advocate: 'ring-[var(--status-asserted)]/40',
+  verifier: 'ring-[var(--status-tested)]/40',
+  product: 'ring-[var(--status-believed)]/40',
+  research: 'ring-[var(--status-believed)]/40',
+  hr: 'ring-[var(--status-uncertain)]/40',
+  ceo: 'ring-primary/50',
+};
+
 export function AgentAvatar({
   name,
   role,
@@ -74,7 +90,7 @@ export function AgentAvatar({
 
   return (
     <div className={cn('relative inline-flex shrink-0', className)}>
-      <Avatar className={SIZE_MAP[size]}>
+      <Avatar className={cn(SIZE_MAP[size], role && ROLE_RING_CLASS[role], 'ring-1 ring-offset-0')}>
         <AvatarFallback
           className="bg-muted text-muted-foreground"
           aria-hidden

@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store/app-store';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type ComposerType =
@@ -131,7 +131,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-t bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur p-3"
+      className="border-t border-border/70 bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur p-3"
       aria-label="Compose a message"
     >
       <div className="flex items-start gap-2">
@@ -141,10 +141,14 @@ export function TypedComposer({ channelId }: { channelId: string }) {
         >
           <SelectTrigger
             size="sm"
-            className="w-32 shrink-0"
+            className={cn(
+              'w-36 shrink-0 gap-1 font-medium',
+              !isMessage && 'bg-primary/10 text-primary border-primary/30',
+            )}
             aria-label="Message type"
           >
             <SelectValue />
+            <ChevronDown className="size-3.5 opacity-60" aria-hidden />
           </SelectTrigger>
           <SelectContent>
             {TYPES.map((t) => (
@@ -205,6 +209,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
               type="submit"
               size="sm"
               disabled={submitting || (isMessage && !body.trim())}
+              className="shadow-sm transition-all hover:shadow-md hover:shadow-primary/20"
             >
               {submitting ? (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />

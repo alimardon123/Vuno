@@ -17,6 +17,7 @@ import {
   Users,
   Target,
   PanelLeftClose,
+  FileText,
 } from 'lucide-react';
 
 interface Channel {
@@ -213,6 +214,18 @@ export function LeftRail({ onClose }: { onClose?: () => void }) {
         >
           <BookOpen className="size-4" aria-hidden />
           Epistemic Ledger
+        </Button>
+        <Button
+          variant={activeView === 'wiki' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="w-full justify-start gap-2"
+          onClick={() => {
+            setView('wiki');
+            onClose?.();
+          }}
+        >
+          <FileText className="size-4" aria-hidden />
+          Project Wiki
         </Button>
         <Button
           variant={activeView === 'agents' ? 'secondary' : 'ghost'}

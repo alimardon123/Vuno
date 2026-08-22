@@ -72,37 +72,34 @@ export function ChatView() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <header className="flex items-center gap-2 border-b px-4 py-2.5">
-        <Hash className="size-4 text-muted-foreground" aria-hidden />
-        <h1 className="text-base font-semibold leading-none">
-          {channel?.name ?? 'channel'}
-        </h1>
-        {channel?.topic ? (
-          <>
-            <span className="mx-1 text-border" aria-hidden>
-              ·
+      <header className="border-b border-border/70 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Hash className="size-4 text-muted-foreground" aria-hidden />
+          <h1 className="text-base font-semibold leading-none tracking-tight">
+            {channel?.name ?? 'channel'}
+          </h1>
+          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            {activeDecisionId ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                <Pin className="size-3" aria-hidden />
+                Pinned decision
+              </span>
+            ) : null}
+            <span className="inline-flex items-center gap-1">
+              <Users className="size-3" aria-hidden /> {messages.length} events
             </span>
-            <span className="truncate text-sm text-muted-foreground">
-              {channel.topic}
-            </span>
-          </>
-        ) : null}
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          {activeDecisionId ? (
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5">
-              <Pin className="size-3" aria-hidden />
-              Pinned: {activeDecisionId}
-            </span>
-          ) : null}
-          <span className="inline-flex items-center gap-1">
-            <Users className="size-3" aria-hidden /> {messages.length} events
-          </span>
+          </div>
         </div>
+        {channel?.topic ? (
+          <p className="mt-1 truncate text-xs text-muted-foreground/80">
+            {channel.topic}
+          </p>
+        ) : null}
       </header>
 
       {/* Messages */}
       <ScrollArea className="flex-1 scrollbar-sleek">
-        <div className="flex flex-col gap-0 py-2">
+        <div className="flex flex-col py-1">
           {eventsRes.loading ? (
             <ChatSkeleton />
           ) : messages.length === 0 ? (

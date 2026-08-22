@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import type { ClaimStatus } from '@/lib/events/types';
 
-export type ActiveView = 'chat' | 'decision' | 'ledger' | 'agents';
+export type ActiveView = 'chat' | 'decision' | 'ledger' | 'agents' | 'wiki';
 
 export interface LedgerFilters {
   status: ClaimStatus[]; // multi-select; empty = all

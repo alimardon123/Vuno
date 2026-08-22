@@ -107,3 +107,110 @@ Stage Summary:
 - Dev server runs without runtime errors
 - All 4 design-system pillars verified: sleek dark palette, status colors used load-bearing-ly, dense-but-calm, typed-message rendering
 - NEXT (Phase 7+): the killer demo is complete; next slices can be: real-time chat (socket.io mini-service), live debate state machine with actual ClaimStatusChanged transitions triggered by user actions, attention router (deterministic triggers), HR dashboard with metrics visualizations, wiki generation from ledger, real-LLM agent adapter (drop-in via the AgentAdapter interface), promotion mechanic.
+
+---
+Task ID: 7 (webDevReview round 1)
+Agent: orchestrator (Z.ai Code main, webDevReview cron)
+Task: Autonomous QA + new feature slice. Pick the highest-impact next slice and execute it.
+
+## Current project status assessment
+- The killer demo (falsification arc) was already complete and verified end-to-end (Task ID 6d-QA).
+- All API endpoints healthy (GET /, /api/events, /api/claims, /api/agents, /api/channels, /api/decisions/dec-17 all return 200).
+- No runtime errors in dev.log.
+- Lint passes cleanly.
+- VLM-rated the chat surface 7/10 — production-ready but not yet premium. Key issues: cramped spacing, low-contrast secondary text, raw system message boxes, weak composer dropdown, avatar misalignment.
+
+## Goals / completed modifications / verification results
+
+### Slice chosen: Wiki generation from ledger + chat polish + timeline scrubber
+I picked the Wiki slice because it (a) is a new feature (mandatory), (b) demonstrates a load-bearing thesis from the vision doc ("the wiki is generated from the ledger, not maintained beside it"), (c) is a pure projection (no schema changes), and (d) gives me a surface to apply polished visual treatment. As bonus, I added a Timeline scrubber to the decision page (demonstrates "replay, audit, time-travel for free" thesis) and a polish pass on the chat surface.
+
+### 1. Chat polish pass (Task r1) — VLM 7.0 → 8.5/10
+- `src/components/chat/message-bubble.tsx`: rewrote typed-message rendering to use subtle bordered cards with left-accent in statusHint color (instead of just a 2px left-border). Each typed message now reads as a discrete scannable object.
+- `src/components/chat/message-bubble.tsx`: better vertical rhythm (gap-1.5 inside cards, leading-relaxed on body text, more whitespace).
+- `src/components/common/agent-avatar.tsx`: added role-colored ring (1px) around avatars — architect/engineer/perf=believed color, security=falsified, qa/devils_advocate=asserted, verifier=tested, hr=uncertain, ceo=primary. Aids scanning the member list.
+- `src/components/chat/typed-composer.tsx`: composer dropdown now styled as a proper button with ChevronDown icon, accent color when non-Message type is selected. Post button gets a shadow + hover shadow.
+- `src/components/chat/chat-view.tsx`: better header hierarchy (channel name larger, topic as separate muted line below, separator border-border/70), pinned-decision badge styled as primary/10 instead of muted.
+- `src/app/globals.css`: bumped `--muted-foreground` from oklch(0.66 0.01 250) → oklch(0.72 0.012 250) for better dark-mode legibility.
+- Inlined `TypedCard` as a `cardClass` + `cardStyle` fragment wrapper (not a component) to satisfy react-hooks/static-components lint rule.
+
+### 2. New feature: Project Wiki view (Task r2-r4, r6) — VLM 7.5/10
+A new "Project Wiki" navigation entry in the left rail, between "Epistemic Ledger" and "Agents". Renders a project page that is **generated entirely from the ledger** — no separate WikiPage table, pure projection per ADR-0005. This is the thesis "wiki is generated from the ledger, not maintained beside it" made concrete.
+
+- `src/store/app-store.ts`: added `'wiki'` to ActiveView union.
+- `src/components/app-shell/left-rail.tsx`: added "Project Wiki" button (FileText icon).
+- `src/components/app-shell/app-shell.tsx`: wired WikiView into the main view router; added "Project Wiki" to the Help dialog.
+- `src/app/api/wiki/route.ts` (NEW): GET endpoint that returns the assembled wiki for the first project. Pulls from:
+  - Project + Objective (DB)
+  - All Decisions for the project (DB) + their events (event spine, scopeType='decision')
+  - All Claims scoped to the project (DB) — grouped by status
+  - All Gates for the project (DB)
+  - All RiskFlagged events scoped to the project (event spine, scopeType='project')
+  - HR agent's MessagePosted events from the channel (heuristic: contains "objection precision", "survival", "retrospective", "meta log", "metrics", "org is working")
+  - Participants derived from RoleAssigned events per decision
+  - Full event timeline (project + decision events sorted by seq)
+- `src/components/wiki/wiki-view.tsx` (NEW): renders the generated wiki with 8 sections:
+  1. **Header** — project name, slug, description, "Generated from the ledger" badge, "13 events · updated less than a minute ago"
+  2. **Objective card** — title, success criteria (monospace block), constraints, budget/autonomy/status. Left-accent border in primary color.
+  3. **Status summary strip** — 7 mini stat cards (decisions, claims, asserted, believed, tested, falsified, risks) each with the count in the status color.
+  4. **Architecture Decisions** — full decision anatomy cards: title, status pill, proposer, time, proposal body, rejected alternatives, rationale, gate summary (✓/✗ pills with gate name), participant/evidence/objection/experiment/benchmark counts, "Open decision page" button.
+  5. **Claims by Status** — claims grouped by status (tested, believed, falsified, asserted, uncertain) with a colored left-border per group. Each claim shows status pill, statement, provenance (agent + role), evidence count, contradicts count, time, status reason.
+  6. **Open Risks** — each risk shows severity pill (color-coded), flagged-by agent, time, description, linked claim.
+  7. **Unresolved Uncertainties** — claims with status=uncertain (or empty state).
+  8. **Organizational Retrospective** — HR agent's retrospective messages, styled as comment cards with avatar + role + time + body.
+  9. **Participants** — grid of cards with avatar, name, role label, and badges for proposal/objection/evidence counts.
+  10. **Event Timeline** — compact scrollable list of all events for this project, with seq #, event type (colored), summary, actor, time.
+  11. **Footer** — "This page is a pure projection of the ledger. It is never hand-maintained — when a decision is reopened or a claim's status changes, this page updates."
+
+### 3. Bonus: Timeline scrubber on decision page (Task r5) — time-travel thesis
+- `src/components/decision/timeline-scrubber.tsx` (NEW): a slider component at the bottom of the decision page that lets the user scrub through the event spine for this decision. Demonstrates ADR-0004's "replay, audit, time-travel for free" thesis.
+  - Slider from minSeq to lastSeq (e.g. #4 to #19 for the seeded decision).
+  - Step back / Play / Step forward / Reset-to-latest buttons.
+  - Auto-play mode: advances the timeline every 1.1s when "Play" is clicked.
+  - 4 summary stat tiles at the top: state (derived from visible events), objections, evidence, benchmarks. State transitions through draft → believed → contested → experiment_pending → falsified as the user scrubs forward.
+  - Event tick list below: visible events solid, hidden events ghosted (opacity-30).
+  - Hint text: "Showing the latest state. Scrub left to time-travel..." or "Viewing the decision as it was at seq #N. X events hidden."
+- `src/components/decision/decision-view.tsx`: wired the TimelineScrubber into the decision page, between the 2-column layout and the anchored discussion.
+- Verified via Agent Browser: focused the slider, pressed Arrow Left 9 times, slider moved from seq 19 → seq 10, 4 events ghosted, hint updated to "Viewing the decision as it was at seq #10. 4 events hidden." Clicking "Reset to latest" returned to seq 19.
+
+### Verification results
+- VLM analysis of polished chat: **8.5/10** (up from 7.0). All 5 polish improvements confirmed visible and effective. Verbatim: "Definitely an upgrade from 7/10. The interface now feels like a purpose-built tool for technical collaboration rather than a generic chat window."
+- VLM analysis of wiki view: **7.5/10**. "Highly functional, data-dense interface that successfully conveys complex project state. Feels 'engineered' and 'precise'—like a mission control dashboard for AI agents."
+- Timeline scrubber verified end-to-end via Agent Browser (slider drag, ghosting, hint, reset all work).
+- Lint passes cleanly.
+- Dev server runs without runtime errors.
+
+## Unresolved issues or risks, and priority recommendations for the next phase
+
+### Known issues / incomplete items
+1. **Wiki view: only 1 project supported** (v1 = single seeded project). The view doesn't have a project switcher yet. Multi-project support comes when more projects are seeded.
+2. **Wiki view: claimsByStatus** only shows claims scoped to the project (`scopeType='project', scopeId=project.id`). Decision-scoped claims (like `claim-bloom-mem` which is `scopeType='decision'`) are not yet surfaced in the wiki. Could add a "Decision claims" subsection.
+3. **Timeline scrubber: only ghosts events in the tick list** — does NOT replay the actual decision page state (proposal/risks/gates) at seq=N. That would be a bigger lift (re-derive state from events). For now, the scrubber is a visual demonstration of the time-travel thesis.
+4. **HR retrospective heuristic** is keyword-based ("objection precision", "survival", "retrospective", "meta log", "metrics", "org is working"). A real implementation would have a typed `RetrospectivePosted` event.
+5. **VLM feedback not yet applied**: card padding could be 2-4px more generous, alternating backgrounds very subtle, missing hover states on cards. These are quick wins for the next round.
+6. **Wiki generatedAt** is `new Date()` per request — no caching. Fine for v1; would be cached in production.
+
+### Priority recommendations for next phase (pick ONE per round)
+1. **Live debate state machine** (HIGH IMPACT) — let the user file a new proposal via the typed composer; simulated agents respond via the AgentAdapter interface; claims transition through statuses in real time. This makes the killer demo interactive instead of just observable.
+2. **HR dashboard with metrics** (HIGH IMPACT) — visualize the metrics from Hana's retrospective (objection precision, proposal survival rate, gate-block accuracy, catch rate) as charts using recharts. Adds a new "HR / Meta" view in the left rail. Demonstrates the "HR as meta team" thesis visually.
+3. **Real-LLM agent adapter** (HIGH IMPACT for thesis) — implement the AgentAdapter interface using z-ai-web-dev-sdk (backend only), drop-in alongside the simulated adapters. Proves the "same design works for real agents too" constraint from the user.
+4. **Attention router** (MEDIUM IMPACT) — deterministic triggers (a benchmark event auto-wakes the perf agent; a security-related file change auto-wakes the security agent) demonstrated structurally. Adds a "router events" stream to the chat.
+5. **Promotion mechanic** (LOW PRIORITY for v1) — distillation flow: extract role-relevant patterns from a personal assistant's history, drop personal facts, owner reviews the diff.
+6. **Real-time chat with socket.io** (MEDIUM IMPACT) — live presence + typing indicators via a socket.io mini-service on port 3003.
+7. **Mobile sheet polish** — the left rail becomes a Sheet on mobile; verify and improve the UX.
+8. **Empty states for scenarios not yet covered** — no channels, no claims, no agents.
+
+### Files created/modified this round
+- NEW: `/home/z/my-project/src/app/api/wiki/route.ts` (181 lines)
+- NEW: `/home/z/my-project/src/components/wiki/wiki-view.tsx` (650+ lines)
+- NEW: `/home/z/my-project/src/components/decision/timeline-scrubber.tsx` (350+ lines)
+- MODIFIED: `/home/z/my-project/src/store/app-store.ts` (added 'wiki' to ActiveView)
+- MODIFIED: `/home/z/my-project/src/components/app-shell/left-rail.tsx` (added Project Wiki nav button)
+- MODIFIED: `/home/z/my-project/src/components/app-shell/app-shell.tsx` (wired WikiView, added to Help dialog)
+- MODIFIED: `/home/z/my-project/src/components/decision/decision-view.tsx` (added TimelineScrubber)
+- MODIFIED: `/home/z/my-project/src/components/chat/message-bubble.tsx` (rewrote typed-message cards)
+- MODIFIED: `/home/z/my-project/src/components/chat/chat-view.tsx` (better header hierarchy)
+- MODIFIED: `/home/z/my-project/src/components/chat/typed-composer.tsx` (composer dropdown styling)
+- MODIFIED: `/home/z/my-project/src/components/common/agent-avatar.tsx` (role-colored rings)
+- MODIFIED: `/home/z/my-project/src/app/globals.css` (higher-contrast muted-foreground)
+
