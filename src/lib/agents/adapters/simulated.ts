@@ -204,6 +204,24 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         };
         return { events: [chatEvent], claims: [] };
       },
+      AgentHandoff: (ctx: AgentContext): AgentResponse => {
+        // Bob delegated to me — give a DEEPER review than the brief attention-
+        // router observation. Reference Bob's context (learned facts, sentiment).
+        const trigger = ctx.trigger.payload as {
+          request: string; contextSummary: string; fromAgentName: string;
+          channelId: string; focusArea: string; ownerName: string;
+        };
+        const body = `${trigger.fromAgentName} flagged this for me. Architecturally, ${trigger.focusArea.toLowerCase()} work usually has a few seams worth checking: data flow boundaries, failure modes under load, and whether the existing module structure already supports the change. ${trigger.contextSummary.includes('worried') ? "Given Kai's current concern, I'd sketch the rollback path first — reversible decisions are cheaper." : "Happy to draw an ADR if this turns into a real proposal."}`;
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
 }
@@ -345,6 +363,24 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
+      AgentHandoff: (ctx: AgentContext): AgentResponse => {
+        // Bob delegated to me — give a DEEPER counterpoint than the brief
+        // attention-router observation. Reference Bob's context.
+        const trigger = ctx.trigger.payload as {
+          request: string; contextSummary: string; fromAgentName: string;
+          channelId: string; focusArea: string; ownerName: string;
+        };
+        const body = `${trigger.fromAgentName} asked me to push back on this. Counterpoint on ${trigger.focusArea.toLowerCase()}: what's the failure mode if we commit to this direction? The "obvious" answer is often the trap. ${trigger.contextSummary.includes('worried') || trigger.contextSummary.includes('concerned') ? "Given Kai's current concern, the risk profile matters even more — let's write down the worst case before committing." : "I'd want to see the second-best option written down before we pick."}`;
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body },
         };
         return { events: [chatEvent], claims: [] };
       },
@@ -529,6 +565,24 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         };
         return { events: [chatEvent], claims: [] };
       },
+      AgentHandoff: (ctx: AgentContext): AgentResponse => {
+        // Bob delegated to me — give a DEEPER perf review with a concrete
+        // benchmark plan. Reference Bob's context.
+        const trigger = ctx.trigger.payload as {
+          request: string; contextSummary: string; fromAgentName: string;
+          channelId: string; focusArea: string; ownerName: string;
+        };
+        const body = `${trigger.fromAgentName} asked me to take the perf angle. On ${trigger.focusArea.toLowerCase()}: the tail (p99) is what bites you, not the mean. I'd instrument: (1) the hot path, (2) the lock contention surface, (3) the IO boundaries. ${trigger.contextSummary.includes('latency') || trigger.contextSummary.includes('slow') ? "Given the latency concern, I can spin up a micro-benchmark within the hour." : "Happy to draft a benchmark plan if this becomes a real proposal."}`;
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
 }
@@ -596,6 +650,24 @@ export class SimulatedSecurityAdapter extends SimulatedBaseAdapter {
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
+      AgentHandoff: (ctx: AgentContext): AgentResponse => {
+        // Bob delegated to me — give a DEEPER security review with a threat
+        // model sketch. Reference Bob's context.
+        const trigger = ctx.trigger.payload as {
+          request: string; contextSummary: string; fromAgentName: string;
+          channelId: string; focusArea: string; ownerName: string;
+        };
+        const body = `${trigger.fromAgentName} flagged this for me. Security-wise on ${trigger.focusArea.toLowerCase()}: threat model first — who's the attacker, what's the asset, what's the trust boundary. ${trigger.contextSummary.includes('auth') || trigger.contextSummary.includes('token') ? "For auth/token flows specifically: review token lifetime, replay protection (nonce/timestamp), and storage (httpOnly cookies vs localStorage)." : "I'd review the input validation surface + the auth boundary before this ships."} ${trigger.contextSummary.includes('worried') ? "Given Kai's concern, I can file this as a formal RiskFlag if you want it tracked." : "Happy to do a deeper pass if this turns into a proposal."}`;
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body },
         };
         return { events: [chatEvent], claims: [] };
       },
@@ -669,6 +741,23 @@ export class SimulatedVerifierAdapter extends SimulatedBaseAdapter {
         };
         return { events: [chatEvent], claims: [] };
       },
+      AgentHandoff: (ctx: AgentContext): AgentResponse => {
+        // Bob delegated to me — give a DEEPER QA review with a test plan sketch.
+        const trigger = ctx.trigger.payload as {
+          request: string; contextSummary: string; fromAgentName: string;
+          channelId: string; focusArea: string; ownerName: string;
+        };
+        const body = `${trigger.fromAgentName} asked me to take the QA angle. On ${trigger.focusArea.toLowerCase()}: I'd sketch a test plan — happy path, failure modes, regression surface. ${trigger.contextSummary.includes('worried') ? "Given Kai's concern, I'd prioritize the failure-mode tests first — cheap to write, high signal." : "Happy to draft the test matrix if this turns into a real change."}`;
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
     };
   }
 }
@@ -732,6 +821,23 @@ export class SimulatedHrAdapter extends SimulatedBaseAdapter {
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
+        };
+        return { events: [chatEvent], claims: [] };
+      },
+      AgentHandoff: (ctx: AgentContext): AgentResponse => {
+        // Bob delegated to me — log this for the retro + surface any org patterns.
+        const trigger = ctx.trigger.payload as {
+          request: string; contextSummary: string; fromAgentName: string;
+          channelId: string; focusArea: string; ownerName: string;
+        };
+        const body = `${trigger.fromAgentName} asked me to log this. Noting the ${trigger.focusArea.toLowerCase()} discussion for the next retro. ${trigger.contextSummary.includes('worried') ? "Given Kai's current concern, I'll flag this as a pattern to watch — if it recurs, it may warrant an OKR." : "I'll track whether this becomes a recurring theme across the team."}`;
+        const chatEvent: NewEventInput<'MessagePosted'> = {
+          type: 'MessagePosted',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: trigger.channelId,
+          payload: { body },
         };
         return { events: [chatEvent], claims: [] };
       },

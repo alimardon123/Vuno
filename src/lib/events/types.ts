@@ -32,7 +32,8 @@ export type EventType =
   | 'PreemptIssued'
   | 'AttentionWakeup'
   | 'MemoryUpdated'
-  | 'PaProactiveNote';
+  | 'PaProactiveNote'
+  | 'AgentHandoff';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -238,6 +239,17 @@ export interface EventPayloadMap {
       value: string;                 // e.g. "Rust"
       memoryEventId: string;         // the MemoryUpdated event this references (for the 🧠 pill)
     }>;
+  };
+  AgentHandoff: {
+    fromAgentId: string;            // the delegating agent (e.g. Bob)
+    fromAgentName: string;
+    fromRole: string;
+    toAgentId: string;              // the target expert agent (e.g. Sid)
+    toAgentName: string;
+    toRole: string;                  // 'security' | 'perf' | 'architect' | ...
+    request: string;                // what the sender is asking — "please review the security concern"
+    contextSummary: string;          // curated context from the sender (e.g. learned facts + sentiment)
+    triggerEventId: string;         // the user message that originated this chain
   };
 }
 

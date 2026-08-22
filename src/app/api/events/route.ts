@@ -104,6 +104,7 @@ const ALLOWED_TYPES = new Set([
   'AttentionWakeup',
   'MemoryUpdated',
   'PaProactiveNote',
+  'AgentHandoff',
 ]);
 
 interface PostBody {

@@ -1102,6 +1102,53 @@ function MessageBody({
       );
     }
 
+    case 'AgentHandoff': {
+      // ACP — agent-to-agent delegation. Bob (or any agent) hands off to an
+      // expert with curated context. Rendered as a "delegation" badge showing
+      // the chain: from → to, the request, and the context summary.
+      // Per the "Beautiful" principle: warm amber accent (delegation = action),
+      // Forward arrow icon, italic context summary like a colleague's note.
+      const h = p as EventPayloadMap['AgentHandoff'];
+      const accentColor = 'var(--status-asserted)'; // amber — warm, action-oriented
+      return (
+        <div
+          className="flex flex-col gap-2 rounded-md border-l-2 bg-[var(--status-asserted)]/[0.06] px-3 py-2.5"
+          style={{ borderColor: accentColor }}
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider"
+              style={{
+                backgroundColor: `color-mix(in oklch, ${accentColor} 14%, transparent)`,
+                color: accentColor,
+              }}
+            >
+              <ArrowUpRight className="size-2.5" aria-hidden />
+              handoff
+            </span>
+            <span className="text-sm font-medium text-foreground/90">{h.fromAgentName}</span>
+            <span className="text-muted-foreground" aria-hidden>
+              →
+            </span>
+            <span className="text-sm font-medium text-foreground/90">{h.toAgentName}</span>
+            <span className="text-[0.6875rem] text-muted-foreground">
+              ({h.toRole})
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-foreground/90">
+            <span className="text-[0.6875rem] uppercase tracking-widest text-muted-foreground/70">
+              request:
+            </span>{' '}
+            {h.request}
+          </p>
+          <p className="text-[0.75rem] italic leading-relaxed text-muted-foreground/85">
+            <span className="not-italic font-medium text-muted-foreground/70">context:</span>{' '}
+            {h.contextSummary}
+          </p>
+        </div>
+      );
+    }
+
     case 'ThreadReplyPosted': {
       const t = p as EventPayloadMap['ThreadReplyPosted'];
       return (

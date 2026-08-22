@@ -2591,3 +2591,142 @@ Task: PA Proactive Notes — close the learn→reference loop. After Bob learns 
 - evt-290: MemoryUpdated (Bob, sentiment→worried, was excited, conf=0.8)
 - evt-293: PaProactiveNote (Bob → Kai, body="Kai, noting the emotional context shift…", 1 memory reference: evt-290)
 - PersonalMemory after testing: interests=["Rust","Kubernetes"], focus_areas=["Storage","Security","DevOps","Infrastructure"], current_sentiment=worried
+
+
+---
+Task ID: 34
+Agent: autonomous-cron
+Task: ACP (Agent-to-Agent Comms) — the delegation layer. After Bob learns facts + posts a proactive note, he DELEGATES to the expert agent for the detected domain, passing curated context (learned facts + the user's message). The expert then posts a DEEPER review than the attention router's brief observation — referencing Bob's context. This creates the visible chain: user → PA (learns + delegates) → expert (responds with context).
+
+## 🔍 Research (Step 1)
+- Read worklog: Round 25 (Task ID 33) closed the learn→reference loop. Bob now learns (MemoryUpdated) + acts (PaProactiveNote). But agents still operate in SILOS — no agent ever TALKS TO ANOTHER. The attention router wakes them independently. Bob notes. But no delegation happens.
+- Multi-role review:
+  - **Critic**: "Agents operate in silos. The attention router wakes them independently. Bob learns and notes. But no agent ever delegates to another. A real org has colleagues handing off: 'Hey Sid, can you look at this security thing Kai mentioned?'"
+  - **Architect**: "The cleanest design: a new AgentHandoff event type. Bob (or any agent) fires it after detecting a domain match (from learned focus areas). The handoff includes Bob's curated context. The target agent is triggered with an AgentHandoff trigger and responds with a DEEPER review that references Bob's context — richer than the attention router's brief observation."
+  - **Engineer**: "Reuse the attention-router pattern. The handoff is an event on the spine (not a separate transport — Efficient principle). The target agent's AgentHandoff script handler produces a context-aware response. The magic: Bob's handoff passes CONTEXT, so Sid's response references 'Bob flagged this' + the learned facts."
+  - **Designer**: "The magic moment: Kai posts 'concerned about performance' → attention router wakes Peri (brief observation) → Bob learns Performance + concerned → Bob proactively notes → **Bob delegates to Peri with context** → Peri posts a DEEPER review: 'Bob asked me to take the perf angle. On performance: the tail (p99) is what bites you... I can spin up a micro-benchmark within the hour.' The chain is visible: user → PA → expert."
+- Picked from the worklog's recommendation #1: "ACP (agent-to-agent comms) — now that Bob proactively references learned facts, let him HAND OFF to other agents. This would be an AgentToAgentMessage event that triggers the target agent's attention."
+
+## 💻 Action (Step 2)
+
+### 1. New event type: `AgentHandoff` (types.ts)
+- Payload: `{fromAgentId, fromAgentName, fromRole, toAgentId, toAgentName, toRole, request, contextSummary, triggerEventId}`
+- `request`: the delegation ask — "please review the security concern"
+- `contextSummary`: curated context from Bob (user message snippet + focus areas + sentiment + known interests)
+- `triggerEventId`: the user message that originated this chain (for provenance)
+- Added to TYPED_MESSAGE_EVENTS + TYPE_LABELS ('HANDOFF') in project.ts
+- Added to ALLOWED_TYPES in events route
+
+### 2. Handoff router (`src/lib/agents/handoff-router.ts`)
+- `FOCUS_AREA_TO_ROLE` mapping: 20 focus areas → 6 agent roles
+  - Security, Cryptography → security (Sid)
+  - Performance, Observability, Site Reliability → perf (Peri)
+  - Distributed Systems, Databases, Storage, Networking, Compilers, Frontend, Backend, DevOps, Infrastructure → architect (Aris)
+  - Machine Learning, Deep Learning, AI, Data Science, Data Engineering → research (Ravi)
+- `findHandoffTarget(facts)`: returns the FIRST focus area that maps to a known role (one handoff per message — Simple principle, no fan-out)
+- `buildHandoffContext(focusArea, targetRole, facts, userMessage, ownerName)`: builds the delegation request + context summary
+  - Request templates per target role (security/perf/architect/research/verifier/devils_advocate/hr)
+  - Context summary: user message snippet (120 chars) + focus areas discussed + current sentiment + known interests
+  - This is what makes the expert's response RICHER than the attention router's generic observation
+
+### 3. AgentHandoff script handlers (all 6 adapters)
+- Added to architect, devils_advocate, perf, security, verifier, hr adapters
+- Each produces a DEEPER review than the AttentionTriggered handler:
+  - **architect**: "Bob flagged this for me. Architecturally, {focusArea} work usually has a few seams worth checking: data flow boundaries, failure modes under load, module structure. [if worried: sketch rollback path first]"
+  - **devils_advocate**: "Bob asked me to push back. Counterpoint on {focusArea}: what's the failure mode if we commit? [if worried/concerned: risk profile matters more — write down the worst case]"
+  - **perf**: "Bob asked me to take the perf angle. On {focusArea}: the tail (p99) is what bites you. I'd instrument: (1) hot path, (2) lock contention, (3) IO boundaries. [if latency/slow: spin up micro-benchmark within the hour]"
+  - **security**: "Bob flagged this for me. Security-wise: threat model first — attacker, asset, trust boundary. [if auth/token: review token lifetime, replay protection, storage]. [if worried: file as formal RiskFlag]"
+  - **verifier**: "Bob asked me to take the QA angle. On {focusArea}: sketch a test plan — happy path, failure modes, regression surface. [if worried: prioritize failure-mode tests first]"
+  - **hr**: "Bob asked me to log this. Noting the {focusArea} discussion for the next retro. [if worried: flag as pattern to watch — may warrant an OKR]"
+- Each handler references Bob's context (contextSummary) to tailor the response — checks for "worried"/"concerned"/"auth"/"token"/"latency" substrings
+
+### 4. Update memory-evolution route to fire AgentHandoff + trigger target agent
+- After the PaProactiveNote block, added the ACP handoff logic:
+  1. `findHandoffTarget(facts)` — checks if any learned focus area maps to an agent role
+  2. If found: fetch the target agent from DB by role
+  3. `buildHandoffContext(...)` — builds request + context summary
+  4. 400-700ms pause (let the PaProactiveNote land first, then Bob delegates)
+  5. Fire the AgentHandoff event (visible as a "delegation" badge)
+  6. If the target role has an adapter (ROLE_TO_ADAPTER):
+     - Send typing indicator for the target agent (they're "reviewing")
+     - 600-1200ms "think" delay (variable cognitive load)
+     - Stop typing indicator
+     - Invoke the target agent's adapter with `AgentHandoff` trigger (passing request, contextSummary, fromAgentName, channelId, focusArea, ownerName)
+     - Stream the adapter's response (a single MessagePosted event)
+- Gracefully skips if no adapter for the target role (e.g. research — Ravi exists but no adapter yet). The AgentHandoff event still fires (visible badge), but no expert response.
+
+### 5. AgentHandoff rendering (message-bubble.tsx)
+- New `case 'AgentHandoff'` in the renderContent switch
+- Amber border (var(--status-asserted)) + "handoff" badge with ArrowUpRight icon
+- Shows: "fromAgentName → toAgentName (toRole)" header — the delegation chain
+- "request:" line with the delegation ask
+- Italic "context:" line with the context summary (like a colleague's note)
+- Warm, dense, action-oriented design
+
+## 📊 Result (Step 3)
+- Lint: clean
+- End-to-end test: "I am concerned about the performance of the new query engine — the latency is too high and it worries me"
+  - seq=294: User message posted
+  - seq=295: AttentionWakeup from Peri (performance) — REACT
+  - seq=296: **LEARNED** focus_area → Performance (was ["Storage","Security","DevOps","Infrastructure"], NEW)
+  - seq=297: **LEARNED** sentiment → concerned (was worried, UPDATE)
+  - seq=298: Peri posted brief observation (attention router): "Perf glance — worth measuring before assuming…"
+  - seq=299: AttentionWakeup from Devi (risk) — REACT
+  - seq=300: **PROACTIVE** Bob posted: "Hey Kai, Performance is now on my radar for you, and your sentiment shifted…"
+  - seq=301: Devi posted counterpoint (attention router)
+  - seq=302: **HANDOFF** Bob → Peri (perf)
+    - request: "please take a perf angle on the performance discussion — Kai mentioned it and I'd value your read"
+    - context: "Kai's message: 'I am concerned about the performance…' | focus areas discussed: Performance | current sentiment: concerned"
+    - trigger: evt-294
+  - seq=303: Peri posted DEEPER review: "Bob asked me to take the perf angle. On performance: the tail (p99) is what bites you, not the mean. I'd instrument: (1) the hot path, (2) the lock contention surface, (3) the IO boundaries. Given the latency concern, I can spin up a micro-benchmark within the hour."
+- /api/memory-evolution endpoint: 200 in 3.4s (includes all delays: learn + proactive note + handoff + target agent think + streaming)
+- No errors in dev.log
+- All 3 services verified up (next:200, rust:200, realtime:LISTEN)
+
+## 💡 Information (Step 4)
+- The ACP chain is fully visible: user → PA (learns + delegates) → expert (responds with context). The expert's response is RICHER than the attention router's brief observation because it references Bob's curated context ("Bob asked me to take the perf angle" + tailored to the latency concern).
+- The difference between the attention router response (seq=298: "Perf glance — worth measuring…") and the handoff response (seq=303: "Bob asked me to take the perf angle. On performance: the tail (p99) is what bites you… I can spin up a micro-benchmark within the hour") is striking. The handoff response is 2-3x longer, references Bob, offers a concrete plan, and is tailored to the specific concern (latency).
+- The "learn → think → speak → delegate → review" rhythm (400-700ms learn + 700-1100ms speak + 400-700ms delegate + 600-1200ms review) creates a natural, organic feel. The whole chain takes ~3-4s — feels like colleagues collaborating, not a bot stampede.
+- The handoff is scoped to ONE expert per message (Simple principle — no fan-out). If Kai's message touches both security AND performance, only the FIRST learned focus area triggers a handoff. The attention router still wakes both experts independently.
+- The context summary is the key innovation — Bob passes his curated understanding (message + focus areas + sentiment + known interests) to the expert. This is what makes ACP different from the attention router: the expert's response is INFORMED by Bob's model, not just the raw message.
+- The graceful skip for roles without adapters (e.g. research/Ravi) means the handoff badge still fires (visible delegation) but no expert response. This is fine — the user sees Bob delegated, even if the target can't respond yet.
+
+## 🔧 Adjustment (Step 5)
+- All features implemented + verified end-to-end with a performance+concerned message triggering the full chain: attention router → memory evolution → proactive note → handoff → expert deeper review.
+- Next high-impact step recommendations (in priority order):
+  1. **MCP integration in Rust** — now that the agent collaboration layer is complete (react → learn → act → delegate → respond), make the Rust service the brain by replacing simulated adapter calls with real LLM calls via reqwest to z-ai API. The Rust substrate currently owns the spine; it should also own LLM invocation.
+  2. **Memory Evolution view: "referenced by" + "delegated to" badges** — on MemoryUpdated events cited by a PaProactiveNote, show "referenced" badge. On AgentHandoff events, show "delegated to {expert}" on the original message. Completes the bidirectional link in the UI.
+  3. **Research agent adapter** — Ravi (research) exists in the org but has no adapter, so handoffs to research produce no response. Adding a research adapter (surfaces prior art / papers) would complete the delegation graph.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One new event type (AgentHandoff). One router module (mapping + context builder). One render case. One route update (added to existing memory-evolution route). No new infrastructure. |
+| **Powerful** | Agents COLLABORATE, not just react independently. Bob delegates to experts with curated context. The expert's response is RICHER than the attention router's brief observation. No other multi-agent product has agents that delegate to each other with context. |
+| **Performant** | Async fire-and-forget (within memory-evolution route). Context building is O(n) string ops. No ML. Typing indicators + variable delays make it feel organic without blocking. One handoff per message (no fan-out). |
+| **Scalable** | Adding new agent roles = one new entry in FOCUS_AREA_TO_ROLE + one new AgentHandoff handler in the adapter. Multiple PAs work in parallel. Any agent can delegate to any other (the event type is general). |
+| **Efficient** | Reuses existing memory-evolution route, EventSpine, broadcast, typing, adapter infrastructure. No new tables, no new services, no new dependencies. The AgentHandoff event IS the visible artifact — no separate message needed. |
+| **Beautiful** | Warm amber "handoff" badge with ArrowUpRight icon. "from → to (role)" delegation chain header. Italic context summary like a colleague's note. "learn → speak → delegate → review" rhythm via delays + typing indicators. |
+| **Functional** | Verified end-to-end: performance+concerned message → full chain (react + learn + act + delegate + respond). Peri's handoff response is 2-3x richer than the attention router observation, references Bob, offers a concrete benchmark plan. No errors. |
+
+### Files modified this round
+- MODIFIED: `src/lib/events/types.ts` (AgentHandoff event type + payload with from/to/request/contextSummary/triggerEventId)
+- MODIFIED: `src/lib/events/project.ts` (AgentHandoff in TYPED_MESSAGE_EVENTS + TYPE_LABELS 'HANDOFF')
+- MODIFIED: `src/app/api/events/route.ts` (AgentHandoff in ALLOWED_TYPES)
+- MODIFIED: `src/app/api/memory-evolution/route.ts` (ACP handoff logic: findHandoffTarget + buildHandoffContext + fire AgentHandoff event + trigger target agent's adapter with AgentHandoff trigger + typing indicators + delays)
+- MODIFIED: `src/lib/agents/adapters/simulated.ts` (AgentHandoff script handler added to ALL 6 adapters — architect, devils_advocate, perf, security, verifier, hr — each produces a deeper context-aware review)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (AgentHandoff rendering — amber border, "handoff" badge with ArrowUpRight, from→to chain, request, italic context summary)
+- CREATED: `src/lib/agents/handoff-router.ts` (FOCUS_AREA_TO_ROLE mapping + findHandoffTarget + buildHandoffContext with per-role request templates)
+
+### Verification artifacts (events created during testing)
+- evt-294: MessagePosted (user, "I am concerned about the performance of the new query engine…")
+- evt-295: AttentionWakeup (Peri/perf, topic=performance)
+- evt-296: MemoryUpdated (Bob, focus_area→Performance, NEW, was ["Storage","Security","DevOps","Infrastructure"])
+- evt-297: MemoryUpdated (Bob, sentiment→concerned, UPDATE, was worried)
+- evt-298: MessagePosted (Peri, brief attention-router observation)
+- evt-299: AttentionWakeup (Devi/devils_advocate, topic=risk)
+- evt-300: PaProactiveNote (Bob → Kai, "Hey Kai, Performance is now on my radar for you…")
+- evt-301: MessagePosted (Devi, brief attention-router counterpoint)
+- evt-302: AgentHandoff (Bob → Peri, request="please take a perf angle…", context="Kai's message + focus areas + sentiment")
+- evt-303: MessagePosted (Peri, deeper review: "Bob asked me to take the perf angle. On performance: the tail (p99)… I can spin up a micro-benchmark within the hour.")
+- PersonalMemory after testing: focus_areas=["Storage","Security","DevOps","Infrastructure","Performance"], current_sentiment=concerned

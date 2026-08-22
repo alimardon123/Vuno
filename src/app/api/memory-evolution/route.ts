@@ -29,7 +29,10 @@ import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
 import { detectMemoryFacts, appendToListValue, valueInList, type DetectedFact } from '@/lib/agents/memory-detector';
 import { generateProactiveNote } from '@/lib/agents/proactive-note-generator';
+import { findHandoffTarget, buildHandoffContext } from '@/lib/agents/handoff-router';
+import { ROLE_TO_ADAPTER } from '@/lib/agents/adapters/simulated';
 import type { NewEventInput, EventRecord } from '@/lib/events/types';
+import type { AgentContext, AgentAdapter } from '@/lib/agents/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -296,6 +299,85 @@ export async function POST(req: Request): Promise<NextResponse> {
             memoryReferences: note.memoryReferences,
           },
         }], org, useRust);
+      }
+    }
+
+    // ─── ACP: Agent-to-Agent Handoff ──────────────────────────────────────────
+    // Per the design principle "Powerful": agents don't just react independently
+    // — they COLLABORATE. Bob (the PA) detects which domain the user's message
+    // touches (from the learned focus areas), delegates to the expert agent for
+    // that domain, and passes curated context (learned facts + the user's
+    // message). The expert then posts a DEEPER review than the attention
+    // router's brief observation — referencing Bob's context.
+    //
+    // This creates the visible chain: user → PA (learns + delegates) → expert.
+    const handoffTarget = findHandoffTarget(facts);
+    if (handoffTarget) {
+      // Find the target agent (the expert for this domain)
+      const targetAgent = await db.agent.findFirst({
+        where: { orgId: org.id, role: handoffTarget.targetRole, status: 'active' },
+      });
+      if (targetAgent) {
+        const handoffCtx = buildHandoffContext(
+          handoffTarget.focusArea,
+          handoffTarget.targetRole,
+          facts,
+          body.body,
+          ownerName,
+        );
+
+        // Brief pause — let the PaProactiveNote land first, then Bob delegates.
+        await sleep(400 + Math.random() * 300);
+
+        // 1. Fire the AgentHandoff event (visible as a "delegation" badge)
+        await streamEvents([{
+          type: 'AgentHandoff',
+          actorType: 'agent',
+          actorAgentId: pa.id,
+          scopeType: 'channel',
+          scopeId: body.channelId,
+          payload: {
+            fromAgentId: pa.id,
+            fromAgentName: pa.name,
+            fromRole: pa.role,
+            toAgentId: targetAgent.id,
+            toAgentName: targetAgent.name,
+            toRole: targetAgent.role,
+            request: handoffCtx.request,
+            contextSummary: handoffCtx.contextSummary,
+            triggerEventId: body.messageEventId,
+          },
+        }], org, useRust);
+
+        // 2. Trigger the target agent's adapter with the AgentHandoff trigger.
+        // The target agent posts a DEEPER review that references Bob's context.
+        const AdapterClass = ROLE_TO_ADAPTER[targetAgent.role];
+        if (AdapterClass) {
+          // Typing indicator for the target agent — they're "reviewing"
+          const thinkTime = 600 + Math.random() * 600;
+          void broadcastTyping({ channelId: body.channelId, userId: targetAgent.id, isTyping: true });
+          await sleep(thinkTime);
+          void broadcastTyping({ channelId: body.channelId, userId: targetAgent.id, isTyping: false });
+
+          const adapter: AgentAdapter = new AdapterClass(targetAgent.id);
+          const ctx: AgentContext = {
+            events: [],
+            claims: [],
+            trigger: {
+              type: 'AgentHandoff',
+              payload: {
+                request: handoffCtx.request,
+                contextSummary: handoffCtx.contextSummary,
+                fromAgentName: pa.name,
+                channelId: body.channelId,
+                focusArea: handoffTarget.focusArea,
+                ownerName,
+              },
+            },
+          };
+          const response = await adapter.invoke(ctx);
+          await streamEvents(response.events, org, useRust);
+        }
       }
     }
 
