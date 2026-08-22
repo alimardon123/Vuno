@@ -110,6 +110,34 @@ export function TypedComposer({ channelId }: { channelId: string }) {
     }
   }
 
+  async function postTypedEvent(
+    typedType: string,
+    payload: Record<string, unknown>,
+  ) {
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: typedType, payload, channelId }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      bumpChatNonce();
+      toast({
+        title: `${typedType} appended`,
+        description: 'Added to the event spine. The chat projection will update shortly.',
+      });
+    } catch (e) {
+      toast({
+        title: `Failed to append ${typedType}`,
+        description: e instanceof Error ? e.message : String(e),
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (type === 'Message') {
@@ -117,16 +145,89 @@ export function TypedComposer({ channelId }: { channelId: string }) {
       void postMessage(body.trim());
       return;
     }
-    // Non-Message types — UI-only in v1. Show a toast describing the form's
-    // intent without actually appending anything yet.
-    toast({
-      title: `${type} form (UI-only in v1)`,
-      description:
-        'Structured composer is wired visually; the append path lands in the next slice.',
-    });
+    // Non-Message types — POST to /api/events with the structured payload.
+    if (type === 'Proposal') {
+      if (!proposalTitle.trim() || !proposalBody.trim()) return;
+      void postTypedEvent('ProposalOpened', {
+        decisionId: `dec-${Date.now().toString(36)}`,
+        title: proposalTitle.trim(),
+        body: proposalBody.trim(),
+        scopeProjectId: 'proj-storage-engine',
+      });
+      setProposalTitle('');
+      setProposalBody('');
+      return;
+    }
+    if (type === 'Objection') {
+      if (!claimText.trim()) return;
+      void postTypedEvent('ObjectionRaised', {
+        decisionId: 'dec-17',
+        claimText: claimText.trim(),
+        severity: objSeverity,
+      });
+      setClaimText('');
+      return;
+    }
+    if (type === 'Evidence') {
+      if (!evidenceLabel.trim() || !evidenceSummary.trim()) return;
+      void postTypedEvent('EvidenceAttached', {
+        decisionId: 'dec-17',
+        evidenceType: 'paper',
+        label: evidenceLabel.trim(),
+        summary: evidenceSummary.trim(),
+        supportsOrRefutes: 'neutral',
+      });
+      setEvidenceLabel('');
+      setEvidenceSummary('');
+      return;
+    }
+    if (type === 'Benchmark') {
+      if (!metric.trim() || !value.trim() || !unit.trim() || !target.trim()) return;
+      void postTypedEvent('BenchmarkReported', {
+        experimentId: `exp-${Date.now().toString(36)}`,
+        metric: metric.trim(),
+        value: value.trim(),
+        unit: unit.trim(),
+        target: target.trim(),
+        passed: Number(value) <= Number(target),
+      });
+      setMetric('');
+      setValue('');
+      setUnit('');
+      setTarget('');
+      return;
+    }
+    if (type === 'Decision') {
+      if (!decisionChosen.trim() || !decisionRationale.trim()) return;
+      void postTypedEvent('DecisionRecorded', {
+        decisionId: 'dec-17',
+        outcome: 'accepted',
+        chosen: decisionChosen.trim(),
+        rationale: decisionRationale.trim(),
+        rejectedAlternatives: [],
+      });
+      setDecisionChosen('');
+      setDecisionRationale('');
+      return;
+    }
   }
 
   const isMessage = type === 'Message';
+
+  // Compute whether the current form has enough content to submit
+  const hasContent = isMessage
+    ? body.trim().length > 0
+    : type === 'Proposal'
+      ? proposalTitle.trim().length > 0 && proposalBody.trim().length > 0
+      : type === 'Objection'
+        ? claimText.trim().length > 0
+        : type === 'Evidence'
+          ? evidenceLabel.trim().length > 0 && evidenceSummary.trim().length > 0
+          : type === 'Benchmark'
+            ? metric.trim().length > 0 && value.trim().length > 0 && unit.trim().length > 0 && target.trim().length > 0
+            : type === 'Decision'
+              ? decisionChosen.trim().length > 0 && decisionRationale.trim().length > 0
+              : false;
 
   return (
     <form
@@ -208,7 +309,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
             <Button
               type="submit"
               size="sm"
-              disabled={submitting || (isMessage && !body.trim())}
+              disabled={submitting || !hasContent}
               className="shadow-sm transition-all hover:shadow-md hover:shadow-primary/20"
             >
               {submitting ? (
@@ -216,7 +317,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
               ) : (
                 <Send className="size-3.5" aria-hidden />
               )}
-              {isMessage ? 'Post' : `Compose ${type}`}
+              {isMessage ? 'Post' : `Append ${type}`}
             </Button>
           </div>
         </div>
@@ -258,8 +359,8 @@ function TypedForm(props: TypedFormProps) {
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="mb-2 flex items-center gap-1.5 text-[0.625rem] uppercase tracking-widest text-muted-foreground">
-        <span className="rounded-sm bg-muted px-1.5 py-0.5">{props.type}</span>
-        <span>· structured form (v1: UI-only)</span>
+        <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary">{props.type}</span>
+        <span>· structured form — appends to spine</span>
       </div>
       <div className="grid gap-2">
         {props.type === 'Proposal' ? (

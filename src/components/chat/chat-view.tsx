@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/app-store';
 import { useFetch } from '@/hooks/use-fetch';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { TypedComposer } from '@/components/chat/typed-composer';
+import { RunDebateButton } from '@/components/chat/run-debate-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useRef } from 'react';
@@ -88,6 +89,7 @@ export function ChatView() {
             <span className="inline-flex items-center gap-1">
               <Users className="size-3" aria-hidden /> {messages.length} events
             </span>
+            <RunDebateButton />
           </div>
         </div>
         {channel?.topic ? (
