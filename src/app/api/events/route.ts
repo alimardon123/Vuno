@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
 import { projectChatMessages } from '@/lib/events/project';
+import { broadcastEventAppended } from '@/lib/realtime/broadcast';
 import type { NewEventInput } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -109,6 +110,13 @@ export async function POST(req: Request) {
     };
 
     const created = await spine.append([input]);
+    // Broadcast to the realtime service so connected clients get the event instantly
+    void broadcastEventAppended({
+      channelId: scopeType === 'channel' ? scopeId : undefined,
+      scopeType,
+      scopeId,
+      event: created[0],
+    });
     return NextResponse.json({ ok: true, event: created[0] });
   } catch (err) {
     console.error('POST /api/events failed:', err);

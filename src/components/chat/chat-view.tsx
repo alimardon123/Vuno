@@ -2,12 +2,14 @@
 // Fetches /api/events?scopeType=channel&scopeId=<id>&project=true and renders
 // the projected chat messages. Includes a typed composer.
 // The channel header is clickable — opens a sheet showing shared links/files/media.
+// Subscribes to realtime events via socket.io — new messages appear instantly.
 
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/app-store';
 import { useFetch } from '@/hooks/use-fetch';
+import { useRealtime } from '@/hooks/use-realtime';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { TypedComposer } from '@/components/chat/typed-composer';
 import { ChannelDetailsContent } from '@/components/chat/channel-details-content';
@@ -15,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useEffect, useRef } from 'react';
-import { Hash, Users, Pin, ChevronRight } from 'lucide-react';
+import { Hash, Users, Pin, ChevronRight, Wifi, WifiOff } from 'lucide-react';
 import type { ChatMessageProjection } from '@/lib/events/project';
 
 interface EventsResponse {
@@ -46,7 +48,7 @@ export function ChatView() {
     ? `/api/events?scopeType=channel&scopeId=${activeChannelId}&project=true`
     : null;
   const eventsRes = useFetch<EventsResponse>(eventsUrl, {
-    intervalMs: 5000,
+    intervalMs: 10000, // slower poll (10s) — realtime is the primary transport now
   });
 
   // refetch when the chat nonce bumps (e.g. after posting a message)
@@ -56,6 +58,29 @@ export function ChatView() {
     }
     // eventsRes.refetch is stable; we intentionally only depend on chatNonce
   }, [chatNonce, eventsRes]);
+
+  // Realtime subscription — when a new event is broadcast for this channel,
+  // prepend it to the messages list instantly (no waiting for poll).
+  const handleEventAppended = useCallback((data: { channelId?: string; scopeType?: string; scopeId?: string; event: unknown }) => {
+    // Only handle events for the active channel
+    if (data.channelId && data.channelId !== activeChannelId) return;
+    if (data.scopeType === 'channel' && data.scopeId !== activeChannelId) return;
+    // Force a refetch to get the latest projection (simplest + correct approach;
+    // in a later slice we can optimize by prepending the single event)
+    eventsRes.refetch();
+  }, [activeChannelId, eventsRes]);
+
+  const { isConnected, subscribe, unsubscribe } = useRealtime({
+    onEventAppended: handleEventAppended,
+  });
+
+  // Subscribe to the active channel for realtime events
+  useEffect(() => {
+    if (activeChannelId) {
+      subscribe(activeChannelId);
+      return () => unsubscribe(activeChannelId);
+    }
+  }, [activeChannelId, subscribe, unsubscribe]);
 
   const messages = eventsRes.data?.chatMessages ?? [];
 
@@ -104,6 +129,18 @@ export function ChatView() {
             ) : null}
             <span className="inline-flex items-center gap-1">
               <Users className="size-3" aria-hidden /> {messages.length} events
+            </span>
+            {/* Realtime connection indicator */}
+            <span
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.625rem]"
+              title={isConnected ? 'Real-time connected' : 'Real-time disconnected — using polling'}
+              aria-label={isConnected ? 'Real-time connected' : 'Real-time disconnected'}
+            >
+              {isConnected ? (
+                <Wifi className="size-3 text-primary" aria-hidden />
+              ) : (
+                <WifiOff className="size-3 text-muted-foreground/60" aria-hidden />
+              )}
             </span>
           </div>
         </div>

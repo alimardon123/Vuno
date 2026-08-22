@@ -628,3 +628,133 @@ Task: Fix org panel team members, fix left-side-no-scroll, make central top bar 
 - MODIFIED: `src/components/left-rail/chats-panel.tsx` (merged Team Chats into Group Chats with "team" badge)
 - MODIFIED: `src/components/chat/chat-view.tsx` (clickable header + channel details sheet)
 
+
+---
+Task ID: 12 (Round 4 — Real-time chat via socket.io)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Build the real-time transport layer (socket.io mini-service on port 3003). Replace 5s polling with WebSocket push. Apply the 7 design principles (Simple, Powerful, Performant, Scalable, Efficient, Beautiful, Functional). Follow the 5-step learning loop (Research → Action → Result → Information → Adjustment).
+
+## 🔍 Research (Step 1) — Multi-role review
+
+### Critic's view
+- ❌ Chat was 5s polling — messages appeared with up to 5s delay. NOT real-time.
+- ❌ Agents run sequentially in /api/debate — not concurrent. (Still true — that's Round 6.)
+- ❌ No real-time presence or typing indicators.
+- ✅ The event-spine architecture is sound (Buzz validates this with Nostr).
+
+### Architect's view
+- The architecture is: Next.js API (spine owner) + this realtime service (transport) + UI (consumer).
+- In Round 5, the Rust substrate will replace Next.js as the spine owner, but it will still use this service for UI fan-out. The transport layer stays stable while the brain changes underneath.
+- Design principles applied:
+  - **Simple**: single socket.io transport, no separate HTTP endpoint
+  - **Powerful**: real-time push to all connected clients
+  - **Performant**: WebSocket (no polling overhead)
+  - **Scalable**: room-based subscriptions (per-channel)
+  - **Efficient**: replaces 5s polling — no wasted requests
+  - **Beautiful**: wifi indicator + instant message appearance
+  - **Functional**: delivers real-time chat immediately
+
+### Engineer's view
+- New `mini-services/realtime-service/` bun project, port 3003, socket.io server
+- Next.js API routes emit 'broadcast' as a socket.io client (auth.role='server')
+- UI connects via `io("/?XTransformPort=3003")`, subscribes to channels, listens for 'event:appended'
+- Polling reduced from 5s to 10s (fallback only — realtime is primary)
+
+## 💻 Action (Step 2)
+
+### 1. Created realtime mini-service (port 3003)
+- `mini-services/realtime-service/package.json` — new bun project with socket.io dependency
+- `mini-services/realtime-service/index.ts` (110 lines):
+  - socket.io server on port 3003, path '/' (for Caddy XTransformPort forwarding)
+  - Tracks connected clients (UI clients + server clients)
+  - UI clients emit 'subscribe'/'unsubscribe' to join/leave channel rooms
+  - UI clients emit 'typing' for typing indicators (broadcast to channel)
+  - Server clients emit 'broadcast' to fan out events to all UI clients in the room
+  - Server clients identified via `auth.role = 'server'`
+
+### 2. Created useRealtime hook (client-side)
+- `src/hooks/use-realtime.ts` (120 lines):
+  - Singleton socket connection (reused across views)
+  - `useRealtime({ onEventAppended, onTyping })` hook
+  - `subscribe(channelId)` / `unsubscribe(channelId)` — join/leave channel rooms
+  - `sendTyping(channelId, userId, isTyping)` — emit typing indicator
+  - Returns `isConnected` for UI status indicator
+
+### 3. Created server-side broadcast helpers
+- `src/lib/realtime/broadcast.ts` (70 lines) — SERVER-ONLY (no 'use client'):
+  - `broadcastEventAppended(data)` — long-lived socket.io client (auth.role='server')
+  - `broadcastTyping(data)` — same client
+  - Connects directly to localhost:3003 (server-to-server, no Caddy gateway)
+- Why split from use-realtime.ts: the hook has 'use client' (React hooks + browser APIs), which makes the whole file client-only. Server-side code can't import from client-only files.
+
+### 4. Updated Next.js API routes to broadcast
+- `src/app/api/events/route.ts`: after `spine.append()`, calls `broadcastEventAppended()` so connected clients get the event instantly
+- `src/app/api/debate/route.ts`: after the debate chain completes, broadcasts each channel/decision/project-scoped event individually so they stream in one-by-one
+
+### 5. Updated ChatView to subscribe to realtime events
+- `src/components/chat/chat-view.tsx`:
+  - Uses `useRealtime({ onEventAppended })` hook
+  - Subscribes to the active channel on mount, unsubscribes on unmount
+  - On 'event:appended': refetches the events projection (simplest + correct approach; can optimize to prepend single events later)
+  - Polling reduced from 5s to 10s (fallback only)
+  - Added wifi/wifi-off indicator in the chat header (green when connected, gray when disconnected)
+
+## 📊 Result (Step 3)
+- Lint: clean (after 2 fixes — see Adjustment)
+- Realtime service: listening on port 3003, accepting UI + server client connections
+- Agent Browser QA (via Caddy gateway port 81):
+  - ✅ UI client connects to realtime service (wifi indicator shows "Real-time connected")
+  - ✅ Server client connects (from Next.js API broadcast)
+  - ✅ POST /api/events → event appears in chat INSTANTLY (no 5s wait)
+  - ✅ Realtime log confirms: "broadcast event to room channel:ch-storage"
+- VLM analysis: 9/10 — "production-quality real-time UI. The WiFi indicator is professional and unobtrusive."
+
+## 💡 Information (Step 4) — What worked + what failed
+
+### What worked
+- socket.io client-emit pattern (server emits 'broadcast' to the service, which fans out) — simpler + more efficient than a separate HTTP endpoint
+- Splitting client hook (use-realtime.ts) from server helpers (lib/realtime/broadcast.ts) — avoids 'use client' import errors
+- Room-based subscriptions — per-channel fan-out, scalable to many channels
+- Polling as fallback — if the realtime service is down, chat still works (just slower)
+
+### What failed (and was fixed)
+1. **HTTP /broadcast endpoint didn't work** — socket.io's path '/' intercepts all HTTP requests. Fix: switched to socket.io client-emit pattern (server emits 'broadcast' as a client).
+2. **"Attempted to call broadcastEventAppended() from the server but broadcastEventAppended is on the client"** — use-realtime.ts had 'use client' at the top, making the whole file client-only. Fix: split server-side helpers into `src/lib/realtime/broadcast.ts` (no 'use client').
+3. **React 19 lint: "Cannot update ref during render"** — `optsRef.current = opts` during render. Fix: moved into a useEffect.
+4. **React 19 lint: "Calling setState synchronously within an effect"** — `setIsConnected(true)` when socket already connected. Fix: wrapped in `queueMicrotask()`.
+
+### VLM suggestions for future
+- Add a subtle active-state animation (gentle pulse or green glow) to make "connected" status immediately obvious without hover
+
+## 🔧 Adjustment (Step 5)
+- All 4 failures fixed. Lint clean. Realtime flow verified end-to-end.
+- Deferred: subtle pulse animation on the wifi indicator (VLM suggestion — polish-level).
+
+## Design principles assessment
+| Principle | How this round delivers |
+|---|---|
+| **Simple** | Single socket.io transport, no separate HTTP endpoint, one hook for the UI |
+| **Powerful** | Real-time push to all connected clients, room-based fan-out |
+| **Performant** | WebSocket (no polling overhead), 10s fallback poll instead of 5s |
+| **Scalable** | Room-based subscriptions, can swap to Redis adapter for horizontal scaling |
+| **Efficient** | No wasted polling requests, single transport, long-lived server client |
+| **Beautiful** | Wifi indicator + instant message appearance = real-time UX |
+| **Functional** | Delivers real-time chat immediately — the foundation for concurrent agents |
+
+## Unresolved issues / next steps
+1. **Concurrent agent runtime** (Round 6) — agents still run sequentially in /api/debate. The realtime transport is ready; the concurrent brain (Rust) is next.
+2. **Typing indicators** — the realtime service supports them, but the UI doesn't send/receive them yet. Need to add typing UI in the composer + a "X is typing..." indicator.
+3. **Optimize: prepend single events** — currently on 'event:appended' we refetch the whole projection. Could optimize by prepending the single event to the local state.
+4. **Rust substrate service** (Round 5) — new `mini-services/vuno-substrate/` Rust project. Owns the event spine writer. Next.js API routes proxy to it.
+5. **Concurrent agent runtime in Rust** (Round 6) — THE HEADLINE. Agents wake in parallel on events, debate in real time concurrently like humans.
+
+### Files created/modified this round
+- NEW: `mini-services/realtime-service/package.json`
+- NEW: `mini-services/realtime-service/index.ts` (110 lines)
+- NEW: `src/hooks/use-realtime.ts` (120 lines)
+- NEW: `src/lib/realtime/broadcast.ts` (70 lines)
+- MODIFIED: `src/app/api/events/route.ts` (added broadcastEventAppended after spine.append)
+- MODIFIED: `src/app/api/debate/route.ts` (added broadcastEventAppended for each event)
+- MODIFIED: `src/components/chat/chat-view.tsx` (useRealtime hook, subscribe/unsubscribe, wifi indicator, 10s poll fallback)
+- INSTALLED: `socket.io-client` + `socket.io` (in main project + realtime service)
+

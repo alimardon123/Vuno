@@ -17,6 +17,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
+import { broadcastEventAppended } from '@/lib/realtime/broadcast';
 import type { NewEventInput, EventRecord, ClaimStatus } from '@/lib/events/types';
 import type { AgentContext, AgentAdapter, AgentClaimRecord } from '@/lib/agents/types';
 import {
@@ -494,6 +495,22 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       where: { id: decisionId },
       data: { state: 'resolved', outcome: 'falsified', updatedAt: new Date() },
     });
+
+    // Broadcast channel-scoped events to the realtime service so connected
+    // clients see them appear in real time (not waiting for the 5s poll).
+    // We broadcast each event individually so they stream in one-by-one.
+    for (const evt of createdEvents) {
+      // Only broadcast channel-scoped events (those are what the chat shows)
+      // plus decision-scoped events (those are what the decision page shows).
+      if (evt.scopeType === 'channel' || evt.scopeType === 'decision' || evt.scopeType === 'project') {
+        void broadcastEventAppended({
+          channelId: evt.scopeType === 'channel' ? evt.scopeId : undefined,
+          scopeType: evt.scopeType,
+          scopeId: evt.scopeId,
+          event: evt,
+        });
+      }
+    }
 
     return NextResponse.json({
       ok: true,
