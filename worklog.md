@@ -1118,3 +1118,88 @@ This means: when Aris proposes, Security (Sid) should see not just the final pro
 - MODIFIED: `src/components/chat/message-bubble.tsx` (AgentThought rendering: italic + thought-type pill)
 - NEW: `src/app/api/thoughts/route.ts` (memory graph query layer)
 
+
+---
+Task ID: 16 (Round 8 — Docs update + wire Next.js API to proxy to Rust substrate)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Update all docs (replace "AI Organization OS" → "Vuno"), wire Next.js API routes to proxy to the Rust substrate (port 3030) for event spine operations. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- Found 11 references to "AI Organization OS" / "AI Org OS" across docs/ (PRD, WHATS_NEW, DESIGN_SYSTEM, SCREENS, ADR-0001)
+- Identified that the Rust substrate (port 3030) was running but Next.js still used Prisma directly for spine operations
+- Multi-role review: the user explicitly asked for Rust twice — the integration was overdue
+
+## 💻 Action (Step 2)
+
+### 1. Updated all docs to replace old name references
+- Bulk sed-replaced "AI Organization OS" / "AI Org OS" → "Vuno" across all docs/*.md files (11 references, 0 remaining)
+- `docs/PRD.md` (REWRITTEN): updated to reflect the current build state — ✅ done items, 🚧 in-progress, ❌ deferred. Includes architecture diagram (Next.js + Rust + socket.io), design principles table, build sequence (12 steps, 8 done).
+- `docs/design/DESIGN_SYSTEM.md` (UPDATED): color palette section updated to reflect the warm Buzz-inspired cream/mustard palette (was cold charcoal + emerald)
+- `docs/adr/0001-tech-stack.md` (REWRITTEN): updated to reflect the hybrid architecture — Rust substrate (port 3030), socket.io real-time (port 3003), AgentThought memory graph, warm palette. Updated consequences section.
+
+### 2. Wired Next.js API routes to proxy to Rust substrate
+- `src/app/api/events/route.ts` (REWRITTEN):
+  - **GET handler**: tries Rust first (`GET http://localhost:3030/events/replay`), converts `createdAt` from integer (SQLite ms epoch) to ISO string, projects to chat messages. Falls back to Prisma if Rust is unavailable.
+  - **POST handler**: tries Rust first (`POST http://localhost:3030/events`), broadcasts the returned event via socket.io. Falls back to Prisma if Rust is unavailable.
+  - **isRustAvailable() helper**: health check with 1s timeout. Non-blocking — if Rust is down, the chat still works via Prisma fallback.
+  - Added `AgentThought` to the ALLOWED_TYPES set (was missing).
+- `mini-services/vuno-substrate/src/main.rs`: added `#[serde(rename_all = "camelCase")]` to the EventRecord struct so Rust returns proper camelCase field names (`scopeType`, `actorType`, etc.) matching the frontend's expectations.
+
+### Architecture after this round
+```
+[Next.js UI (port 3000)]
+    ↕ socket.io (port 3003 via Caddy)
+    ↕ HTTP proxy (POST/GET /events → Rust)
+[Rust substrate (port 3030)] — owns the event spine
+    ↕ rusqlite
+[SQLite] — shared DB (Prisma reads, Rust writes)
+```
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Rust proxy verified end-to-end:
+  - `POST /api/events` → Next.js proxies to Rust → event appended (seq=121) → returned with correct camelCase fields → broadcast via socket.io
+  - `GET /api/events?project=true` → Next.js proxies to Rust → 51 chat messages returned → projectChatMessages projection works
+  - Fallback: if Rust is down, Prisma is used automatically (no user-visible failure)
+- All docs: 0 remaining "AI Organization OS" / "AI Org OS" references
+
+## 💡 Information (Step 4)
+
+### What worked
+- Rust proxy: events appended via Rust (seq=120, 121) with correct camelCase serialization
+- Fallback pattern: Rust-first with Prisma fallback — follows the Functional principle (works even if Rust is down)
+- Docs update: all references cleaned, PRD/ADR/design system updated to reflect current state
+
+### What failed (and was fixed)
+1. **snake_case field names from Rust**: Rust's EventRecord serialized as `scope_type`, `actor_agent_id` (snake_case) but the frontend expects `scopeType`, `actorAgentId` (camelCase). Fix: added `#[serde(rename_all = "camelCase")]` to the EventRecord struct.
+2. **created_at as integer**: SQLite stores DateTime as integer (ms epoch), but the frontend expects ISO strings. Fix: the GET handler converts `created_at` from integer to ISO string in the proxy layer.
+
+## 🔧 Adjustment (Step 5)
+- All bugs fixed. Rust proxy works end-to-end. Docs are clean.
+- Next: thought-to-thought edges (use `relatedThoughtId` for graph edges between thoughts), argument graph visualization, memory tiers 2-3.
+
+## Design principles assessment
+| Principle | How this round delivers |
+|---|---|
+| **Simple** | Rust owns the spine, Next.js proxies — clean separation. One isRustAvailable() check. |
+| **Powerful** | Rust's compiled binary + tokio for the core operation |
+| **Performant** | No GC, no JIT, zero-cost abstractions on the critical path |
+| **Scalable** | Rust can handle millions of events; the proxy pattern scales |
+| **Efficient** | Single spine owner (Rust), no duplicate writes |
+| **Beautiful** | Docs are clean and consistent; PRD reflects the actual build state |
+| **Functional** | Delivers the user's explicit ask for Rust + all docs updated |
+
+## Services running
+1. **Next.js** (port 3000) — UI + API routes (proxy to Rust + broadcast via socket.io)
+2. **socket.io** (port 3003) — real-time transport (room-based fan-out, typing indicators)
+3. **Rust substrate** (port 3030) — event spine writer (tokio + axum + rusqlite)
+
+### Files created/modified this round
+- MODIFIED: `docs/PRD.md` (rewritten to reflect current state)
+- MODIFIED: `docs/design/DESIGN_SYSTEM.md` (updated color palette to warm Buzz-inspired)
+- MODIFIED: `docs/adr/0001-tech-stack.md` (rewritten for hybrid TS+Rust architecture)
+- MODIFIED: `docs/WHATS_NEW.md` (bulk renamed)
+- MODIFIED: `docs/design/SCREENS.md` (bulk renamed)
+- MODIFIED: `src/app/api/events/route.ts` (rewritten: Rust proxy with Prisma fallback)
+- MODIFIED: `mini-services/vuno-substrate/src/main.rs` (added #[serde(rename_all = "camelCase")])
+

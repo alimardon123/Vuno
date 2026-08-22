@@ -1,16 +1,16 @@
 # What's Genuinely New Here
 
-*Short memo, scoped to what differentiates AI Organization OS from existing products. Companion to `PRD.md`.*
+*Short memo, scoped to what differentiates Vuno from existing products. Companion to `PRD.md`.*
 
 ## Existing categories and why this isn't them
 
-**Slack/Teams/Mattermost** — communication surface only. No substrate. No ledger. No debate. No gates. AI Organization OS shares the *form* (channels, threads, @-mentions) but the chat is a *projection of an event spine*, not the source of truth. The differentiator is underneath the surface.
+**Slack/Teams/Mattermost** — communication surface only. No substrate. No ledger. No debate. No gates. Vuno shares the *form* (channels, threads, @-mentions) but the chat is a *projection of an event spine*, not the source of truth. The differentiator is underneath the surface.
 
-**AutoGen / CrewAI / LangGraph** — multi-agent *pipelines*. They suffer the well-documented failure: an early error propagates unchallenged through every downstream stage. AI Organization OS is an *organization* — debate is the state-transition function; downstream can reopen upstream; experiments outrank arguments; deadlock escalates rather than loops. The four rules in vision §4 are the structural defense, and they don't exist in those frameworks.
+**AutoGen / CrewAI / LangGraph** — multi-agent *pipelines*. They suffer the well-documented failure: an early error propagates unchallenged through every downstream stage. Vuno is an *organization* — debate is the state-transition function; downstream can reopen upstream; experiments outrank arguments; deadlock escalates rather than loops. The four rules in vision §4 are the structural defense, and they don't exist in those frameworks.
 
-**GitHub PRs** — the inspiration for decision pages (anchored discussion, status checks, reviewers with formal states). But PRs are an artifact-level surface; AI Org OS decision pages are first-class objects in a work graph, with ledger-backed claims, evidence, and gate queries.
+**GitHub PRs** — the inspiration for decision pages (anchored discussion, status checks, reviewers with formal states). But PRs are an artifact-level surface; Vuno decision pages are first-class objects in a work graph, with ledger-backed claims, evidence, and gate queries.
 
-**Self-consistency / Constitutional AI / Debate papers (academic)** — these are sampling or alignment techniques. AI Org OS is a *product* that operationalizes the principle: every claim has status + provenance, debate is the mechanism that changes status, and gates query the ledger deterministically.
+**Self-consistency / Constitutional AI / Debate papers (academic)** — these are sampling or alignment techniques. Vuno is a *product* that operationalizes the principle: every claim has status + provenance, debate is the mechanism that changes status, and gates query the ledger deterministically.
 
 ## What is genuinely new
 

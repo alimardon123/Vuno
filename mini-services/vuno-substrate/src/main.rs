@@ -59,6 +59,7 @@ struct EventInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct EventRecord {
     id: String,
     seq: i64,

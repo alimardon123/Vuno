@@ -1,4 +1,4 @@
-# AI Organization OS — Key Screens (Wireframe Descriptions)
+# Vuno — Key Screens (Wireframe Descriptions)
 
 > Companion to `DESIGN_SYSTEM.md`. Describes the 5 critical screens for v1. Implementation will match these.
 
@@ -6,7 +6,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ [logo] AI Org OS  · Acme Corp ▾  · TechCo ▾ (disabled, v2)   [theme] [?] │  ← top bar
+│ [logo] Vuno  · Acme Corp ▾  · TechCo ▾ (disabled, v2)   [theme] [?] │  ← top bar
 ├────────────┬─────────────────────────────────────────────────┬───────────┤
 │            │                                                 │           │
 │  CHANNELS  │                                                 │  CONTEXT  │

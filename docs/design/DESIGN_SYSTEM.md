@@ -1,44 +1,49 @@
-# AI Organization OS — Design System
+# Vuno — Design System
 
-> Sleek, dark-capable, refined. The chat surface is dense but calm; the ledger view is the distinctive surface that should feel "unlike anything else."
+> Warm, sleek, refined — inspired by Buzz from Block (block.xyz). The chat surface is dense but calm; the ledger view is the distinctive surface that should feel "unlike anything else."
 
 ## 1. Aesthetic principle
 
-**Dense information, calm presentation.** This is a product where users see channels, threads, decision pages, ledger rows, gate status checks, agent cards, and event timelines — often simultaneously. Density is unavoidable. The job of the design system is to make density feel calm.
+**Dense information, calm presentation.** Inspired by Buzz from Block: warm cream backgrounds, mustard/gold accents, charcoal text — NOT cold blue/emerald. The product should feel like a "living room" for engineering teams, not a "dashboard."
 
-- **Restraint over decoration.** One accent color. No gradients on chrome. No skeuomorphic shadows. Subtle elevation only.
+- **Restraint over decoration.** One accent color (mustard/gold). No gradients on chrome. No skeuomorphic shadows. Subtle elevation only.
 - **Type does the heavy lifting.** Hierarchy via size, weight, and color — not via containers.
 - **Status is first-class.** The product's epistemic states (`asserted / believed / tested / falsified / uncertain`) and gate states (`passed / blocked / pending`) are visually distinct, not just labeled.
 - **Provenance is visible.** Every claim, every decision, every gate references its source. The UI shows the chain, not just the result.
 
 ## 2. Color palette
 
-**Base scale (dark mode primary):**
-- `--background`: oklch(0.13 0.005 250) — near-black with the faintest blue undertone (charcoal, not pure black)
-- `--foreground`: oklch(0.96 0 0) — off-white
-- `--card`: oklch(0.16 0.006 250) — one step up from background
-- `--card-foreground`: oklch(0.96 0 0)
-- `--popover`: oklch(0.18 0.006 250)
-- `--muted`: oklch(0.20 0.005 250)
-- `--muted-foreground`: oklch(0.66 0.01 250) — readable secondary text
-- `--border`: oklch(0.25 0.005 250 / 60%) — subtle, low-contrast
-- `--input`: oklch(0.22 0.005 250)
+**Base scale (light mode primary — Buzz-inspired warm cream):**
+- `--background`: oklch(0.98 0.006 85) — warm off-white/cream
+- `--foreground`: oklch(0.18 0.006 60) — warm dark charcoal
+- `--card`: oklch(1 0.003 85) — pure white
+- `--card-foreground`: oklch(0.18 0.006 60)
+- `--popover`: oklch(1 0.003 85)
+- `--muted`: oklch(0.94 0.012 85) — warm muted
+- `--muted-foreground`: oklch(0.48 0.01 60) — warm grey secondary text
+- `--border`: oklch(0.88 0.008 60 / 50%) — subtle warm border
+- `--input`: oklch(0.92 0.012 85)
 
-**Accent — emerald (single restrained accent):**
-- `--primary`: oklch(0.70 0.14 165) — refined emerald, not neon
-- `--primary-foreground`: oklch(0.13 0.005 250) — dark text on emerald
-- `--ring`: oklch(0.70 0.14 165 / 40%) — focus ring
+**Accent — mustard/gold (Buzz-inspired, replaces emerald):**
+- `--primary`: oklch(0.52 0.13 70) — muted gold/mustard (darkened for WCAG AA)
+- `--primary-foreground`: oklch(0.99 0.003 85) — light text on gold
+- `--ring`: oklch(0.52 0.13 70 / 40%) — focus ring
+
+**Dark mode (warm dark — NOT cold blue-black):**
+- `--background`: oklch(0.15 0.008 60) — warm charcoal
+- `--foreground`: oklch(0.94 0.008 80) — warm off-white
+- `--primary`: oklch(0.70 0.14 75) — brighter gold for dark
 
 **Semantic — claim status (the load-bearing color system):**
-- `--status-asserted`: oklch(0.70 0.13 60) — amber (unverified, neutral caution)
-- `--status-believed`: oklch(0.70 0.14 200) — sky (provisionally accepted)
-- `--status-tested`: oklch(0.70 0.14 165) — emerald (verified by experiment)
-- `--status-falsified`: oklch(0.65 0.20 25) — red-orange (refuted by evidence)
-- `--status-uncertain`: oklch(0.66 0.02 250) — gray (needs investigation)
+- `--status-asserted`: oklch(0.55 0.13 60) — amber (unverified, neutral caution)
+- `--status-believed`: oklch(0.50 0.13 230) — sky (provisionally accepted — cool contrast with warm bg)
+- `--status-tested`: oklch(0.50 0.12 145) — warm green (verified by experiment)
+- `--status-falsified`: oklch(0.50 0.20 25) — warm red-orange (refuted by evidence)
+- `--status-uncertain`: oklch(0.45 0.01 60) — warm grey (needs investigation)
 
 **Semantic — gate / debate state:**
-- `--gate-passed`: emerald (matches `--status-tested`)
-- `--gate-blocked`: red-orange (matches `--status-falsified`)
+- `--gate-passed`: warm green (matches `--status-tested`)
+- `--gate-blocked`: warm red-orange (matches `--status-falsified`)
 - `--gate-pending`: amber (matches `--status-asserted`)
 
 **Light mode:** Same palette, inverted L values. Background goes to oklch(0.99 0 0), foreground to oklch(0.15 0.005 250), etc. The accent emerald stays the same.
