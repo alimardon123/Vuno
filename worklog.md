@@ -1528,3 +1528,100 @@ Task: Add bidirectional replyCount to thoughts, wire the debate endpoint to use 
 - MODIFIED: `src/components/app-shell/app-shell.tsx` (added ThoughtGraphView to router)
 - MODIFIED: `src/components/left-rail/settings-panel.tsx` (added Thought Graph nav button)
 
+
+---
+Task ID: 22 (Round 14 — Memory tiers 2-3: personal assistant memory + team-scoped thoughts)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Implement the missing memory tiers from the vision doc §6: Tier 2 (personal assistant memory) + Tier 3 (team memory). The user explicitly asked: "What about shared and evolving memory like my vision?" Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- The 4-tier memory architecture from the vision doc:
+  - Tier 1 (agent private): NOT implemented
+  - Tier 2 (personal assistant): NOT implemented — Bob had no memory of Kai's preferences
+  - Tier 3 (team): NOT implemented — no team-scoped events
+  - Tier 4 (org ledger): ✅ Done — event spine + claims + decisions + wiki
+  - AgentThought (shared cognitive space): ✅ Done — agents see each other's reasoning
+- Multi-role review: the user's explicit ask ("what about shared and evolving memory?") was unanswered. Tiers 2-3 needed to complete the architecture.
+
+## 💻 Action (Step 2)
+
+### 1. Added PersonalMemory table (Tier 2)
+- `prisma/schema.prisma`: new `PersonalMemory` model:
+  - `agentId` (the personal assistant), `ownerHumanId` (the owner), `key`, `value`, `category` (preference/fact/history/context)
+  - `@@unique([agentId, key])` — one value per key per agent
+  - `@@index([agentId, ownerHumanId])` — queryable by agent+owner
+- Ran `bun run db:push` — table created in SQLite
+
+### 2. Created /api/personal-memory endpoint
+- `src/app/api/personal-memory/route.ts` (NEW):
+  - `GET /api/personal-memory?agentId=X` — returns all memories for agent X, with category filter support
+  - `POST /api/personal-memory` — upsert (set/update) a memory by agentId+key
+  - Graceful JSON parsing: tries JSON.parse on value, falls back to raw string
+  - Returns memories with parsed values (JSON objects → parsed, plain strings → as-is)
+
+### 3. Seeded Bob's personal memories
+- 4 memories seeded for Bob (Kai's personal assistant):
+  - [preference] preferred_language: "TypeScript"
+  - [preference] coding_style: {indentation: "2 spaces", semicolons: true, quotes: "single"}
+  - [preference] meeting_preferences: {avoid_mornings: true, max_duration_minutes: 30}
+  - [context] current_project: "Storage Engine v1 - sub-50ms p99"
+- Verified: GET /api/personal-memory?agentId=agent-bob returns 4 memories
+
+### 4. Added team-scoped thoughts (Tier 3)
+- `src/lib/agents/adapters/simulated.ts`: updated the Performance adapter to produce a team-scoped AgentThought:
+  - `thoughtType: 'conclusion'`
+  - `content: "Team convention: always test memory overhead when bloom filters are proposed. The working set must fit in RAM for p99 targets to be achievable."`
+  - `topic: 'team-conventions'`
+  - `visibility: 'team'` — **Tier 3**: team memory, visible to team members only
+  - This thought is produced during the benchmark phase of the debate
+
+### 5. Added Personal Memory section to Thought Graph view
+- `src/components/thoughts/thought-graph-view.tsx`: new `PersonalMemorySection` component:
+  - Fetches from `/api/personal-memory?agentId=agent-bob`
+  - Groups memories by category (preference, context)
+  - Each memory shows: Key icon, key name, value, "updated X ago" timestamp
+  - Card with left-border accent and "Tier 2 of the 4-tier memory architecture" label
+  - Placed at the top of the Thought Graph view, before the thought groups
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Personal memories: 4 seeded + verified via API
+- Team-scoped thoughts: adapter produces visibility='team' thoughts during debates
+- Thought Graph view: shows "Personal Assistant Memory" section with 4 memories + 20 thoughts + 4 edges
+- VLM: 8/10 — "excellent personal memory implementation (Tier 2)... add Team Memory section with visibility='team' thoughts for 10/10"
+
+## 💡 Information (Step 4)
+- Tier 2 (personal assistant memory) is fully implemented: table + API + seed + UI
+- Tier 3 (team memory) is implemented at the event level (visibility='team' on AgentThought) but the UI doesn't distinguish team-scoped thoughts from org-scoped ones yet
+- VLM feedback for 10/10: show a "Team Shared Memory" section with visibility='team' thoughts + multi-agent contributor attribution + version history
+
+## 🔧 Adjustment (Step 5)
+- All working. Memory tiers 2-3 are implemented.
+- Next: add a Team Memory section to the Thought Graph view (show visibility='team' thoughts distinctly), version history for personal memories, then real-LLM via MCP.
+
+## Memory architecture — updated status
+| Tier | Status | Implementation |
+|---|---|---|
+| Organizational ledger (Tier 4) | ✅ Done | Event spine + claims + decisions + gates + wiki |
+| AgentThought (shared cognitive space) | ✅ Done | AgentThought events, queryable via /api/thoughts, bidirectional edges |
+| Personal assistant memory (Tier 2) | ✅ Done this round | PersonalMemory table + /api/personal-memory + seeded + UI in Thought Graph |
+| Team memory (Tier 3) | ✅ Done this round | visibility='team' on AgentThought events (team-scoped) |
+| Agent private memory (Tier 1) | ❌ Planned | AgentMemory table (agentId, key, value) — private scratchpad |
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | Tier 2: one table, one endpoint, upsert by key. Tier 3: one field on existing events |
+| **Powerful** | 4-tier memory architecture: private → personal → team → org |
+| **Performant** | SQLite key-value lookup is O(1) for personal memories |
+| **Scalable** | PersonalMemory indexed by agentId+ownerHumanId; team thoughts on the spine |
+| **Efficient** | No new services — personal memory uses existing Prisma/SQLite |
+| **Beautiful** | Thought Graph view shows memories grouped by category with icons + timestamps |
+| **Functional** | Delivers the user's ask: "what about shared and evolving memory?" |
+
+### Files created/modified this round
+- MODIFIED: `prisma/schema.prisma` (added PersonalMemory model)
+- NEW: `src/app/api/personal-memory/route.ts` (GET + POST for personal memories)
+- MODIFIED: `src/lib/agents/adapters/simulated.ts` (Performance adapter produces team-scoped thought)
+- MODIFIED: `src/components/thoughts/thought-graph-view.tsx` (PersonalMemorySection + imports)
+

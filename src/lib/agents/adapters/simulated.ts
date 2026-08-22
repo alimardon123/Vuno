@@ -427,7 +427,24 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
             meta: { samples: '10000', duration: '30s', result: 'FAIL' },
           },
         };
-        return { events: [completed, benchmark, sharedReport, chatEvent], claims: [] };
+        // Team-scoped thought (Tier 3 memory) — visible to Performance team
+        // members only. This is a team convention: "always test memory overhead
+        // when bloom filters are proposed."
+        const teamThought: NewEventInput<'AgentThought'> = {
+          type: 'AgentThought',
+          actorType: 'agent',
+          actorAgentId: this.manifest.id,
+          scopeType: 'channel',
+          scopeId: 'ch-storage',
+          payload: {
+            thoughtType: 'conclusion',
+            content: 'Team convention: always test memory overhead when bloom filters are proposed. The working set must fit in RAM for p99 targets to be achievable.',
+            topic: 'team-conventions',
+            relatedEventId: expEvent.id,
+            visibility: 'team', // TIER 3 — team memory, visible to team members only
+          },
+        };
+        return { events: [completed, benchmark, sharedReport, teamThought, chatEvent], claims: [] };
       },
     };
   }

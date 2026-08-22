@@ -333,3 +333,33 @@ model Gate {
   @@index([orgId, projectId, state])
   @@index([decisionId])
 }
+
+// ─── Personal Assistant Memory (Tier 2) ──────────────────────────────────────
+// Per the vision doc §6: "Personal assistant: Owner's files, history,
+// preferences. Visible to owner only."
+// Bob (Kai's personal assistant) accumulates Kai's preferences over time.
+// Key-value store per agent+owner. Queryable by the agent for context.
+model PersonalMemory {
+  id            String   @id @default(cuid())
+  tenantId      String
+  orgId         String
+  agentId       String   // the personal assistant agent
+  ownerHumanId  String   // the owner (human)
+  key           String   // e.g. "preferred_language", "coding_style", "meeting_preferences"
+  value         String   // the stored value (JSON or plain text)
+  category      String   @default("preference") // "preference" | "fact" | "history" | "context"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([agentId, key])
+  @@index([agentId, ownerHumanId])
+  @@index([orgId, agentId])
+}
+
+// ─── Team Memory (Tier 3) ────────────────────────────────────────────────────
+// Per the vision doc §6: "Team: Team conventions, in-flight work, local
+// decisions. Visible to team members."
+// Implemented as team-scoped AgentThought events with visibility='team' on
+// the event spine — no new table needed. The /api/thoughts endpoint filters
+// by visibility. See ADR-0005 for the event-based memory architecture.
+

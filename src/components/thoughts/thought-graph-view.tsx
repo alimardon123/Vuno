@@ -29,6 +29,8 @@ import {
   ArrowDown,
   Reply,
   Sparkles,
+  Database,
+  Key,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useMemo } from 'react';
@@ -140,6 +142,10 @@ export function ThoughtGraphView() {
 
       <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
+          {/* Personal Assistant Memory (Tier 2) */}
+          <PersonalMemorySection />
+
+          {/* Thought groups */}
           {grouped.map(([topic, topicThoughts]) => (
             <Card key={topic} className="overflow-hidden">
               <CardHeader className="pb-2">
@@ -216,5 +222,85 @@ export function ThoughtGraphView() {
         </div>
       </ScrollArea>
     </div>
+  );
+}
+
+// ─── Personal Assistant Memory section (Tier 2) ───────────────────────────────
+interface PersonalMemory {
+  id: string;
+  agentId: string;
+  ownerHumanId: string;
+  key: string;
+  value: string | Record<string, unknown>;
+  category: string;
+  updatedAt: string;
+}
+
+function PersonalMemorySection() {
+  // Fetch personal memories for Bob (the seeded personal assistant)
+  const res = useFetch<{ memories: PersonalMemory[]; count: number }>(
+    '/api/personal-memory?agentId=agent-bob',
+    { intervalMs: 30000 },
+  );
+
+  const memories = res.data?.memories ?? [];
+
+  // Group by category (before early return to satisfy rules-of-hooks)
+  const grouped = useMemo(() => {
+    const groups = new Map<string, PersonalMemory[]>();
+    for (const m of memories) {
+      const key = m.category || 'other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(m);
+    }
+    return Array.from(groups.entries());
+  }, [memories]);
+
+  if (memories.length === 0) return null;
+
+  return (
+    <Card className="border-l-2 border-l-primary/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Database className="size-4 text-primary" aria-hidden />
+          Personal Assistant Memory
+          <Badge variant="secondary" className="px-1.5 py-0 text-[0.625rem]">
+            {memories.length} memories
+          </Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Bob&apos;s accumulated knowledge about Kai — preferences, context, history.
+          Visible to owner only (Tier 2 of the 4-tier memory architecture).
+        </p>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {grouped.map(([category, items]) => (
+          <div key={category}>
+            <div className="mb-1 text-[0.5625rem] uppercase tracking-widest text-muted-foreground/70">
+              {category}
+            </div>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {items.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-start gap-2 rounded-md border border-border/40 bg-card/30 px-3 py-2 transition-colors hover:bg-card/60"
+                >
+                  <Key className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-xs font-medium text-foreground/90">{m.key}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {typeof m.value === 'object' ? JSON.stringify(m.value) : String(m.value)}
+                    </span>
+                    <span className="text-[0.5625rem] text-muted-foreground/60">
+                      updated {formatDistanceToNow(new Date(m.updatedAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
