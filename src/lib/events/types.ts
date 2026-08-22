@@ -27,7 +27,8 @@ export type EventType =
   | 'AgentRetired'
   | 'WikiSectionAuthored'
   | 'AgentThought'
-  | 'SharedItem';
+  | 'SharedItem'
+  | 'ReactionAdded';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -180,13 +181,17 @@ export interface EventPayloadMap {
   };
   SharedItem: {
     itemType: 'file' | 'report' | 'url' | 'image' | 'code' | 'data';
-    title: string;                       // name of the shared item
-    description?: string;                // what it is / why it's shared
-    url?: string;                        // for URLs and linkable items
-    content?: string;                    // inline content (code, report text, data)
-    fileName?: string;                  // for file attachments
-    mimeType?: string;                   // for files (pdf, png, json, etc.)
-    meta?: Record<string, string>;       // arbitrary metadata (e.g., {lines: "247", size: "1.2MB"})
+    title: string;
+    description?: string;
+    url?: string;
+    content?: string;
+    fileName?: string;
+    mimeType?: string;
+    meta?: Record<string, string>;
+  };
+  ReactionAdded: {
+    emoji: string;           // e.g. "👍", "❤️", "🚀"
+    targetEventId: string;   // which message this reaction is on
   };
 }
 

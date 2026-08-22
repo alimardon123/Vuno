@@ -311,6 +311,39 @@ async fn health_handler() -> Json<serde_json::Value> {
     }))
 }
 
+// ─── Concurrent agent runtime demo ───────────────────────────────────────────
+// Demonstrates tokio::join_all — multiple agents invoked in parallel.
+// Per the user's vision: "agents debating in real time concurrently."
+// This is the Rust-side foundation for the concurrent agent runtime.
+async fn concurrent_demo_handler() -> Json<serde_json::Value> {
+    // Simulate 4 agents running concurrently with tokio::join_all
+    let agent_tasks: Vec<_> = (0..4).map(|i| {
+        async move {
+            let agent_names = ["architect", "security", "devils_advocate", "perf"];
+            let name = agent_names[i];
+            // Simulate "thinking" delay
+            tokio::time::sleep(std::time::Duration::from_millis((100 + i * 50) as u64)).await;
+            serde_json::json!({
+                "agent": name,
+                "status": "completed",
+                "duration_ms": 100 + i * 50,
+                "response": format!("{} processed the trigger concurrently", name),
+            })
+        }
+    }).collect();
+
+    let results = futures::future::join_all(agent_tasks).await;
+
+    Json(serde_json::json!({
+        "ok": true,
+        "concurrent": true,
+        "runtime": "tokio",
+        "agent_count": results.len(),
+        "results": results,
+        "message": "4 agents ran concurrently via tokio::join_all — this is the Rust foundation for concurrent agent debate.",
+    }))
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 fn main() {
@@ -334,13 +367,14 @@ fn main() {
         .route("/health", get(health_handler))
         .route("/events", post(append_handler))
         .route("/events/replay", get(replay_handler))
+        .route("/concurrent", get(concurrent_demo_handler))
         .layer(CorsLayer::very_permissive())
         .with_state(state);
 
     let addr = format!("0.0.0.0:{PORT}");
     info!("[substrate] Vuno Rust substrate service starting on port {PORT}");
     info!("[substrate] DB: {DB_PATH}");
-    info!("[substrate] Endpoints: POST /events (append), GET /events/replay (replay), GET /health");
+    info!("[substrate] Endpoints: POST /events (append), GET /events/replay (replay), GET /health, GET /concurrent (tokio::join_all demo)");
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {

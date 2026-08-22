@@ -146,6 +146,23 @@ export function MessageBubble({
   });
   const timeTitle = format(new Date(message.createdAt), 'PPpp');
 
+  // Post a reaction (emoji) to this message
+  const postReaction = async (emoji: string) => {
+    try {
+      await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ReactionAdded',
+          payload: { emoji, targetEventId: message.id },
+          channelId: message.scopeType === 'channel' ? message.scopeId : undefined,
+        }),
+      });
+    } catch (e) {
+      console.error('[reaction] failed:', e);
+    }
+  };
+
   return (
     <article
       className={cn(
@@ -175,9 +192,27 @@ export function MessageBubble({
           className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label="React"
           title="React"
+          onClick={() => {
+            // Post a thumbs-up reaction
+            void postReaction('👍');
+          }}
         >
           <SmilePlus className="size-3" aria-hidden />
         </button>
+        {/* Quick reactions */}
+        <div className="flex gap-0.5">
+          {['👍', '❤️', '🚀', '⚠️'].map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              className="rounded p-0.5 text-xs hover:bg-accent"
+              onClick={() => void postReaction(emoji)}
+              aria-label={`React with ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="mt-0.5">
         <MemberAvatar
@@ -777,6 +812,26 @@ function MessageBody({
               ) : null}
             </div>
           </div>
+        </div>
+      );
+    }
+
+    case 'ReactionAdded': {
+      const r = p as EventPayloadMap['ReactionAdded'];
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="text-base">{r.emoji}</span>
+          <span>reacted to <span className="font-mono text-foreground/60">{r.targetEventId.slice(0, 12)}…</span></span>
+        </div>
+      );
+    }
+
+    case 'ThreadReplyPosted': {
+      const t = p as EventPayloadMap['ThreadReplyPosted'];
+      return (
+        <div className="flex flex-col gap-1 border-l-2 border-border/40 pl-3">
+          <span className="text-[0.5625rem] uppercase tracking-widest text-muted-foreground/60">reply</span>
+          <p className="text-sm leading-relaxed text-foreground">{t.body}</p>
         </div>
       );
     }

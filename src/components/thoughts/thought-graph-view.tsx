@@ -483,13 +483,65 @@ function TopologyView({
   const nodeRadius = 24;
   const svgWidth = 600;
   const svgHeight = Math.max(orgThoughts.length * nodeSpacing + 40, 200);
-  const positions = new Map<string, { x: number; y: number }>();
-  orgThoughts.forEach((t, i) => {
-    const hasOutgoing = !!t.relatedThoughtId;
-    const hasIncoming = t.replyCount > 0;
-    const xOffset = hasOutgoing && hasIncoming ? 350 : hasOutgoing ? 400 : 200;
-    positions.set(t.id, { x: xOffset + (i % 3) * 20, y: 40 + i * nodeSpacing });
-  });
+  // Simple force-directed layout: nodes repel each other, edges pull connected nodes together
+  const positions = useMemo(() => {
+    const pos = new Map<string, { x: number; y: number }>();
+    const centerX = 300;
+    // Initial positions: spread in a circle
+    orgThoughts.forEach((t, i) => {
+      const angle = (i / orgThoughts.length) * Math.PI * 2;
+      const radius = 120 + (i % 3) * 40;
+      pos.set(t.id, {
+        x: centerX + Math.cos(angle) * radius + (Math.random() - 0.5) * 20,
+        y: 120 + Math.sin(angle) * radius + i * 15,
+      });
+    });
+    // Run 50 iterations of force simulation
+    for (let iter = 0; iter < 50; iter++) {
+      const forces = new Map<string, { x: number; y: number }>();
+      orgThoughts.forEach((t) => forces.set(t.id, { x: 0, y: 0 }));
+      // Repulsion: all nodes repel each other
+      for (let i = 0; i < orgThoughts.length; i++) {
+        for (let j = i + 1; j < orgThoughts.length; j++) {
+          const a = pos.get(orgThoughts[i].id)!;
+          const b = pos.get(orgThoughts[j].id)!;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+          const force = 800 / (dist * dist);
+          forces.get(orgThoughts[i].id)!.x += (dx / dist) * force;
+          forces.get(orgThoughts[i].id)!.y += (dy / dist) * force;
+          forces.get(orgThoughts[j].id)!.x -= (dx / dist) * force;
+          forces.get(orgThoughts[j].id)!.y -= (dy / dist) * force;
+        }
+      }
+      // Attraction: edges pull connected nodes together
+      for (const edge of edges) {
+        const a = pos.get(edge.from);
+        const b = pos.get(edge.to);
+        if (!a || !b) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+        const force = (dist - 100) * 0.05;
+        forces.get(edge.from)!.x += (dx / dist) * force;
+        forces.get(edge.from)!.y += (dy / dist) * force;
+        forces.get(edge.to)!.x -= (dx / dist) * force;
+        forces.get(edge.to)!.y -= (dy / dist) * force;
+      }
+      // Apply forces with damping
+      for (const t of orgThoughts) {
+        const p = pos.get(t.id)!;
+        const f = forces.get(t.id)!;
+        p.x += Math.max(-20, Math.min(20, f.x * 0.1));
+        p.y += Math.max(-20, Math.min(20, f.y * 0.1));
+        // Keep within bounds
+        p.x = Math.max(nodeRadius + 10, Math.min(svgWidth - nodeRadius - 10, p.x));
+        p.y = Math.max(nodeRadius + 10, Math.min(svgHeight - nodeRadius - 10, p.y));
+      }
+    }
+    return pos;
+  }, [orgThoughts, edges, nodeRadius, svgWidth, svgHeight]);
   // Highlight edges connected to the hovered/selected node
   const activeNode = hoveredNode ?? selectedNode;
   const isEdgeActive = (edge: { from: string; to: string }) =>

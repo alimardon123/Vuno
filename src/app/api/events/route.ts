@@ -98,6 +98,8 @@ const ALLOWED_TYPES = new Set([
   'RiskFlagged',
   'AgentThought',
   'SharedItem',
+  'ReactionAdded',
+  'ThreadReplyPosted',
 ]);
 
 interface PostBody {
