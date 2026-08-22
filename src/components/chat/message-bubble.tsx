@@ -652,9 +652,6 @@ function MessageBody({
 
     case 'AgentThought': {
       const t = p as EventPayloadMap['AgentThought'];
-      // AgentThought events render with a subtle, italic style —
-      // distinguishable from regular messages. Shows the reasoning
-      // behind each agent action. The thought type gets a small pill.
       const thoughtColor =
         t.thoughtType === 'doubt' ? 'var(--status-asserted)' :
         t.thoughtType === 'question' ? 'var(--status-uncertain)' :
@@ -675,9 +672,16 @@ function MessageBody({
           >
             {t.thoughtType}
           </span>
-          <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
-            {t.content}
-          </p>
+          <div className="flex-1">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {t.content}
+            </p>
+            {t.relatedThoughtId ? (
+              <p className="mt-0.5 text-[0.625rem] not-italic text-muted-foreground/60">
+                ↳ replying to: <span className="font-mono">{t.relatedThoughtId.slice(0, 12)}…</span>
+              </p>
+            ) : null}
+          </div>
         </div>
       );
     }

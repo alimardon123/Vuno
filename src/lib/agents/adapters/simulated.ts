@@ -234,6 +234,15 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
         // AgentThought events — the devil's advocate reasons aloud.
         // Other agents (especially Peri) can see these thoughts and use them
         // to inform their own responses.
+        // GRAPH EDGES: the devil's advocate references the architect's conclusion
+        // thought using relatedThoughtId — this creates a cognitive web where
+        // thoughts link to each other, not just to events.
+        const architectConclusion = ctx.events.find(
+          (e) => e.type === 'AgentThought' &&
+          (e.payload as { thoughtType?: string }).thoughtType === 'conclusion'
+        );
+        const architectConclusionId = architectConclusion?.id;
+
         const thoughts: NewEventInput[] = [
           {
             type: 'AgentThought',
@@ -246,6 +255,7 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
               content: thoughtContent,
               topic: 'bloom-filters',
               relatedEventId: proposalEvent.id,
+              relatedThoughtId: architectConclusionId,  // GRAPH EDGE → architect's conclusion
               visibility: 'org',
             },
           },
@@ -260,6 +270,7 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
               content: 'I should raise this as an objection — the memory/performance tradeoff is unverified. Peri should benchmark this.',
               topic: 'bloom-filters',
               relatedEventId: proposalEvent.id,
+              relatedThoughtId: architectConclusionId,  // GRAPH EDGE → architect's conclusion
               visibility: 'org',
             },
           },

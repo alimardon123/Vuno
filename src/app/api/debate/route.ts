@@ -224,10 +224,14 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     // ─── Phase 3: Security + DevilsAdvocate review IN PARALLEL ───────────────
     // These two agents wake in parallel — they both respond to ProposalOpened
     // independently, like real colleagues seeing a Slack message and replying.
+    // We pass ALL created events (including the architect's AgentThought events)
+    // as context so downstream agents can see each other's reasoning and
+    // reference thoughts using relatedThoughtId (memory graph edges).
     await sleep(300);
+    const allContextEvents = [...proposalCreated, proposalEventRecord!].filter(Boolean);
     const [securityCreated, devilsCreated] = await Promise.all([
-      invokeAndStream(security.id, 'ProposalOpened', proposalEventRecord!.payload, [proposalEventRecord!], security.name),
-      invokeAndStream(devilsAdvocate.id, 'ProposalOpened', proposalEventRecord!.payload, [proposalEventRecord!], devilsAdvocate.name),
+      invokeAndStream(security.id, 'ProposalOpened', proposalEventRecord!.payload, allContextEvents, security.name),
+      invokeAndStream(devilsAdvocate.id, 'ProposalOpened', proposalEventRecord!.payload, allContextEvents, devilsAdvocate.name),
     ]);
 
     // Find the ObjectionRaised event from the devil's advocate
@@ -240,7 +244,8 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     let experimentEventRecord: EventRecord | null = null;
     if (objectionEventRecord) {
       await sleep(300);
-      const expCreated = await invokeAndStream(perf.id, 'ObjectionRaised', objectionEventRecord.payload, [objectionEventRecord], perf.name);
+      const perfContext = [...allContextEvents, ...devilsCreated, objectionEventRecord].filter(Boolean);
+      const expCreated = await invokeAndStream(perf.id, 'ObjectionRaised', objectionEventRecord.payload, perfContext, perf.name);
       experimentEventRecord = expCreated.find((e) => e.type === 'ExperimentRequested') ?? null;
     }
 

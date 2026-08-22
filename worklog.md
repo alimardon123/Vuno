@@ -1320,3 +1320,64 @@ Task: Add the ability for agents to send files, reports, URLs, etc. in chats and
 - MODIFIED: `src/lib/agents/adapters/simulated.ts` (architect shares prior-art URL, perf shares benchmark report)
 - MODIFIED: `src/app/api/events/route.ts` (added SharedItem to allowed types)
 
+
+---
+Task ID: 19 (Round 11 — Thought-to-thought graph edges + fix task-runner failures)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Implement thought-to-thought graph edges (relatedThoughtId), fix the "Failure" status on the user's task runner (caused by Bash timeouts). Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- User screenshot showed "Failure" on the task runner — this is the Z.ai Code platform's own execution view, not Vuno. The failures were from Bash commands exceeding the 30s timeout (especially `agent-browser open` + `sleep 25` + `agent-browser eval` combinations).
+- VLM from Round 7 said: "The AgentThought schema is the right primitive. Now give those thoughts edges."
+- The `relatedThoughtId` field exists in the AgentThought payload but wasn't being used by the adapters.
+
+## 💻 Action (Step 2)
+
+### 1. Fixed the "Failure" status issue
+- Root cause: Bash commands exceeding the 30s default timeout
+- Fix: using `nohup` for server starts, splitting long sleeps into separate calls, using `timeout: 60000` for long operations
+- This is an approach fix, not a code change — I'll use proper timeouts going forward
+
+### 2. Thought-to-thought graph edges
+- `src/app/api/debate/route.ts`: updated Phase 3 (Security + DevilsAdvocate review) to pass ALL created events (including the architect's AgentThought events) as context to downstream agents — `allContextEvents = [...proposalCreated, proposalEventRecord!]`. This lets downstream agents SEE the architect's thoughts and reference them.
+- `src/app/api/debate/route.ts`: updated Phase 4 (Perf experiment request) to also receive the Devil's Advocate's created events as context — `perfContext = [...allContextEvents, ...devilsCreated, objectionEventRecord]`
+- `src/lib/agents/adapters/simulated.ts`: updated the Devil's Advocate adapter:
+  - Finds the Architect's conclusion thought in `ctx.events` (by filtering for `type === 'AgentThought'` and `thoughtType === 'conclusion'`)
+  - Uses the architect's thought ID as `relatedThoughtId` in the Devil's Advocate's own thoughts (observation + doubt)
+  - This creates graph EDGES: Devi's thoughts → reference → Aris's conclusion
+- `src/components/chat/message-bubble.tsx`: updated the AgentThought rendering:
+  - Shows "↳ replying to: cmt4rkaph000d…" when a thought has a `relatedThoughtId`
+  - The reference ID is truncated to 12 chars for readability
+  - This makes the graph edge visible in the chat UI
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Verified via API: 15 total thoughts, 2 with graph edges — Devi's observation and doubt both link to Aris's conclusion thought
+- Verified in chat: "2 thoughts with graph edges found" — the "↳ replying to" indicator renders
+- VLM: 9/10 — "transforms memory from a flat log into a navigable knowledge graph. This is how LLM agent systems should handle context—not as streams, but as structured argumentation graphs."
+
+## 💡 Information (Step 4)
+- The thought-to-thought edges create a cognitive web where thoughts link to each other
+- The Devil's Advocate references the Architect's conclusion — this preserves the adversarial relationship in the graph structure
+- VLM suggestion for 10/10: add reverse edges (Aris's thought should show "2 replies" badge) — planned for next round
+
+## 🔧 Adjustment (Step 5)
+- All working. The memory graph is now relational (thoughts link to each other, not just to events).
+- Next: bidirectional edge indicators, argument graph visualization, memory tiers 2-3.
+
+## Design principles assessment
+| Principle | How |
+|---|---|
+| **Simple** | One field (`relatedThoughtId`) creates the graph edge — no new storage |
+| **Powerful** | Thoughts form a navigable knowledge graph, not just a flat log |
+| **Performant** | Edge creation is just setting a field — zero overhead |
+| **Scalable** | Any number of thought-to-thought edges |
+| **Efficient** | No extra queries needed — edges are in the existing event payload |
+| **Beautiful** | "↳ replying to: ..." indicator makes the edge visible without cluttering |
+| **Functional** | Delivers the VLM's recommendation: "give those thoughts edges" |
+
+### Files modified this round
+- MODIFIED: `src/app/api/debate/route.ts` (pass all context events to downstream agents)
+- MODIFIED: `src/lib/agents/adapters/simulated.ts` (Devil's Advocate references Architect's conclusion thought via relatedThoughtId)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (AgentThought rendering: "↳ replying to" indicator)
+
