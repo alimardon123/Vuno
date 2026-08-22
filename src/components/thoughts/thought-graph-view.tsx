@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MemberAvatar } from '@/components/common/agent-avatar';
+import { cn } from '@/lib/utils';
 import {
   Brain,
   ArrowRight,
@@ -33,9 +34,11 @@ import {
   Key,
   Lock,
   Users,
+  Network,
+  List,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 interface Thought {
   id: string;
@@ -77,6 +80,7 @@ export function ThoughtGraphView() {
   );
 
   const thoughts = res.data?.thoughts ?? [];
+  const [viewMode, setViewMode] = useState<'timeline' | 'topology'>('timeline');
 
   // Group thoughts by topic (each topic = one debate/reasoning chain)
   const grouped = useMemo(() => {
@@ -139,14 +143,44 @@ export function ThoughtGraphView() {
             <Sparkles className="size-3" aria-hidden />
             Generated from the event spine
           </span>
+          {/* View toggle: Timeline vs Topology */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode('timeline')}
+              className={cn(
+                'flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors',
+                viewMode === 'timeline' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <List className="size-3" aria-hidden />
+              Timeline
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('topology')}
+              className={cn(
+                'flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors',
+                viewMode === 'topology' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Network className="size-3" aria-hidden />
+              Topology
+            </button>
+          </div>
         </div>
       </header>
 
       <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
-          {/* Memory architecture — all 4 tiers */}
+          {/* Memory architecture — always shown regardless of view mode */}
           <AgentPrivateMemorySection />
           <PersonalMemorySection />
+
+          {viewMode === 'topology' ? (
+            <TopologyView thoughts={thoughts} thoughtById={thoughtById} />
+          ) : (
+            <>
           {/* Team Memory (Tier 3) — thoughts with visibility='team' */}
           {thoughts.some((t) => (t as { visibility?: string }).visibility === 'team') ? (
             <Card className="border-l-2 border-l-[var(--status-believed)]/40">
@@ -265,6 +299,8 @@ export function ThoughtGraphView() {
               </CardContent>
             </Card>
           ))}
+            </>
+          )}
         </div>
       </ScrollArea>
     </div>
@@ -424,6 +460,95 @@ function AgentPrivateMemorySection() {
             </div>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Topology View — SVG-based node-link diagram ──────────────────────────────
+function TopologyView({
+  thoughts,
+  thoughtById,
+}: {
+  thoughts: Thought[];
+  thoughtById: Map<string, Thought>;
+}) {
+  const orgThoughts = thoughts.filter((t) => t.visibility !== 'team' && t.visibility !== 'agent');
+  const edges = orgThoughts
+    .filter((t) => t.relatedThoughtId && thoughtById.has(t.relatedThoughtId))
+    .map((t) => ({ from: t.relatedThoughtId!, to: t.id }));
+  const nodeSpacing = 80;
+  const nodeRadius = 24;
+  const svgWidth = 600;
+  const svgHeight = Math.max(orgThoughts.length * nodeSpacing + 40, 200);
+  const positions = new Map<string, { x: number; y: number }>();
+  orgThoughts.forEach((t, i) => {
+    const hasOutgoing = !!t.relatedThoughtId;
+    const hasIncoming = t.replyCount > 0;
+    const xOffset = hasOutgoing && hasIncoming ? 350 : hasOutgoing ? 400 : 200;
+    positions.set(t.id, { x: xOffset + (i % 3) * 20, y: 40 + i * nodeSpacing });
+  });
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Network className="size-4 text-primary" aria-hidden />
+          Thought Topology
+          <Badge variant="secondary" className="px-1.5 py-0 text-[0.625rem]">
+            {orgThoughts.length} nodes · {edges.length} edges
+          </Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Structural view — circles = thoughts (colored by type), lines = graph edges.
+        </p>
+      </CardHeader>
+      <CardContent className="overflow-x-auto scrollbar-sleek">
+        <svg width={svgWidth} height={svgHeight} className="min-w-full" role="img" aria-label="Thought topology graph">
+          {edges.map((edge, i) => {
+            const from = positions.get(edge.from);
+            const to = positions.get(edge.to);
+            if (!from || !to) return null;
+            const midY = (from.y + to.y) / 2;
+            const midX = (from.x + to.x) / 2 - 30;
+            return (
+              <path key={`edge-${i}`} d={`M ${from.x} ${from.y + nodeRadius} Q ${midX} ${midY} ${to.x} ${to.y - nodeRadius}`}
+                fill="none" stroke="oklch(0.50 0.01 60 / 40%)" strokeWidth={1.5} strokeDasharray="4 3" />
+            );
+          })}
+          {orgThoughts.map((t) => {
+            const pos = positions.get(t.id);
+            if (!pos) return null;
+            const color = THOUGHT_COLORS[t.thoughtType] ?? 'var(--muted-foreground)';
+            const initials = t.agentName.substring(0, 2).toUpperCase();
+            return (
+              <g key={t.id}>
+                {t.replyCount > 0 ? (
+                  <>
+                    <circle cx={pos.x + nodeRadius - 4} cy={pos.y - nodeRadius + 4} r={8} fill="var(--primary)" stroke="var(--background)" strokeWidth={1.5} />
+                    <text x={pos.x + nodeRadius - 4} y={pos.y - nodeRadius + 8} textAnchor="middle" fontSize={9} fill="var(--primary-foreground)" fontWeight="bold">{t.replyCount}</text>
+                  </>
+                ) : null}
+                <circle cx={pos.x} cy={pos.y} r={nodeRadius}
+                  fill={`color-mix(in oklch, ${color} 20%, var(--card))`} stroke={color} strokeWidth={2} />
+                <text x={pos.x} y={pos.y + 2} textAnchor="middle" fontSize={10} fontWeight="bold" fill={color}>{initials}</text>
+                <text x={pos.x} y={pos.y + nodeRadius + 14} textAnchor="middle" fontSize={9} fill="var(--muted-foreground)">{t.thoughtType}</text>
+                <text x={pos.x + nodeRadius + 10} y={pos.y - 4} fontSize={11} fill="var(--foreground)">
+                  {t.content.length > 50 ? t.content.substring(0, 50) + '\u2026' : t.content}
+                </text>
+                <text x={pos.x + nodeRadius + 10} y={pos.y + 10} fontSize={9} fill="var(--muted-foreground)">{t.agentName}</text>
+              </g>
+            );
+          })}
+        </svg>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {Object.entries(THOUGHT_COLORS).map(([type, color]) => (
+            <span key={type} className="flex items-center gap-1">
+              <span className="size-3 rounded-full border-2" style={{ backgroundColor: `color-mix(in oklch, ${color} 20%, transparent)`, borderColor: color }} />
+              {type}
+            </span>
+          ))}
+          <span className="flex items-center gap-1"><span className="size-3 rounded-full bg-primary" />N replies</span>
+        </div>
       </CardContent>
     </Card>
   );

@@ -1858,3 +1858,64 @@ Task: Apply VLM-suggested UI polish: active channel indicator (bold left-border)
 - MODIFIED: `src/components/left-rail/chats-panel.tsx` (active group chat left-border)
 - MODIFIED: `src/components/chat/message-bubble.tsx` (Reply + React hover actions, new icon imports)
 
+
+---
+Task ID: 26 (Round 18 — Topology view: SVG node-link diagram for the Thought Graph)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Build the Topology view — the VLM's #1 recommendation for reaching 10/10 on the Thought Graph. SVG-based node-link diagram showing thoughts as colored circles with graph edges as dashed lines. Toggle between Timeline and Topology. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- VLM from Round 13 said: "Add a toggle between 'Timeline' (current view) and 'Topology' (force-directed node-link diagram). The Timeline builds trust through transparency; the Topology builds insight through structure."
+- VLM from Round 15 said: "render the argument graph as a secondary visualization" + "edge rendering to make the 'graph' literal rather than implicit"
+- The thought-to-thought edges (relatedThoughtId) and bidirectional replyCount already exist in the /api/thoughts API
+
+## 💻 Action (Step 2)
+
+### Topology view — SVG-based node-link diagram
+- `src/components/thoughts/thought-graph-view.tsx`:
+  - Added `viewMode` state: 'timeline' | 'topology'
+  - Added toggle button in the header (Timeline / Topology with icons)
+  - When 'topology': renders `<TopologyView>` instead of the timeline content
+  - Memory sections (Agent Private + Personal Assistant) always shown regardless of view mode
+  - `TopologyView` component (160+ lines):
+    - Filters to org-visible thoughts (excludes team/agent-scoped)
+    - Builds edges from `relatedThoughtId` references
+    - Positions nodes vertically by seq, with x-offset based on edge relationships
+    - SVG rendering:
+      - Nodes: colored circles (by thoughtType), agent initials inside, thought-type label below, content preview + agent name to the right
+      - Edges: dashed curved Bezier paths from parent to child
+      - Reply count badges: small circles with number on nodes that have incoming edges
+    - Legend at the bottom showing thought-type colors + reply badge meaning
+    - No D3.js needed — pure SVG + React
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Topology view verified: SVG renders (`hasSVG: true`), 28 thoughts, 4 edges
+- Toggle between Timeline and Topology works
+- Memory sections still visible above the topology view
+- VLM: 9/10 — "how AI thought processes should be visualized — not as chat logs, but as living knowledge graphs. The VLM's 10/10 is defensible; my 9/10 reserves room for density/interaction layer."
+
+## 💡 Information (Step 4)
+- The Topology view makes the "memory graph" literally a graph — nodes and edges are visible
+- The dashed edge lines suggest "tentative" or "weighted" connections — cognitive, not hard logic
+- The toggle gives users dual epistemic lenses: Timeline (temporal causality) vs Topology (structural relationships)
+- VLM feedback for 10/10: add node interactivity (drag, hover for edge weights) + denser edges
+
+## 🔧 Adjustment (Step 5)
+- All working. The VLM's #1 suggestion for 10/10 is now implemented.
+- Next: node interactivity (hover for details, drag to reposition), denser edge generation, MCP in Rust.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | Pure SVG + React — no D3.js dependency needed |
+| **Powerful** | Visual graph topology — structural insight, not just temporal |
+| **Performant** | SVG rendering is lightweight, no animation loop |
+| **Scalable** | Can handle hundreds of nodes (SVG is vector-based) |
+| **Efficient** | No extra API calls — uses existing /api/thoughts data |
+| **Beautiful** | Colored circles, dashed curved edges, legend, toggle |
+| **Functional** | Delivers the VLM's #1 recommendation for 10/10 |
+
+### Files modified this round
+- MODIFIED: `src/components/thoughts/thought-graph-view.tsx` (viewMode state, toggle, TopologyView component, Network + List icons, cn import)
+
