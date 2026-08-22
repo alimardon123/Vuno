@@ -18,6 +18,7 @@ import {
   Target,
   PanelLeftClose,
   FileText,
+  BarChart3,
 } from 'lucide-react';
 
 interface Channel {
@@ -226,6 +227,18 @@ export function LeftRail({ onClose }: { onClose?: () => void }) {
         >
           <FileText className="size-4" aria-hidden />
           Project Wiki
+        </Button>
+        <Button
+          variant={activeView === 'hr' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="w-full justify-start gap-2"
+          onClick={() => {
+            setView('hr');
+            onClose?.();
+          }}
+        >
+          <BarChart3 className="size-4" aria-hidden />
+          HR / Meta
         </Button>
         <Button
           variant={activeView === 'agents' ? 'secondary' : 'ghost'}

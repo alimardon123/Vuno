@@ -365,7 +365,7 @@ function ObjectiveCard({
   objective: NonNullable<WikiResponse['objective']>;
 }) {
   return (
-    <Card className="overflow-hidden border-l-2 border-l-primary/60 bg-primary/[0.04] shadow-sm">
+    <Card className="overflow-hidden border-l-2 border-l-primary/60 bg-primary/[0.04] shadow-sm transition-colors hover:bg-primary/[0.06]">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Target className="size-4 text-primary" aria-hidden />
@@ -512,7 +512,7 @@ function DecisionCard({
   );
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden transition-colors hover:bg-accent/20">
       <CardHeader className="pb-2">
         <div className="flex items-start gap-2">
           <GitPullRequest className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -667,7 +667,7 @@ function ClaimsByStatus({
 
 function ClaimRow({ claim }: { claim: WikiClaim }) {
   return (
-    <div className="rounded-md border border-border/40 bg-card/30 px-3 py-2 text-sm">
+    <div className="rounded-md border border-border/40 bg-card/30 px-3 py-2.5 text-sm transition-colors hover:bg-card/60 hover:border-border/70">
       <div className="flex items-start gap-2">
         <StatusPill status={statusToColor(claim.status)} />
         <p className="flex-1 leading-relaxed text-foreground/90">
@@ -709,7 +709,7 @@ function RiskRow({ risk }: { risk: WikiRisk }) {
       ? 'var(--status-falsified)'
       : 'var(--status-asserted)';
   return (
-    <div className="rounded-md border-l-2 bg-card/30 px-3 py-2 text-sm" style={{ borderColor: sevColor }}>
+    <div className="rounded-md border-l-2 bg-card/30 px-3 py-2.5 text-sm transition-colors hover:bg-card/60" style={{ borderColor: sevColor }}>
       <div className="flex items-center gap-2">
         <span
           className="rounded px-1.5 py-0.5 font-mono text-[0.6875rem] font-semibold uppercase"
@@ -747,7 +747,7 @@ function RetrospectiveCard({
   retrospective: WikiRetrospective;
 }) {
   return (
-    <Card>
+    <Card className="transition-colors hover:bg-accent/20">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <AgentAvatar
@@ -786,7 +786,7 @@ function ParticipantCard({
   participant: WikiParticipant;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-border/40 bg-card/30 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-md border border-border/40 bg-card/30 px-3 py-2.5 transition-colors hover:bg-card/60 hover:border-border/70">
       <AgentAvatar
         name={participant.agentName}
         role={participant.agentRole}

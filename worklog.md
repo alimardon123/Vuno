@@ -214,3 +214,92 @@ A new "Project Wiki" navigation entry in the left rail, between "Epistemic Ledge
 - MODIFIED: `/home/z/my-project/src/components/common/agent-avatar.tsx` (role-colored rings)
 - MODIFIED: `/home/z/my-project/src/app/globals.css` (higher-contrast muted-foreground)
 
+
+---
+Task ID: 8 (webDevReview round 2)
+Agent: orchestrator (Z.ai Code main, webDevReview cron)
+Task: Autonomous QA + new feature slice. Pick the highest-impact next slice and execute it.
+
+## Current project status assessment
+- Round 1 (Task ID 7) added: Wiki view, chat polish, timeline scrubber. VLM rated chat 8.5/10, wiki 7.5/10.
+- Killer demo (falsification arc) still complete and verified end-to-end.
+- All API endpoints healthy (200). Dev server runs cleanly. Lint passes.
+- No runtime errors in dev.log.
+- recharts is installed (in package.json) but was unused — a natural dependency to leverage for the HR dashboard slice.
+
+## Goals / completed modifications / verification results
+
+### Slice chosen: HR / Meta Dashboard with metrics charts
+I picked the HR dashboard slice because: (a) it's a new feature (mandatory), (b) it uses recharts (already installed but unused — leverages existing dependency), (c) it demonstrates the "HR as meta team" thesis from the vision doc (HR agents measure objection precision, proposal survival rate, gate-block accuracy), (d) it's a natural complement to the Wiki view (wiki shows retrospective text; HR dashboard visualizes the metrics), (e) it pulls from the existing event spine + claims + gates — no schema changes, (f) charts add a new visual dimension to the product.
+
+### 1. New API endpoint: /api/hr-metrics (Task h2)
+- `src/app/api/hr-metrics/route.ts` (NEW, 250+ lines): GET endpoint that computes org-wide HR metrics from the event spine + claims + gates. Pure projection — no separate metrics table.
+- **Per-agent metrics**: objection precision (fraction of objections later validated by a benchmark or experiment-refutes event on the same decision), proposal survival rate (fraction of proposals NOT later falsified by a DecisionRecorded with outcome=falsified), plus counts: proposals opened, objections raised, evidence attached, experiments requested/completed, benchmarks reported, risks flagged, decisions recorded, messages posted, total actions.
+- **Claim status distribution**: counts per status (asserted/believed/tested/falsified/uncertain) with status colors.
+- **Gate evaluations**: all gates with name, state, policy, reason, decisionId.
+- **Event-type histogram**: count of each event type on the spine, sorted by count desc, with type colors.
+- **Debate state distribution**: count of decisions per state (draft/open/contested/resolved/escalated).
+- **Totals**: agents, activeAgents, claims, decisions, gates, events, openRisks, blockedGates, passedGates.
+- Verified: GET /api/hr-metrics returns 8 agents, 21 events, 2 claims, 1 decision, 4 gates, 1 open risk, 2 blocked gates, 2 passed gates. Aris proposal survival=0 (falsified), Devi objection precision=1.0 (validated by benchmark).
+
+### 2. New view: HR / Meta Dashboard (Task h3-h5)
+- `src/store/app-store.ts`: added 'hr' to ActiveView union.
+- `src/components/app-shell/left-rail.tsx`: added "HR / Meta" nav button (BarChart3 icon) between Project Wiki and Agents.
+- `src/components/app-shell/app-shell.tsx`: wired HRView into main view router; added "HR / Meta" description to Help dialog ("the org evaluating itself. Objection precision, proposal survival rate, gate-block accuracy, visualized as charts.").
+- `src/components/hr/hr-view.tsx` (NEW, 700+ lines): renders the dashboard with:
+  1. **Header** — "HR / Meta Dashboard" title, subtitle quoting the vision ("HR is peer-to-CEO in visibility, subordinate in authority"), "Generated from the ledger" badge, "21 events · updated less than a minute ago".
+  2. **KPI tiles** (6 tiles) — Active agents (8), Total events (21), Claims (2), Decisions (1, "2 blocked gates"), Open risks (1, "needs attention"), Gates passed (2/4, "2 blocked"). Each tile has an icon, a bold mono value in status color, a label, and a sub-line.
+  3. **Objection precision bar chart** — horizontal bars per agent with objections. Devi at 100%. Background track shows 100% potential so 0% values are visible.
+  4. **Proposal survival rate bar chart** — horizontal bars per agent with proposals. Aris at 0% (his proposal was falsified). Background track.
+  5. **Claim status donut** — PieChart with inner radius 55, outer 85. Center label shows total count ("2 claims"). Legend on the right with color swatches.
+  6. **Event-type histogram** — horizontal bars (13 event types), each colored by its event-type color. Count labels on the right. Sorted by count desc.
+  7. **Gate evaluations** — 2-column grid of gate cards, each with 3px left-border color-coded by state (teal for passed, red for blocked, gray for pending). Shows gate name, status pill, policy, reason.
+  8. **Agent activity table** — 8 agents sorted by total actions, 11 columns: Agent (avatar + name + role), Prop, Obj, Evid, Bench, Risk, Dec, Msg, Total, Obj prec (color-coded %), Prop surv (color-coded %). Zebra striping for scanability.
+
+### 3. Polish pass on wiki view (Task h6)
+Applied VLM feedback from round 1 to the wiki view: added `transition-colors hover:bg-accent/20` to DecisionCard and RetrospectiveCard, `hover:bg-card/60 hover:border-border/70` to ClaimRow and ParticipantCard, `hover:bg-card/60` to RiskRow. Bumped padding from py-2 to py-2.5 on the smaller rows. RetrospectiveCard gets hover state.
+
+### 4. VLM-driven polish on HR dashboard (Task h6 cont.)
+After initial VLM rating of 7.5/10, applied all 6 suggested fixes:
+1. **Event-type histogram**: switched from vertical bars (overlapping X-axis labels) to horizontal bars — VLM called this "the biggest UX pain point; the fix transforms this chart from decorative noise to actionable data."
+2. **Bar charts background tracks**: added a subtle `<Bar dataKey={() => 1} isBackground />` so 0% values are visible as a track. VLM: "you can now see that Aris has zero proposal survival rate, whereas before empty space was ambiguous."
+3. **Donut center label**: added a positioned overlay showing the total count ("2 claims") in the donut hole. VLM: "creates immediate focal point; users grasp the total volume in <1 second."
+4. **Gate cards 3px left-borders**: changed from 2px to 3px, color-coded by state (teal for passed, red for blocked). VLM: "Scanning the four gates: you instantly see 2 red / 2 green split without reading text."
+5. **KPI tile values**: bumped from font-semibold to font-bold + tracking-tight. VLM: "numbers pop against labels."
+6. **Table zebra striping**: added alternating `bg-muted/20` on odd rows. VLM: "prevent line drift when scanning across 8 columns."
+
+### Verification results
+- **VLM analysis of HR dashboard v1: 7.5/10** — "highly functional, data-dense dashboard... fails to be premium primarily due to chart label clipping and slightly cramped vertical rhythm."
+- **VLM analysis of HR dashboard v2 (after fixes): 9.0/10** — "professional-grade dashboard refinement. The horizontal histogram fix alone justifies +1.5 points. Recommendation: Ship this version."
+- Agent Browser QA: HR view renders all 8 sections with seeded data. Charts render correctly (bar charts with background tracks, donut with center label, horizontal histogram with all 13 event types visible). Table shows 8 agents with all metrics. Gate cards show 2 blocked (Performance, Release) and 2 passed (QA, Security) with color-coded left-borders.
+- Lint passes cleanly.
+- Dev server runs without runtime errors.
+
+## Unresolved issues or risks, and priority recommendations for the next phase
+
+### Known issues / incomplete items
+1. **Objection precision heuristic** is conservative — it only counts an objection as "validated" if a BenchmarkReported or ExperimentCompleted(outcome=refutes) event exists on the SAME decision AFTER the objection. Real implementations would also count indirect validations (e.g. a ClaimStatusChanged to falsified that the objection contributed to). Currently Devi=100% (1/1), which is correct.
+2. **Proposal survival rate** is binary per proposal (falsified=0, not-falsified=1). A more nuanced metric would weight by time-since-proposal or by partial validation. Currently Aris=0% (1/1 falsified), which is correct.
+3. **HR dashboard: only org-wide metrics** — no per-team or per-department breakdown. Could add team-level grouping in a future round.
+4. **No "HR proposals" yet** — the vision says HR can propose reassignment, model swap, autonomy expansion, retirement, hiring. Those would be typed events (HRProposalFiled) that go through the same debate pipeline. Not yet implemented.
+5. **Charts don't update in real-time** — they poll every 15s via useFetch. Live updates would need socket.io.
+6. **Agent activity table** is wide (11 columns) — on mobile it scrolls horizontally. Could add a card-based layout for mobile.
+
+### Priority recommendations for next phase (pick ONE per round)
+1. **Live debate state machine** (HIGH IMPACT) — let the user file a new proposal via the typed composer; simulated agents respond via the AgentAdapter interface; claims transition through statuses in real time. This makes the killer demo interactive instead of just observable. Would also feed real data into the HR dashboard.
+2. **Real-LLM agent adapter** (HIGH IMPACT for thesis) — implement the AgentAdapter interface using z-ai-web-dev-sdk (backend only), drop-in alongside the simulated adapters. Proves the "same design works for real agents too" constraint from the user.
+3. **Attention router** (MEDIUM IMPACT) — deterministic triggers (a benchmark event auto-wakes the perf agent; a security-related file change auto-wakes the security agent) demonstrated structurally. Adds a "router events" stream to the chat.
+4. **Real-time chat with socket.io** (MEDIUM IMPACT) — live presence + typing indicators via a socket.io mini-service on port 3003. Would also make the HR dashboard update in real-time.
+5. **Promotion mechanic** (MEDIUM IMPACT) — distillation flow: extract role-relevant patterns from a personal assistant's history, drop personal facts, owner reviews the diff. Demonstrates the "grow an org agent" thesis.
+6. **Mobile sheet polish** — the left rail becomes a Sheet on mobile; verify and improve the UX. HR dashboard table needs a mobile card layout.
+7. **Empty states for scenarios not yet covered** — no channels, no claims, no agents, no decisions, no gates.
+8. **HR proposals** — typed HRProposalFiled events for reassignment, model swap, autonomy expansion, retirement, hiring. Goes through the same debate pipeline.
+
+### Files created/modified this round
+- NEW: `/home/z/my-project/src/app/api/hr-metrics/route.ts` (250+ lines)
+- NEW: `/home/z/my-project/src/components/hr/hr-view.tsx` (700+ lines)
+- MODIFIED: `/home/z/my-project/src/store/app-store.ts` (added 'hr' to ActiveView)
+- MODIFIED: `/home/z/my-project/src/components/app-shell/left-rail.tsx` (added HR / Meta nav button)
+- MODIFIED: `/home/z/my-project/src/components/app-shell/app-shell.tsx` (wired HRView, added to Help dialog)
+- MODIFIED: `/home/z/my-project/src/components/wiki/wiki-view.tsx` (hover states on DecisionCard, RetrospectiveCard, ClaimRow, ParticipantCard, RiskRow; bumped padding)
+

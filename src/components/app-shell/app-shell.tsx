@@ -14,6 +14,7 @@ import { DecisionView } from '@/components/decision/decision-view';
 import { LedgerView } from '@/components/ledger/ledger-view';
 import { AgentsView } from '@/components/agents/agents-view';
 import { WikiView } from '@/components/wiki/wiki-view';
+import { HRView } from '@/components/hr/hr-view';
 import { InstallAgentDialog } from '@/components/agents/install-agent-dialog';
 import { FileObjectiveDialog } from '@/components/objective/file-objective-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -179,6 +180,7 @@ export function AppShell() {
           {activeView === 'ledger' ? <LedgerView /> : null}
           {activeView === 'agents' ? <AgentsView /> : null}
           {activeView === 'wiki' ? <WikiView /> : null}
+          {activeView === 'hr' ? <HRView /> : null}
         </main>
 
         {/* Right rail — hidden on mobile; sheet-triggered */}
@@ -309,6 +311,11 @@ function HelpDialog({
               <span className="text-foreground">Project Wiki</span> — a project
               page generated entirely from the ledger. Always current; never
               maintained separately.
+            </li>
+            <li>
+              <span className="text-foreground">HR / Meta</span> — the org
+              evaluating itself. Objection precision, proposal survival rate,
+              gate-block accuracy, visualized as charts.
             </li>
             <li>
               <span className="text-foreground">Agents</span> — install
