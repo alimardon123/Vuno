@@ -363,3 +363,25 @@ model PersonalMemory {
 // the event spine — no new table needed. The /api/thoughts endpoint filters
 // by visibility. See ADR-0005 for the event-based memory architecture.
 
+// ─── Agent Private Memory (Tier 1) ──────────────────────────────────────────
+// Per the vision doc §6: "Agent private: Working notes, in-progress
+// reasoning. Visible to that agent only."
+// Each agent's private scratchpad — their working notes, hypotheses in
+// progress, TODO lists, context from past interactions. Not visible to
+// other agents or humans. This is where agents "think" before producing
+// org-visible AgentThought events.
+model AgentMemory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  orgId     String
+  agentId   String
+  key       String   // e.g. "working_hypothesis", "todo", "context_from_last_debate"
+  value     String   // JSON or plain text
+  category  String   @default("working") // "working" | "todo" | "context" | "hypothesis"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agentId, key])
+  @@index([orgId, agentId])
+}
+

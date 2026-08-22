@@ -31,6 +31,8 @@ import {
   Sparkles,
   Database,
   Key,
+  Lock,
+  Users,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useMemo } from 'react';
@@ -48,7 +50,7 @@ interface Thought {
   relatedEventId: string | null;
   relatedThoughtId: string | null;
   replyCount: number;
-  visibility: string;
+  visibility: string; // 'agent' | 'team' | 'org'
   createdAt: string;
 }
 
@@ -142,10 +144,54 @@ export function ThoughtGraphView() {
 
       <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
-          {/* Personal Assistant Memory (Tier 2) */}
+          {/* Memory architecture — all 4 tiers */}
+          <AgentPrivateMemorySection />
           <PersonalMemorySection />
+          {/* Team Memory (Tier 3) — thoughts with visibility='team' */}
+          {thoughts.some((t) => (t as { visibility?: string }).visibility === 'team') ? (
+            <Card className="border-l-2 border-l-[var(--status-believed)]/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Users className="size-4 text-[var(--status-believed)]" aria-hidden />
+                  Team Memory
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[0.625rem]">
+                    {thoughts.filter((t) => (t as { visibility?: string }).visibility === 'team').length} items
+                  </Badge>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Team conventions and local decisions — visible to team members only (Tier 3).
+                </p>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                {thoughts
+                  .filter((t) => (t as { visibility?: string }).visibility === 'team')
+                  .map((t) => {
+                    const color = THOUGHT_COLORS[t.thoughtType] ?? 'var(--muted-foreground)';
+                    return (
+                      <div
+                        key={t.id}
+                        className="flex items-start gap-2 rounded-md border-l-2 bg-muted/10 px-3 py-2"
+                        style={{ borderColor: `color-mix(in oklch, ${color} 40%, transparent)` }}
+                      >
+                        <MemberAvatar name={t.agentName} kind="independent" size="sm" />
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium">{t.agentName}</span>
+                            <span className="rounded bg-[var(--status-believed)]/14 px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider text-[var(--status-believed)]">
+                              {t.thoughtType}
+                            </span>
+                            <span className="rounded bg-muted px-1 py-0 text-[0.5625rem] text-muted-foreground">team</span>
+                          </div>
+                          <p className="text-sm leading-relaxed text-muted-foreground">{t.content}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </CardContent>
+            </Card>
+          ) : null}
 
-          {/* Thought groups */}
+          {/* Thought groups (org-visible thoughts) */}
           {grouped.map(([topic, topicThoughts]) => (
             <Card key={topic} className="overflow-hidden">
               <CardHeader className="pb-2">
@@ -284,6 +330,84 @@ function PersonalMemorySection() {
                 <div
                   key={m.id}
                   className="flex items-start gap-2 rounded-md border border-border/40 bg-card/30 px-3 py-2 transition-colors hover:bg-card/60"
+                >
+                  <Key className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-xs font-medium text-foreground/90">{m.key}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {typeof m.value === 'object' ? JSON.stringify(m.value) : String(m.value)}
+                    </span>
+                    <span className="text-[0.5625rem] text-muted-foreground/60">
+                      updated {formatDistanceToNow(new Date(m.updatedAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Agent Private Memory section (Tier 1) ────────────────────────────────────
+interface AgentMemoryItem {
+  id: string;
+  agentId: string;
+  key: string;
+  value: string | Record<string, unknown>;
+  category: string;
+  updatedAt: string;
+}
+
+function AgentPrivateMemorySection() {
+  // Fetch private memories for Aris (the architect — as a demo)
+  const res = useFetch<{ memories: AgentMemoryItem[]; count: number }>(
+    '/api/agent-memory?agentId=agent-aris',
+    { intervalMs: 30000 },
+  );
+
+  const memories = res.data?.memories ?? [];
+
+  const grouped = useMemo(() => {
+    const groups = new Map<string, AgentMemoryItem[]>();
+    for (const m of memories) {
+      const key = m.category || 'other';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(m);
+    }
+    return Array.from(groups.entries());
+  }, [memories]);
+
+  if (memories.length === 0) return null;
+
+  return (
+    <Card className="border-l-2 border-l-muted-foreground/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Lock className="size-4 text-muted-foreground" aria-hidden />
+          Agent Private Memory
+          <Badge variant="secondary" className="px-1.5 py-0 text-[0.625rem]">
+            {memories.length} items
+          </Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Aris&apos;s private scratchpad — working notes, hypotheses in progress, TODO lists.
+          Visible to that agent only (Tier 1 of the 4-tier memory architecture).
+        </p>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {grouped.map(([category, items]) => (
+          <div key={category}>
+            <div className="mb-1 text-[0.5625rem] uppercase tracking-widest text-muted-foreground/70">
+              {category}
+            </div>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {items.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-start gap-2 rounded-md border border-border/40 bg-muted/10 px-3 py-2"
                 >
                   <Key className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
