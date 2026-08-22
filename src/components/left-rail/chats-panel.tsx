@@ -247,7 +247,7 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
                           item.isActive
-                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-l-primary'
                             : 'text-sidebar-foreground/90 hover:bg-sidebar-accent/60',
                         )}
                       >

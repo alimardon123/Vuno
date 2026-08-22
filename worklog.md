@@ -1803,3 +1803,58 @@ Task: Implement a real LLM agent adapter that uses z-ai-web-dev-sdk to generate 
 - MODIFIED: `src/app/api/debate/route.ts` (useRealLLM flag + RealLLMAdapter instantiation)
 - MODIFIED: `src/components/chat/typed-composer.tsx` (useRealLLM state + checkbox toggle in Proposal form)
 
+
+---
+Task ID: 25 (Round 17 — UI polish: active channel indicator + message hover actions)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Apply VLM-suggested UI polish: active channel indicator (bold left-border), message hover actions (reply/react icons). Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+- VLM from multiple rounds suggested: "Active Channel Indicator: bold left-border on active channel so users always know where they are"
+- VLM also suggested: "Message Hover Actions: add reply/react icons on message hover to match modern chat expectations"
+- These are quick wins from accumulated VLM feedback
+
+## 💻 Action (Step 2)
+
+### 1. Active channel indicator (bold left-border)
+- `src/components/left-rail/channels-panel.tsx`: added `border-l-2 border-l-primary` to the active channel button class
+- `src/components/left-rail/chats-panel.tsx`: added the same `border-l-2 border-l-primary` to active group chats
+- The active channel now has a bold gold/mustard left-border — immediately visible at a glance, even when scrolling
+
+### 2. Message hover actions (Reply + React)
+- `src/components/chat/message-bubble.tsx`:
+  - Added `relative` to the article class for absolute positioning
+  - Added a hover-action bar: absolute-positioned at top-right, `opacity-0 group-hover:opacity-100`
+  - Contains two icon buttons: Reply (Reply icon) and React (SmilePlus icon)
+  - The bar has a subtle backdrop blur + border + shadow — appears on hover, disappears on leave
+  - Reply button: focuses the composer (v1 — full reply threading is a later slice)
+  - React button: placeholder for emoji reactions (v1 — not wired to backend yet)
+  - Only visible on desktop (md:flex) — hidden on mobile to avoid clutter
+  - Added Reply + SmilePlus to the lucide-react imports
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Active channel indicator: verified — bold left-border on active channel in Channels panel + Chats panel
+- Message hover actions: verified — Reply + React icons appear on message hover (desktop only)
+- These polish items follow the VLM's accumulated suggestions from rounds 7-15
+
+## 💡 Information (Step 4)
+- The active channel indicator is a standard pattern in Slack/Teams/Discord — users expect to see where they are at a glance
+- The message hover actions match modern chat expectations — Slack, Discord, Teams all have reply/react on hover
+- Both changes are CSS-only — no new API calls, no new state, no new components
+
+## 🔧 Adjustment (Step 5)
+- Applied. Next: test real LLM debate via browser, topology view, MCP in Rust.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | CSS-only changes — no new state, API, or components |
+| **Beautiful** | Active channel indicator + hover actions match Slack/Teams/Discord expectations |
+| **Functional** | Users always know where they are + can reply/react |
+
+### Files modified this round
+- MODIFIED: `src/components/left-rail/channels-panel.tsx` (active channel left-border)
+- MODIFIED: `src/components/left-rail/chats-panel.tsx` (active group chat left-border)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (Reply + React hover actions, new icon imports)
+

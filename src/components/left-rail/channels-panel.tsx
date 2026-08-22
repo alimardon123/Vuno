@@ -116,7 +116,7 @@ export function ChannelsPanel({ onClose }: { onClose?: () => void }) {
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
                           isActive
-                            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium border-l-2 border-l-primary'
                             : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50',
                         )}
                       >

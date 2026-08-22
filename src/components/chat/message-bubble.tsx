@@ -24,6 +24,8 @@ import {
   BarChart3,
   File,
   ExternalLink,
+  Reply,
+  SmilePlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
@@ -147,12 +149,36 @@ export function MessageBubble({
   return (
     <article
       className={cn(
-        'group flex gap-3 px-4 py-2.5 transition-colors hover:bg-accent/40',
+        'group relative flex gap-3 px-4 py-2.5 transition-colors hover:bg-accent/40',
         isSystem && 'bg-muted/30',
         isTyped && 'bg-muted/20',
       )}
       aria-label={`Message from ${actorName} at ${time}`}
     >
+      {/* Hover actions — appear on message hover (top-right) */}
+      <div className="absolute right-2 top-1 hidden gap-0.5 rounded-md border border-border/40 bg-card/80 px-0.5 py-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 md:flex">
+        <button
+          type="button"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="Reply"
+          title="Reply"
+          onClick={() => {
+            // v1: no reply routing yet — just focus the composer
+            const composer = document.querySelector('textarea');
+            composer?.focus();
+          }}
+        >
+          <Reply className="size-3" aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="React"
+          title="React"
+        >
+          <SmilePlus className="size-3" aria-hidden />
+        </button>
+      </div>
       <div className="mt-0.5">
         <MemberAvatar
           name={actorName}
