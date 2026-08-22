@@ -866,3 +866,128 @@ Task: Make agents debate CONCURRENTLY (not sequentially), stream events to the U
 - REWRITTEN: `src/app/api/debate/route.ts` (280 lines — concurrent + streaming + typing)
 - MODIFIED: `src/components/chat/chat-view.tsx` (typing indicator state + UI, onTyping callback)
 
+
+---
+Task ID: 14 (Round 6 — Rust substrate + chat list merge + org panel fixes + memory assessment)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Start the Rust substrate service (user explicitly asked again), merge DMs + group chats in chat list, fix org panel (CEO shown separately, type tags, correct hierarchy), assess the 4-tier memory architecture from the vision doc. Follow the 5-step learning loop + 7 design principles.
+
+## 🔍 Research (Step 1)
+
+### User's requests this round
+1. "I still want Rust backend for things. So please look for it."
+2. "In chat list no need to put Group and direct message chats separately. they can mix just like teams, but put group chat icon before group chat names."
+3. "Why in org menu, Every team shows CEO as member? Maybe ceo and higher level officials should be showed separately apart from department and teams. Review the correct showing the hierarchy in org panel. like org -> department -> team with each its name and type tag."
+4. "What about shared and evolving memory like my vision? Is it implemented too?"
+
+### Memory architecture assessment (the user's question #4)
+The vision doc (§6) describes 4-tier memory:
+
+| Tier | Status | What it is |
+|---|---|---|
+| **Organizational ledger** | ✅ IMPLEMENTED | Event spine + claims + decisions + gates. The wiki is generated from this. Visible org-wide. |
+| **Team memory** | ❌ NOT IMPLEMENTED | Team conventions, in-flight work, local decisions. Should be visible to team members only. |
+| **Personal assistant memory** | ❌ NOT IMPLEMENTED | Owner's files, history, preferences. Bob has no private memory of Kai's preferences. |
+| **Agent private memory** | ❌ NOT IMPLEMENTED | Working notes, in-progress reasoning. Agents have no private scratchpad. |
+
+**Honest answer to the user: Tier 4 (org ledger) is implemented. Tiers 1-3 are NOT.**
+
+### Plan for implementing the missing tiers
+- **Tier 3 (team memory)**: add `visibility='team'` to events + team-scoped queries on the spine. Events with `scopeType='team'`, `scopeId=teamId`, `visibility='team'` are only visible to team members.
+- **Tier 2 (personal assistant)**: new `PersonalMemory` table (ownerId, agentId, key, value). Bob accumulates Kai's preferences over time. Queryable by Bob + Kai only.
+- **Tier 1 (agent private)**: new `AgentMemory` table (agentId, key, value). Each agent's private scratchpad for working notes and in-progress reasoning. Queryable by that agent only.
+
+The "evolving" part: agents write to their memory over time. The "shared" part: team memory is shared among team members, the org ledger is shared org-wide. The wiki is a projection of the shared ledger.
+
+## 💻 Action (Step 2)
+
+### 1. Chat list merge — DMs + group chats in one list (Teams-style)
+- `src/components/left-rail/chats-panel.tsx`: removed the separate "Direct Messages" and "Group Chats" section headers.
+- Merged into a single "Chats" section, sorted alphabetically.
+- Group chats get a Users icon before their name to distinguish them immediately from DMs (which have avatar circles).
+- Team-default group chats retain the small "team" badge.
+
+### 2. Org panel — correct hierarchy + CEO shown separately + type tags
+- `src/components/left-rail/org-panel.tsx`: three fixes:
+  - **CEO shown separately**: added a "Leadership" section at the top of the org tree, showing the CEO (and any future higher-level officials) separately from departments and teams.
+  - **Type tags**: each level in the tree now has a small type tag badge:
+    - org → `<org>` (primary color)
+    - department → `<dept>` (muted)
+    - team → `<team>` (muted)
+  - **Team members filter fix**: removed the `m.role === 'CEO'` check from the team members filter. Now only agents whose `teamId` matches the team are shown as members — NOT the CEO.
+
+### 3. Rust substrate service (port 3030) — BUILT + RUNNING
+- Installed Rust toolchain (rustup, rustc 1.98.0, cargo 1.98.0)
+- `mini-services/vuno-substrate/Cargo.toml` (NEW): Rust project with tokio, axum, serde, rusqlite, reqwest, tracing
+- `mini-services/vuno-substrate/src/main.rs` (NEW, 300+ lines):
+  - **Event spine writer**: `append_events()` — atomic append with monotonic seq, writes to the same SQLite DB as Prisma
+  - **Event replay**: `replay_events()` — queries events by scopeType/scopeId with correct payload JSON parsing
+  - **HTTP API**: `POST /events` (append), `GET /events/replay` (replay), `GET /health`
+  - Uses `axum` (HTTP framework) + `tokio` (async runtime) + `rusqlite` (SQLite)
+  - **serde rename**: all struct fields use camelCase serde rename for API compatibility (`actorType`, `scopeType`, etc.)
+  - SQLite DateTime stored as integer — reads back as i64 and converts to string
+  - **Architecture**: Rust owns the spine; Next.js API routes will proxy to it for spine operations AND handle realtime broadcast (via the existing socket.io client). This separation follows the design principle: Simple (each service has one job).
+- Built successfully: `cargo build` → 0 errors, 0 warnings
+- Running on port 3030: health, replay, and append all verified:
+  - `GET /health` → `{"ok":true,"port":3030,"service":"vuno-substrate","version":"0.1.0"}`
+  - `GET /events/replay?scope_type=channel&scope_id=ch-storage&limit=2` → returns events with correct payloads
+  - `POST /events` → appends event (seq=93), returns the created EventRecord
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Rust substrate: built + running on port 3030, all endpoints verified
+- Chat list: merged DMs + group chats into one list with Users icon for group chats
+- Org panel: CEO shown in Leadership section, type tags on all levels, team members filter fixed
+- Three services running: Next.js (3000), realtime (3003), Rust substrate (3030)
+
+## 💡 Information (Step 4)
+
+### What worked
+- Rust toolchain installation: clean (rustup → 1.98.0)
+- Rust substrate build: clean (cargo build, 0 errors, 0 warnings)
+- Rust substrate runtime: all 3 endpoints (health, replay, append) verified
+- Chat list merge: quick fix, Teams-style merged list with group icon
+- Org panel: CEO separated, type tags added, team members filter fixed
+
+### What failed (and was fixed)
+1. **SQLite DateTime type mismatch**: rusqlite expected String for `createdAt` but SQLite stores DateTime as integer (ms since epoch). Fix: read as i64, convert to string.
+2. **serde camelCase**: Rust struct fields default to snake_case but the API sends camelCase. Fix: `#[serde(rename = "actorType")]` etc.
+3. **Broadcast from Rust**: the Rust service tried to HTTP POST to the realtime service's `/broadcast` endpoint, but that endpoint was removed in Round 4 (replaced by socket.io client-emit). Fix: removed the broadcast from the Rust service. The Next.js API route (which proxies to Rust) will handle the broadcast via its existing socket.io client. Architecture: Rust owns the spine, Next.js owns the realtime fan-out.
+
+## 🔧 Adjustment (Step 5)
+- All bugs fixed. Rust substrate running.
+- Next round: wire the Next.js API routes to proxy to the Rust service (instead of using Prisma directly). The Next.js route calls Rust for append/replay, then broadcasts via socket.io.
+- Memory tiers 1-3 planned (see Research section above).
+
+## Design principles assessment
+| Principle | How this round delivers |
+|---|---|
+| **Simple** | Rust service has one job (spine); Next.js has one job (proxy + broadcast); chat list is one merged list |
+| **Powerful** | Rust ownership model + tokio for true async; the substrate is the core of the product |
+| **Performant** | Rust = zero-cost abstractions, no GC, no JIT warmup |
+| **Scalable** | Rust can handle millions of events, thread-safe by design |
+| **Efficient** | Minimal memory footprint, compiled binary |
+| **Beautiful** | Type tags in org panel, Users icon for group chats, clean Rust type system |
+| **Functional** | Rust spine works (append + replay verified), chat list merged, org panel fixed |
+
+## Memory architecture — honest status
+| Tier | Status | Next step |
+|---|---|---|
+| **Organizational ledger** | ✅ Done | Event spine + claims + wiki |
+| **Team memory** | ❌ Planned | Add visibility='team' + team-scoped events |
+| **Personal assistant memory** | ❌ Planned | New PersonalMemory table (ownerId, agentId, key, value) |
+| **Agent private memory** | ❌ Planned | New AgentMemory table (agentId, key, value) |
+
+## Unresolved issues / next steps
+1. **Wire Next.js API to proxy to Rust** — the Next.js API routes currently use Prisma directly. Next step: update them to call `POST http://localhost:3030/events` for appends and `GET http://localhost:3030/events/replay` for replays, then broadcast the returned events via socket.io.
+2. **Implement memory tiers 1-3** — agent private, personal assistant, team memory. Schema changes + API endpoints + agent adapter integration.
+3. **Concurrent agent runtime in Rust** (Round 7) — move the concurrent debate from TS Promise.all to Rust tokio::join_all.
+4. **Real-LLM agent adapter via MCP** (Round 8).
+5. **ACP for agent-to-agent comms** (Round 9).
+
+### Files created/modified this round
+- NEW: `mini-services/vuno-substrate/Cargo.toml` (Rust project manifest)
+- NEW: `mini-services/vuno-substrate/src/main.rs` (300+ lines — event spine writer in Rust)
+- MODIFIED: `src/components/left-rail/chats-panel.tsx` (merged DMs + group chats, Users icon for groups)
+- MODIFIED: `src/components/left-rail/org-panel.tsx` (Leadership section, type tags, team members filter fix)
+

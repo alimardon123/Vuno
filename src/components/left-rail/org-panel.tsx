@@ -145,7 +145,7 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
     <div className="flex h-full flex-col">
       <ScrollArea className="flex-1 scrollbar-sleek">
         <div className="flex flex-col gap-4 p-2">
-          {/* Org tree */}
+          {/* Org tree — correct hierarchy: org → leadership → departments → teams → channels */}
           <section aria-label="Organization">
             <div className="mb-1 flex items-center gap-1.5 px-2">
               <Building2 className="size-3 text-muted-foreground" aria-hidden />
@@ -154,12 +154,30 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
               </h3>
             </div>
             <div className="flex flex-col gap-0.5">
-              {/* Org root */}
+              {/* Org root — with type tag */}
               <div className="flex items-center gap-1.5 px-2 py-1 text-sm font-medium">
                 <Building2 className="size-3.5 text-primary" aria-hidden />
                 <span>{org?.name ?? 'Org'}</span>
+                <span className="rounded bg-primary/10 px-1 py-0 text-[0.5625rem] font-medium leading-none text-primary">org</span>
               </div>
-              {/* Departments */}
+
+              {/* Leadership — CEO and higher-level officials shown separately */}
+              {users.filter((u) => u.isOrgOwner).length > 0 ? (
+                <div className="ml-3 flex flex-col border-l border-border/40 pl-2">
+                  <div className="px-2 py-0.5 text-[0.5625rem] uppercase tracking-widest text-muted-foreground/70">
+                    Leadership
+                  </div>
+                  {users.filter((u) => u.isOrgOwner).map((u) => (
+                    <div key={u.id} className="flex items-center gap-1.5 px-2 py-1 text-sm">
+                      <MemberAvatar name={u.name ?? u.email} kind="human" size="sm" />
+                      <span className="truncate">{u.name ?? u.email}</span>
+                      <span className="rounded bg-muted px-1 py-0 text-[0.5625rem] font-medium leading-none text-muted-foreground">CEO</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Departments — with type tag */}
               {departments.map((dept) => {
                 const deptTeams = teams.filter((t) => t.departmentId === dept.id);
                 const isExpanded = expandedDepts.has(dept.id);
@@ -170,11 +188,9 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
                       onClick={() => toggleDept(dept.id)}
                       className="flex items-center gap-1.5 px-2 py-1 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/40"
                     >
-                      <ChevronRight
-                        className={cn('size-3 transition-transform', isExpanded && 'rotate-90')}
-                        aria-hidden
-                      />
+                      <ChevronRight className={cn('size-3 transition-transform', isExpanded && 'rotate-90')} aria-hidden />
                       <span className="font-medium">{dept.name}</span>
+                      <span className="rounded bg-muted px-1 py-0 text-[0.5625rem] font-medium leading-none text-muted-foreground">dept</span>
                       <span className="ml-auto text-[0.625rem] text-muted-foreground">
                         {deptTeams.length} {deptTeams.length === 1 ? 'team' : 'teams'}
                       </span>
@@ -196,6 +212,7 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
                                   aria-hidden
                                 />
                                 <span>{t.name}</span>
+                                <span className="rounded bg-muted px-1 py-0 text-[0.5625rem] font-medium leading-none text-muted-foreground">team</span>
                                 <span className="ml-auto text-[0.625rem] text-muted-foreground">
                                   {teamChannels.length} {teamChannels.length === 1 ? 'channel' : 'channels'}
                                 </span>
@@ -243,14 +260,10 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
                                     <ul className="flex flex-col">
                                       {allMembers
                                         .filter((m) => {
-                                          // For human members, check if they're in this team via team memberships
-                                          // For agent members, check teamId directly
-                                          if (m.kind === 'human') {
-                                            // v1: the CEO is in all teams (org owner). In a real app, team
-                                            // memberships would be a separate query.
-                                            return m.role === 'CEO';
-                                          }
-                                          // agent — check teamId
+                                          // CEO and higher-level officials are shown in the Leadership
+                                          // section, NOT under each team. Only show agents whose
+                                          // teamId matches this team.
+                                          if (m.kind === 'human') return false;
                                           const agent = agents.find((a) => a.id === m.id);
                                           return agent?.teamId === t.id;
                                         })

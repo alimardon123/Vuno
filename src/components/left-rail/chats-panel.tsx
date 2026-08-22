@@ -151,25 +151,13 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
                   <li key={a.id}>
                     <button
                       type="button"
-                      onClick={() => {
-                        // Open the personal assistant's DM — for v1, set the
-                        // active channel to the org channel (DM routing is a
-                        // later slice). Show a toast on click for now.
-                        // TODO: DM routing — open a private chat scope.
-                        setView('chat');
-                        onClose?.();
-                      }}
+                      onClick={() => { setView('chat'); onClose?.(); }}
                       className={cn(
                         'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
                         'text-sidebar-foreground/90 hover:bg-sidebar-accent/60',
                       )}
                     >
-                      <MemberAvatar
-                        name={a.name}
-                        kind="personal_assistant"
-                        size="sm"
-                        health={a.status === 'active' ? 'ok' : 'warn'}
-                      />
+                      <MemberAvatar name={a.name} kind="personal_assistant" size="sm" health={a.status === 'active' ? 'ok' : 'warn'} />
                       <div className="flex min-w-0 flex-1 flex-col">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate font-medium leading-none">{a.name}</span>
@@ -186,107 +174,95 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
             </section>
           ) : null}
 
-          {/* Direct messages */}
-          <section aria-label="Direct messages">
+          {/* Merged chat list — DMs + group chats in one list (Teams-style).
+              Group chats get a Users icon before their name to distinguish them. */}
+          <section aria-label="Chats">
             <div className="mb-1 flex items-center gap-1.5 px-2">
               <MessageSquare className="size-3 text-muted-foreground" aria-hidden />
               <h3 className="text-[0.625rem] font-semibold uppercase tracking-widest text-muted-foreground">
-                Direct Messages
+                Chats
               </h3>
             </div>
             <ul className="flex flex-col gap-0.5">
-              {recentDMs.length === 0 ? (
-                <li className="px-2 py-1 text-xs text-muted-foreground">No conversations</li>
-              ) : (
-                recentDMs.map((dm) => (
-                  <li key={dm.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // For org agents and humans, open the main channel for v1.
-                        // TODO: per-DM routing in a later slice.
-                        const firstChannel = channels[0];
-                        if (firstChannel) setActiveChannel(firstChannel.id);
-                        onClose?.();
-                      }}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-                        'text-sidebar-foreground/90 hover:bg-sidebar-accent/60',
-                      )}
-                    >
-                      <MemberAvatar
-                        name={dm.name}
-                        kind={dm.kind}
-                        size="sm"
-                      />
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate font-medium leading-none">{dm.name}</span>
-                          {dm.kind !== 'human' ? <MemberBadge kind={dm.kind} /> : null}
-                        </div>
-                        {dm.role ? (
-                          <span className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">
-                            {dm.role}
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          </section>
-
-          {/* Group chats (merged — team-default chats + regular group chats, NO #) */}
-          <section aria-label="Group chats">
-            <div className="mb-1 flex items-center gap-1.5 px-2">
-              <Users className="size-3 text-muted-foreground" aria-hidden />
-              <h3 className="text-[0.625rem] font-semibold uppercase tracking-widest text-muted-foreground">
-                Group Chats
-              </h3>
-            </div>
-            <ul className="flex flex-col gap-0.5">
-              {teamChats.length === 0 ? (
-                <li className="px-2 py-1 text-xs text-muted-foreground">No group chats</li>
-              ) : (
-                teamChats.map((t) => {
-                  // For v1, clicking a group chat opens the team's first channel.
-                  // Team-default group chats get a small "team" badge to distinguish
-                  // from regular group chats.
+              {(() => {
+                // Merge DMs + group chats into one list, sorted alphabetically
+                const dmItems = recentDMs.map((dm) => ({
+                  type: 'dm' as const,
+                  id: dm.id,
+                  name: dm.name,
+                  kind: dm.kind,
+                  role: dm.role,
+                }));
+                const groupItems = teamChats.map((t) => {
                   const firstChannel = channels.find((c) => c.teamId === t.id);
-                  const isActive =
-                    firstChannel && activeChannelId === firstChannel.id;
+                  return {
+                    type: 'group' as const,
+                    id: t.id,
+                    name: t.name,
+                    firstChannelId: firstChannel?.id,
+                    isActive: firstChannel && activeChannelId === firstChannel.id,
+                  };
+                });
+                const merged = [...dmItems, ...groupItems].sort((a, b) => a.name.localeCompare(b.name));
+                if (merged.length === 0) return <li className="px-2 py-1 text-xs text-muted-foreground">No chats</li>;
+                return merged.map((item) => {
+                  if (item.type === 'dm') {
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const firstChannel = channels[0];
+                            if (firstChannel) setActiveChannel(firstChannel.id);
+                            onClose?.();
+                          }}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                            'text-sidebar-foreground/90 hover:bg-sidebar-accent/60',
+                          )}
+                        >
+                          <MemberAvatar name={item.name} kind={item.kind} size="sm" />
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium leading-none">{item.name}</span>
+                              {item.kind !== 'human' ? <MemberBadge kind={item.kind} /> : null}
+                            </div>
+                            {item.role ? (
+                              <span className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">{item.role}</span>
+                            ) : null}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  }
+                  // Group chat — Users icon before the name
                   return (
-                    <li key={t.id}>
+                    <li key={item.id}>
                       <button
                         type="button"
                         onClick={() => {
-                          if (firstChannel) setActiveChannel(firstChannel.id);
+                          if (item.firstChannelId) setActiveChannel(item.firstChannelId);
                           onClose?.();
                         }}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-                          isActive
+                          item.isActive
                             ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                             : 'text-sidebar-foreground/90 hover:bg-sidebar-accent/60',
                         )}
                       >
-                        <span
-                          className="grid size-5 place-items-center rounded bg-muted text-[0.625rem] font-semibold text-muted-foreground"
-                          aria-hidden
-                        >
-                          {t.name.charAt(0).toUpperCase()}
+                        <span className="grid size-5 place-items-center rounded bg-muted text-muted-foreground" aria-hidden>
+                          <Users className="size-3" />
                         </span>
-                        <span className="truncate">{t.name}</span>
-                        {/* Small "team" badge to distinguish team-default chats */}
+                        <span className="truncate">{item.name}</span>
                         <span className="ml-auto rounded bg-primary/10 px-1 py-0 text-[0.5625rem] font-medium leading-none text-primary">
                           team
                         </span>
                       </button>
                     </li>
                   );
-                })
-              )}
+                });
+              })()}
             </ul>
           </section>
         </div>
