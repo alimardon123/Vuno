@@ -33,6 +33,7 @@ export const TYPED_MESSAGE_EVENTS: EventType[] = [
   'ReactionAdded',
   'PreemptIssued',
   'AttentionWakeup',
+  'MemoryUpdated',
 ];
 
 export interface ChatMessageProjection {
@@ -74,6 +75,7 @@ const TYPE_LABELS: Partial<Record<EventType, string>> = {
   ReactionAdded: 'REACTION',
   PreemptIssued: 'PREEMPT',
   AttentionWakeup: 'ATTENTION',
+  MemoryUpdated: 'LEARNED',
 };
 
 const STATUS_HINTS: Partial<Record<EventType, ClaimStatus | 'blocked' | 'passed'>> = {

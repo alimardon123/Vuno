@@ -102,6 +102,7 @@ const ALLOWED_TYPES = new Set([
   'ThreadReplyPosted',
   'PreemptIssued',
   'AttentionWakeup',
+  'MemoryUpdated',
 ]);
 
 interface PostBody {
@@ -130,6 +131,29 @@ function triggerAttentionRouter(eventId: string, body: string | undefined, chann
   });
 }
 
+// Async trigger: after a human posts a MessagePosted, fire the memory evolution
+// route. The PA (Bob) silently extracts learned facts (interests, focus areas,
+// sentiment) from the message and updates his model of the owner.
+// Per the "Powerful" principle: the PA visibly learns from the owner's behavior.
+// Per the "Performant" principle: fire-and-forget, never blocks the response.
+function triggerMemoryEvolution(
+  eventId: string,
+  body: string | undefined,
+  channelId: string,
+  ownerUserId: string,
+): void {
+  if (!body) return;
+  // Fire-and-forget — don't await, don't block the response
+  void fetch('http://localhost:3000/api/memory-evolution', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messageEventId: eventId, body, channelId, ownerUserId }),
+  }).catch((err) => {
+    // Silent failure — memory evolution is best-effort, never blocks user
+    console.warn('[events] memory evolution trigger failed:', err);
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as PostBody | null;
@@ -150,6 +174,13 @@ export async function POST(req: Request) {
     if (!org) {
       return NextResponse.json({ ok: false, error: 'No organization found' }, { status: 400 });
     }
+
+    // Resolve the org owner (the human who posts messages — Kai in v1).
+    // The PA's memory evolution needs the owner's id to find the right PA.
+    const ownerUser = await db.user.findFirst({
+      where: { tenantId: org.tenantId, isOrgOwner: true },
+      select: { id: true },
+    });
 
     // Determine scope
     let scopeType = body.scopeType;
@@ -209,6 +240,11 @@ export async function POST(req: Request) {
               const bodyText = (body.payload as { body?: string }).body;
               if (typeof event.id === 'string' && typeof bodyText === 'string') {
                 triggerAttentionRouter(event.id, bodyText, scopeId);
+                // Memory evolution — PA silently learns from the owner's messages.
+                // Fires alongside the attention router (react + learn in parallel).
+                if (ownerUser) {
+                  triggerMemoryEvolution(event.id, bodyText, scopeId, ownerUser.id);
+                }
               }
             }
             return NextResponse.json({ ok: true, event });
@@ -233,6 +269,10 @@ export async function POST(req: Request) {
       const bodyText = (body.payload as { body?: string }).body;
       if (typeof created[0]?.id === 'string' && typeof bodyText === 'string') {
         triggerAttentionRouter(created[0].id, bodyText, scopeId);
+        // Memory evolution — PA silently learns (Prisma path)
+        if (ownerUser) {
+          triggerMemoryEvolution(created[0].id, bodyText, scopeId, ownerUser.id);
+        }
       }
     }
     return NextResponse.json({ ok: true, event: created[0] });

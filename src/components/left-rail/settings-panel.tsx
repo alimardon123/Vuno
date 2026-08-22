@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   Brain,
   Radar,
+  BookHeart,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/common/theme-toggle';
 import { ATTENTION_PATTERNS } from '@/lib/agents/attention-router';
@@ -30,7 +31,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const navItems: Array<{
     label: string;
     icon: typeof BookOpen;
-    view: 'ledger' | 'wiki' | 'hr' | 'thoughts' | 'attention';
+    view: 'ledger' | 'wiki' | 'hr' | 'thoughts' | 'attention' | 'memory';
     description: string;
   }> = [
     {
@@ -56,6 +57,12 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       icon: Radar,
       view: 'attention',
       description: 'What each agent listens for in channel chatter.',
+    },
+    {
+      label: 'Memory Evolution',
+      icon: BookHeart,
+      view: 'memory',
+      description: 'How your PA\'s model of you has grown over time.',
     },
     {
       label: 'HR / Meta',

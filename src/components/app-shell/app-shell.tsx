@@ -17,6 +17,7 @@ import { WikiView } from '@/components/wiki/wiki-view';
 import { HRView } from '@/components/hr/hr-view';
 import { ThoughtGraphView } from '@/components/thoughts/thought-graph-view';
 import { AttentionRouterView } from '@/components/attention/attention-router-view';
+import { MemoryEvolutionView } from '@/components/memory/memory-evolution-view';
 import { InstallAgentDialog } from '@/components/agents/install-agent-dialog';
 import { FileObjectiveDialog } from '@/components/objective/file-objective-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -161,6 +162,7 @@ export function AppShell() {
           {activeView === 'hr' ? <HRView /> : null}
           {activeView === 'thoughts' ? <ThoughtGraphView /> : null}
           {activeView === 'attention' ? <AttentionRouterView /> : null}
+          {activeView === 'memory' ? <MemoryEvolutionView /> : null}
         </main>
 
         {/* Right rail — hidden on mobile; sheet-triggered */}

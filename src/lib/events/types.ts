@@ -30,7 +30,8 @@ export type EventType =
   | 'SharedItem'
   | 'ReactionAdded'
   | 'PreemptIssued'
-  | 'AttentionWakeup';
+  | 'AttentionWakeup'
+  | 'MemoryUpdated';
 
 export type ActorType = 'agent' | 'human' | 'system';
 
@@ -211,6 +212,18 @@ export interface EventPayloadMap {
     topic: string;                          // what topic matched (e.g. "security", "perf")
     matchedKeywords: string[];              // which keywords triggered the wake-up
     confidence: number;                     // 0-1 — how relevant the agent thinks this is
+  };
+  MemoryUpdated: {
+    agentId: string;              // the personal assistant (e.g. Bob)
+    agentName: string;
+    ownerHumanId: string;          // the human owner (e.g. Kai)
+    ownerName: string;             // owner's display name (for rendering)
+    factType: 'interest' | 'focus_area' | 'sentiment' | 'preference';
+    key: string;                    // e.g. "interests", "focus_areas", "current_sentiment"
+    value: string;                  // the learned value (e.g. "rust", "worried")
+    oldValue: string | null;        // previous value (null if new fact)
+    evidenceEventId: string;        // the user message that triggered this learning
+    confidence: number;             // 0-1 — how confident the PA is in this inference
   };
 }
 

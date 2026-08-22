@@ -28,6 +28,7 @@ import {
   SmilePlus,
   Eye,
   Sparkles,
+  Brain,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
@@ -956,6 +957,75 @@ function MessageBody({
             </div>
             <p className="mt-1 text-[0.6875rem] italic text-muted-foreground/80">
               engaging — typing a brief observation…
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    case 'MemoryUpdated': {
+      // The PA silently learned something about the owner from this message.
+      // Rendered as a subtle "🧠 learned" badge — the second magic moment
+      // (after the attention router's "noticed this" badge).
+      // Per the "Beautiful" principle: amber accent (warm, learned), Brain icon,
+      // fact-type pill, evidence link.
+      const m = p as EventPayloadMap['MemoryUpdated'];
+      const confidencePct = Math.round(m.confidence * 100);
+      const isNew = m.oldValue === null;
+      const accentColor = 'var(--status-asserted)'; // amber — warm, learned
+      const factTypeLabel = m.factType === 'focus_area' ? 'focus area'
+        : m.factType === 'interest' ? 'interest'
+        : m.factType === 'sentiment' ? 'sentiment'
+        : 'preference';
+      return (
+        <div
+          className="flex items-start gap-2 rounded-md border-l-2 bg-[var(--status-asserted)]/[0.06] px-3 py-2"
+          style={{ borderColor: accentColor }}
+        >
+          <span
+            className="mt-0.5 inline-flex size-4 items-center justify-center text-[var(--status-asserted)] animate-status-pulse"
+            aria-hidden
+          >
+            <Brain className="size-3.5" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm leading-relaxed text-foreground/90">
+              <span className="font-medium">{m.agentName}</span>{' '}
+              <span className="text-muted-foreground">
+                {isNew ? 'learned a new' : 'updated an'} {factTypeLabel} about{' '}
+                <span className="font-medium text-foreground/80">{m.ownerName}</span>
+              </span>
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                className="rounded px-1.5 py-0 font-mono text-[0.625rem] uppercase tracking-wider"
+                style={{
+                  backgroundColor: `color-mix(in oklch, ${accentColor} 14%, transparent)`,
+                  color: accentColor,
+                }}
+              >
+                {m.key}
+              </span>
+              <span className="rounded bg-muted/70 px-1.5 py-0 font-mono text-[0.625rem] text-foreground/80">
+                {m.value}
+              </span>
+              {m.oldValue ? (
+                <span className="text-[0.625rem] text-muted-foreground/70">
+                  was: <span className="font-mono line-through">{m.oldValue.length > 40 ? m.oldValue.slice(0, 40) + '…' : m.oldValue}</span>
+                </span>
+              ) : null}
+              <span
+                className="ml-1 inline-flex items-center gap-0.5 rounded px-1 py-0 text-[0.5625rem] font-semibold uppercase tracking-wider text-[var(--status-asserted)]"
+                title={`confidence: ${confidencePct}%`}
+              >
+                <Sparkles className="size-2.5" aria-hidden />
+                {confidencePct}%
+              </span>
+            </div>
+            <p className="mt-1 text-[0.6875rem] italic text-muted-foreground/80">
+              {isNew
+                ? `noted from your message — saved to ${m.ownerName}'s profile`
+                : `refined the model — ${m.ownerName}'s ${factTypeLabel} changed`}
             </p>
           </div>
         </div>

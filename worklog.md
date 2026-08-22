@@ -2306,3 +2306,161 @@ Task: Attention Router — the "magic moment" feature. When a user posts a messa
 - evt-260: MessagePosted (user, perf message)
 - evt-261: AttentionWakeup (Peri/perf, conf=0.84, kw=[latency, p99, benchmark])
 - evt-262: MessagePosted (Peri's brief observation)
+
+
+---
+Task ID: 32
+Agent: autonomous-cron
+Task: Personal Assistant Memory Evolution — the natural complement to the attention router (react → learn). When Kai posts a message, Bob (the PA) silently extracts learned facts (interests, focus areas, sentiment, preferences), upserts them into PersonalMemory (Tier 2), and fires a MemoryUpdated event visible in chat as a "🧠 learned" badge. A new Memory Evolution view shows the timeline of how Bob's model of Kai has grown.
+
+## 🔍 Research (Step 1)
+- Read worklog: Round 23 (Task ID 31) added the Attention Router. Agents now *react* to messages, but they don't *learn*. Every time Kai mentions Rust, the same observation fires — no accumulation, no "I've noticed you keep coming back to Rust" moment.
+- Multi-role review:
+  - **Critic**: "The killer gap: the 5-tier memory architecture exists in the schema (PersonalMemory table) but is empty. Tier 2 doesn't visibly evolve. The PA feels like a static config, not a learning entity."
+  - **Architect**: "The natural complement to react→learn. Build a memory detector that runs alongside the attention router — same async fire-and-forget pattern. The MemoryUpdated event makes the learning visible + auditable."
+  - **Engineer**: "Reuse the attention-router pattern. The detector is substring-based (interests, focus areas) + regex-based (stated preferences) + keyword-based (sentiment). Upsert PersonalMemory, fire MemoryUpdated events, skip already-known facts (no spam)."
+  - **Designer**: "The second magic moment: Kai posts 'I'm excited to dig into Rust' → within ~1s a small amber '🧠 Bob learned: interest → Rust' badge appears inline. The Memory Evolution view shows the full timeline — like watching the PA's notebook fill up."
+- Picked from the next-steps list: "Personal assistant memory evolution — Bob's preferences update based on Kai's actions."
+
+## 💻 Action (Step 2)
+
+### 1. New event type: `MemoryUpdated` (types.ts)
+- Payload: `{agentId, agentName, ownerHumanId, ownerName, factType, key, value, oldValue, evidenceEventId, confidence}`
+- `factType`: 'interest' | 'focus_area' | 'sentiment' | 'preference'
+- `oldValue`: null if new fact, previous value if updated (enables diff view)
+- Added to TYPED_MESSAGE_EVENTS + TYPE_LABELS ('LEARNED') in project.ts
+
+### 2. Memory detector (`src/lib/agents/memory-detector.ts`)
+- `detectMemoryFacts(body)` returns up to 4 facts per message (capped — Simple principle)
+- **Interests** (33 tech keywords): rust, golang, python, typescript, kubernetes, docker, tokio, webassembly, react, next.js, postgres, redis, kafka, graphql, grpc, terraform, aws, gcp, azure, elixir, swift, kotlin, zig, nim, … (confidence 0.8, append to list)
+- **Focus areas** (20 domains): distributed systems, machine learning, AI, security, performance, observability, database, storage, networking, compiler, frontend, backend, devops, sre, cryptography, data engineering, infrastructure, … (confidence 0.75, append to list)
+- **Sentiment** (13 patterns): worried, concerned, anxious, frustrated, stressed, excited, pumped, thrilled, stoked, focused (deep dive, digging into), … (confidence 0.65-0.85, REPLACE previous value — current state, not history)
+- **Stated preferences** (4 regex patterns): "I prefer X", "I like/love X", "I hate X", "I always use X" (confidence 0.75-0.9, append to list)
+- `appendToListValue(existingJson, newValue)` — dedupes + caps at 20 entries (keeps most recent)
+- `valueInList(existingJson, value)` — checks if already known (for skip logic)
+
+### 3. New `/api/memory-evolution` route
+- POST `{messageEventId, body, channelId, ownerUserId}`
+- Flow:
+  1. Fetch the PA (personal_assistant agent owned by ownerUserId)
+  2. Run `detectMemoryFacts(body)`
+  3. For each fact:
+     - Read existing PersonalMemory for that key
+     - Skip if already known (list-type) — no spam on repeat mentions
+     - Upsert PersonalMemory with new aggregate value
+     - Queue a MemoryUpdated event (with oldValue for diff)
+  4. Stream all MemoryUpdated events (they appear in chat as "🧠 learned" badges)
+- 400-700ms "thinking" delay before processing — feels organic, not instant
+- Uses Rust substrate (port 3030) for spine appends, Prisma fallback
+- Silently skips if no PA installed for the user
+
+### 4. Async trigger in /api/events POST
+- Added `triggerMemoryEvolution(eventId, body, channelId, ownerUserId)` helper
+- Resolves the org owner (Kai) via `db.user.findFirst({ where: { isOrgOwner: true } })`
+- Fires BOTH triggers (attention router + memory evolution) in parallel after a human MessagePosted — react + learn simultaneously
+- Fire-and-forget, never blocks the user's response (Performant principle)
+- Added 'MemoryUpdated' to ALLOWED_TYPES
+
+### 5. MemoryUpdated rendering (message-bubble.tsx)
+- New `case 'MemoryUpdated'` in the renderContent switch
+- Amber border (var(--status-asserted)) + animated Brain icon (animate-status-pulse)
+- Shows: PA name, "learned a new/update an {factType} about {ownerName}"
+- Fact-type pill (amber), key pill (mono), value chip (mono)
+- If updated (not new): shows "was: ~~oldValue~~" with strikethrough
+- Confidence % with Sparkles icon (amber)
+- Italic "noted from your message — saved to {ownerName}'s profile" / "refined the model"
+- Imported `Brain` from lucide-react
+
+### 6. MemoryEvolutionView (settings panel)
+- New view added to settings navItems (BookHeart icon, between Attention Router and HR / Meta)
+- Two sections:
+  1. **Current Model** — grid of cards showing Bob's current PersonalMemory (key, category, value chips, "updated X ago")
+  2. **Learning Timeline** — reverse-chronological list of all MemoryUpdated events with:
+     - Timeline dot (fact-type colored)
+     - Fact-type pill (INTEREST/FOCUS AREA/SENTIMENT/PREFERENCE)
+     - key → value chips
+     - "new" badge or "was: ~~oldValue~~" strikethrough
+     - Confidence % with Sparkles
+     - Italic "Bob learned this about Kai from message evt-XXX…"
+     - Relative timestamp
+- Empty states for both sections (no memories / no events yet)
+- Footer explaining how it works (detector, caps, confidence ranges)
+- Fact-type → status color mapping: interest=sky, focus_area=emerald, sentiment=amber, preference=amber
+- Added 'memory' to ActiveView union type in app-store.ts
+- Wired into app-shell.tsx
+
+## 📊 Result (Step 3)
+- Lint: clean
+- End-to-end test 1 (Rust + excited): "I am excited to dig into Rust for the new storage engine — it feels like the right tool for the job"
+  - seq=263: User message posted
+  - seq=264: AttentionWakeup from Sam (verifier/quality, 0.52) — "storage engine" matched quality keywords
+  - seq=265: Sam posted "QA glance — worth a test plan before this lands…"
+  - seq=266: **LEARNED** Bob fact=interest key=interests value=Rust old=None conf=0.8
+  - seq=267: **LEARNED** Bob fact=focus_area key=focus_areas value=Storage old=None conf=0.75
+  - seq=268: **LEARNED** Bob fact=sentiment key=current_sentiment value=excited old=None conf=0.85
+- End-to-end test 2 (dedup): "Thinking about Rust again — the borrow checker is interesting"
+  - seq=269: User message posted
+  - NO MemoryUpdated event fired — "Rust" already in interests list (dedup works)
+  - NO AttentionWakeup — no attention-router keywords matched (correct)
+- End-to-end test 3 (sentiment update): "I am worried about the security of the auth token flow — feels risky"
+  - seq=270: User message posted
+  - seq=271: AttentionWakeup from Sid (security, 0.84)
+  - seq=272: **LEARNED** Bob fact=focus_area key=focus_areas value=Security old=["Storage"] conf=0.75 (appended)
+  - seq=273: **LEARNED** Bob fact=sentiment key=current_sentiment value=worried old=excited conf=0.8 (updated!)
+  - seq=274: Sid posted security observation
+  - seq=275: AttentionWakeup from Devi (risk, 0.55)
+  - seq=276: Devi posted counterpoint
+- /api/memory-evolution endpoint: 200 in 460-709ms
+- Bob's PersonalMemory after testing: 7 entries (3 new from this round + 4 pre-existing)
+  - interests: ["Rust"]
+  - focus_areas: ["Storage", "Security"]
+  - current_sentiment: worried
+  - + 4 pre-existing (current_project, meeting_preferences, coding_style, preferred_language)
+- No errors in dev.log
+- MemoryEvolutionView renders via Settings → Memory Evolution nav item
+
+## 💡 Information (Step 4)
+- The "second magic moment" works: Kai posts about Rust + excitement → within ~1s three "🧠 learned" badges appear inline (interest, focus area, sentiment). The PA feels like it's genuinely paying attention.
+- The dedup logic is critical — without it, every repeat mention would spam the channel. "Rust already known? Skip." This keeps the learning subtle, not noisy.
+- The sentiment REPLACE semantics (vs append) are correct — sentiment is current state, not history. The diff view (old=excited → new=worried) makes the change visible.
+- Both triggers (attention router + memory evolution) fire in parallel after a human MessagePosted — react + learn simultaneously. The user sees agents waking up AND the PA learning, all within ~2-3s.
+- The Memory Evolution view's two-panel design (current state + timeline) gives users both the "what does Bob know about me right now" and the "how did Bob's model grow" perspectives. The timeline with diff (was: ~~oldValue~~) is particularly powerful for transparency.
+- The 4-fact cap per message prevents extraction spam — a message mentioning 10 techs only learns the first 4, keeping the channel calm.
+
+## 🔧 Adjustment (Step 5)
+- All features implemented + verified end-to-end with 3 test messages covering: new learning, dedup, and sentiment update.
+- Next high-impact step recommendations (in priority order):
+  1. **ACP (agent-to-agent comms)** — now that agents react (attention router) and the PA learns (memory evolution), let agents message each other directly. Bob could @-mention Sid when Kai expresses a security concern, creating a structured handoff.
+  2. **PA references learned facts in responses** — when Bob next speaks (e.g. via attention router), prefix with "Kai, based on your interest in Rust…" and show a small "memory" pill linking to the MemoryUpdated event. Closes the loop: learn → reference.
+  3. **MCP integration in Rust** — replace the Rust concurrent demo's simulated tasks with real LLM calls via reqwest to z-ai API. Makes Rust the brain, not just the spine.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One event type (MemoryUpdated). One detector module. One route. One view. Substring + regex matching, no ML. Reuses attention-router's async fire-and-forget pattern. |
+| **Powerful** | The PA visibly learns from the owner's behavior — interests, focus areas, sentiment, preferences. No other multi-agent product has PAs that visibly learn + let users audit the learning. |
+| **Performant** | Async fire-and-forget — never blocks user's POST. Detector is O(n×k) substring — fast. Dedup skips already-known facts (no wasted events). 4-fact cap prevents spam. |
+| **Scalable** | Adding new fact types = one new entry in the detector. Multiple PAs (one per human) work in parallel — each PA only learns from its own owner. PersonalMemory table handles 10x users. |
+| **Efficient** | Reuses existing PersonalMemory table (Tier 2), EventSpine, broadcast, adapter infrastructure. No new tables, no new services, no new dependencies. |
+| **Beautiful** | Amber "🧠 learned" badge with pulsing Brain icon, fact-type pills, value chips, "was: ~~oldValue~~" strikethrough for updates. Memory Evolution view has warm cream cards + timeline dots + italic evidence hints. |
+| **Functional** | Verified end-to-end with 3 test messages: new learning (3 facts), dedup (0 facts), sentiment update (2 facts with diff). All events created + persisted. View renders. No errors. |
+
+### Files modified this round
+- MODIFIED: `src/lib/events/types.ts` (MemoryUpdated event type + payload)
+- MODIFIED: `src/lib/events/project.ts` (MemoryUpdated in TYPED_MESSAGE_EVENTS + TYPE_LABELS)
+- MODIFIED: `src/app/api/events/route.ts` (MemoryUpdated in ALLOWED_TYPES + triggerMemoryEvolution helper + ownerUser resolution + dual-trigger on human MessagePosted in both Rust + Prisma paths)
+- MODIFIED: `src/components/chat/message-bubble.tsx` (MemoryUpdated rendering — Brain icon, amber border, fact-type pill, value chips, oldValue strikethrough, confidence %, italic evidence hint)
+- MODIFIED: `src/store/app-store.ts` (added 'memory' to ActiveView union)
+- MODIFIED: `src/components/app-shell/app-shell.tsx` (MemoryEvolutionView import + render branch)
+- MODIFIED: `src/components/left-rail/settings-panel.tsx` (Memory Evolution nav item + BookHeart icon)
+- CREATED: `src/lib/agents/memory-detector.ts` (detectMemoryFacts + appendToListValue + valueInList + INTEREST/FOCUS/SENTIMENT/PREFERENCE keyword configs)
+- CREATED: `src/app/api/memory-evolution/route.ts` (POST endpoint — fetches PA, runs detector, upserts PersonalMemory, fires MemoryUpdated events)
+- CREATED: `src/components/memory/memory-evolution-view.tsx` (Settings view: current model grid + learning timeline with diff)
+
+### Verification artifacts (events created during testing)
+- evt-266: MemoryUpdated (Bob, interest→Rust, new, conf=0.8)
+- evt-267: MemoryUpdated (Bob, focus_area→Storage, new, conf=0.75)
+- evt-268: MemoryUpdated (Bob, sentiment→excited, new, conf=0.85)
+- evt-272: MemoryUpdated (Bob, focus_area→Security, was=["Storage"], conf=0.75)
+- evt-273: MemoryUpdated (Bob, sentiment→worried, was=excited, conf=0.8)
+- PersonalMemory: interests=["Rust"], focus_areas=["Storage","Security"], current_sentiment=worried
