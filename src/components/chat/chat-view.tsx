@@ -1,18 +1,21 @@
 // Vuno — Chat view
 // Fetches /api/events?scopeType=channel&scopeId=<id>&project=true and renders
 // the projected chat messages. Includes a typed composer.
+// The channel header is clickable — opens a sheet showing shared links/files/media.
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/app-store';
 import { useFetch } from '@/hooks/use-fetch';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { TypedComposer } from '@/components/chat/typed-composer';
+import { ChannelDetailsContent } from '@/components/chat/channel-details-content';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { useEffect, useRef } from 'react';
-import { Hash, Users, Pin } from 'lucide-react';
+import { Hash, Users, Pin, ChevronRight } from 'lucide-react';
 import type { ChatMessageProjection } from '@/lib/events/project';
 
 interface EventsResponse {
@@ -29,6 +32,7 @@ interface ChannelsResponse {
 export function ChatView() {
   const { activeChannelId, activeDecisionId, setActiveDecision, chatNonce } =
     useAppStore();
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Channels list (so we can show the channel header even if we don't have the channel preloaded)
   const channelsRes = useFetch<ChannelsResponse>('/api/channels');
@@ -71,13 +75,26 @@ export function ChatView() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <header className="border-b border-border/70 px-4 py-2.5">
+      {/* Header — clickable to open the channel details sheet (shared things) */}
+      <header
+        className="group cursor-pointer border-b border-border/70 px-4 py-2.5 transition-colors hover:bg-accent/40"
+        onClick={() => setDetailsOpen(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setDetailsOpen(true);
+          }
+        }}
+        aria-label={`Open channel details for ${channel?.name ?? 'channel'}`}
+      >
         <div className="flex items-center gap-2">
           <Hash className="size-4 text-muted-foreground" aria-hidden />
           <h1 className="text-base font-semibold leading-none tracking-tight">
             {channel?.name ?? 'channel'}
           </h1>
+          <ChevronRight className="size-4 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:text-muted-foreground" aria-hidden />
           <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
             {activeDecisionId ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 font-medium text-primary">
@@ -119,6 +136,20 @@ export function ChatView() {
 
       {/* Composer */}
       <TypedComposer channelId={activeChannelId} />
+
+      {/* Channel details sheet — shared links, files, media */}
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent side="right" className="w-full max-w-md p-0">
+          <SheetTitle className="sr-only">Channel details</SheetTitle>
+          {activeChannelId ? (
+            <ChannelDetailsContent
+              channelId={activeChannelId}
+              channelName={channel?.name ?? 'channel'}
+              channelTopic={channel?.topic}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

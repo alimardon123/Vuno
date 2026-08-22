@@ -536,3 +536,95 @@ Task: Research Buzz from Block, shift to warm cream/mustard palette, restructure
 - MODIFIED: `src/components/chat/chat-view.tsx` (removed RunDebateButton)
 - MODIFIED: `src/components/chat/typed-composer.tsx` (Proposal now triggers /api/debate, "File proposal" button label, "filing a proposal triggers the agent debate chain" hint)
 
+
+---
+Task ID: 11 (Round 3 — UI fixes per user feedback)
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Fix org panel team members, fix left-side-no-scroll, make central top bar clickable (shared things), merge team chats into group chats, remove "Booting Org" loading, polish. Follow the 5-step continuous learning loop (Research → Action → Result → Information → Adjustment).
+
+## 🔍 Research (Step 1)
+- Read app-shell.tsx — found the full-page "Booting organization…" spinner that blocks the UI
+- Read org-panel.tsx — found teams expand to channels only, no member list
+- Read chats-panel.tsx — found separate "Team Chats" section (user wants merged)
+- Read chat-view.tsx — found channel header is not clickable
+- Layout uses `min-h-screen flex flex-col` which allows page scroll; user wants left side fixed
+
+## 💻 Action (Step 2)
+
+### 1. Fixed layout — left side fixed, center scrolls
+- `src/components/app-shell/app-shell.tsx`: changed root from `min-h-screen flex flex-col` to `h-screen flex flex-col overflow-hidden`. The whole app is now a fixed viewport height. Top bar + 3-column area fill the screen; each column scrolls internally via ScrollArea.
+- Removed the footer (was redundant with top bar's tenant/org info; Buzz doesn't have a footer).
+- Left rail width: `calc(48px + 240px)` — the icon rail (48px) + content panel (240px).
+
+### 2. Removed "Booting Org" full-page spinner
+- Removed the `booting` state and the full-page loading screen.
+- The app shell renders immediately. The seed runs in the background via useEffect.
+- The chat view shows an empty state until the first channel is auto-selected (which happens as soon as the seed completes + channels fetch resolves).
+- If seed fails, shows a "Failed to initialize" error screen with Retry button.
+- Removed unused `Boxes`, `Loader2`, `Skeleton` imports.
+
+### 3. Org panel — team members when expanded
+- `src/components/left-rail/org-panel.tsx`: when a team is expanded, it now shows TWO subsections:
+  - **Channels** (with `#` prefix, as before)
+  - **Members** (avatars + names + badges, filtered to agents whose teamId matches + the CEO)
+- Members are clickable (open the team's first channel for v1; DM routing is a later slice).
+- Compact layout with small avatars + member badges.
+
+### 4. Merged team chats into group chats
+- `src/components/left-rail/chats-panel.tsx`: removed the separate "Team Chats" section header.
+- Merged into a single "Group Chats" section.
+- Each team-default group chat gets a small "team" badge (primary/10 background, primary text) to distinguish from regular group chats.
+- All multi-person chats are now in one list — no artificial separation.
+
+### 5. Central top bar clickable — shared things sheet
+- `src/components/chat/chat-view.tsx`: the channel header is now a clickable button (`role="button"`, `tabIndex=0`, keyboard accessible).
+- On click: opens a right-side Sheet showing the channel details.
+- Hover state: `hover:bg-accent/40` + a ChevronRight icon that translates slightly on hover (affordance).
+- `src/components/chat/channel-details-content.tsx` (NEW): the sheet content. Shows:
+  - Channel header (name + topic)
+  - Shared links (URLs extracted from message bodies via regex)
+  - Shared files (file extensions detected: pdf, docx, xlsx, png, jpg, mp4, mov, mp3, etc.)
+  - Shared images / videos / audio (categorized by extension)
+  - Empty state: "No shared items yet — Links, files, and media shared in this channel will appear here."
+- Uses the `/api/events?scopeType=channel&scopeId=<id>` endpoint (no projection — raw events).
+- Polls every 30s for new shared items.
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Dev server: no runtime errors
+- Agent Browser QA:
+  - ✅ App loads immediately (no "Booting Org" spinner)
+  - ✅ Left side is fixed (h-screen + overflow-hidden on root; left rail doesn't scroll with page)
+  - ✅ Org panel: expanding Engineering → Engineering team shows Channels + Members (Aris visible)
+  - ✅ Chats panel: "GROUP CHATS" section (merged, no "Team Chats" header); each team chat has a small "team" badge
+  - ✅ Channel header is clickable (`Open channel details for storage-engine` button); clicking opens the Channel details sheet with name + topic + "No shared items yet" empty state
+- VLM analysis: 8.5/10 — "ship this... production-ready iteration. The fixed sidebar, immediate load state, and expanded team hierarchy significantly improve the information density and perceived performance."
+
+## 💡 Information (Step 4)
+- What worked: all 5 fixes applied successfully. Layout is solid. Clickable header is excellent.
+- VLM suggestions for future polish:
+  1. Active channel indicator (bold left-border on active channel in sidebar)
+  2. Avatar stack in members panel (show first 4 + "+N more")
+  3. Message hover actions (reply/react icons)
+  4. Badge color consistency (team badge should be cool color to distinguish from agent amber)
+  5. Search input visibility (subtle border/bg)
+  6. Pinned decision card left-border accent
+
+## 🔧 Adjustment (Step 5)
+- Applied: increased header hover contrast (hover:bg-accent/30 → hover:bg-accent/40)
+- Deferred: the other VLM polish suggestions are quick wins for the next round (active channel indicator, avatar stack, message hover actions, badge color consistency). They're polish-level, not blocking.
+
+## Unresolved issues / next steps
+1. **DM routing** — clicking a DM still opens the main channel. Per-member private chat scope is a later slice.
+2. **Create channel dialog** — the "Create channel" button in Channels panel is a placeholder. Full channel creation with member selection (departments, teams, users) is a later slice.
+3. **Real-time chat via socket.io** (Round 4) — replace 5s polling with WebSocket push. Foundation for concurrent agent runtime.
+4. **Rust substrate service** (Round 5) — new mini-services/vuno-substrate/ Rust project. Owns the event spine writer.
+5. **Concurrent agent runtime in Rust** (Round 6) — the headline. Agents wake in parallel on events, debate in real time.
+
+### Files created/modified this round
+- NEW: `src/components/chat/channel-details-content.tsx` (170 lines)
+- MODIFIED: `src/components/app-shell/app-shell.tsx` (h-screen layout, removed booting spinner + footer, removed unused imports)
+- MODIFIED: `src/components/left-rail/org-panel.tsx` (team expansion now shows Channels + Members subsections)
+- MODIFIED: `src/components/left-rail/chats-panel.tsx` (merged Team Chats into Group Chats with "team" badge)
+- MODIFIED: `src/components/chat/chat-view.tsx` (clickable header + channel details sheet)
+

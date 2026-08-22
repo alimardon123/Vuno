@@ -18,7 +18,6 @@ import { HRView } from '@/components/hr/hr-view';
 import { InstallAgentDialog } from '@/components/agents/install-agent-dialog';
 import { FileObjectiveDialog } from '@/components/objective/file-objective-dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -28,10 +27,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Boxes,
   Menu,
   PanelRight,
-  Loader2,
 } from 'lucide-react';
 import { useFetch } from '@/hooks/use-fetch';
 
@@ -54,12 +51,13 @@ export function AppShell() {
   // org info (for top bar + footer)
   const orgInfoRes = useFetch<OrgInfo>('/api/org-info');
 
-  // boot-sequence state
-  const [booting, setBooting] = useState(true);
+  // boot-sequence state — no longer blocks the UI; seeds in the background
   const [bootError, setBootError] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
   // auto-seed on first mount + auto-select the first channel once seeding completes
+  // The app shell renders immediately; the chat view shows a subtle loading
+  // state until the first channel is selected.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -74,7 +72,6 @@ export function AppShell() {
           if (cancelled) return;
           if (!post.ok) {
             setBootError('Seed failed');
-            setBooting(false);
             return;
           }
         }
@@ -92,11 +89,9 @@ export function AppShell() {
         } catch {
           // ignore channel fetch errors — user can still pick manually
         }
-        setBooting(false);
       } catch (e) {
         if (!cancelled) {
           setBootError(e instanceof Error ? e.message : String(e));
-          setBooting(false);
         }
       }
     })();
@@ -105,29 +100,10 @@ export function AppShell() {
     };
   }, []);
 
-  if (booting) {
-    return (
-      <div
-        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background text-foreground"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="grid size-10 place-items-center rounded-md bg-primary text-primary-foreground">
-          <Boxes className="size-5" aria-hidden />
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden />
-          Booting organization…
-        </div>
-        <Skeleton className="h-24 w-72" />
-      </div>
-    );
-  }
-
   if (bootError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-lg font-semibold">Failed to boot</h1>
+      <div className="flex h-screen flex-col items-center justify-center gap-4 p-6 text-center">
+        <h1 className="text-lg font-semibold">Failed to initialize</h1>
         <p className="text-sm text-muted-foreground">{bootError}</p>
         <Button onClick={() => location.reload()}>Retry</Button>
       </div>
@@ -135,7 +111,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <TopBar
         tenantName={orgInfoRes.data?.tenant?.name ?? 'Acme'}
         orgName={orgInfoRes.data?.org?.name ?? 'Storage Engine Co.'}
@@ -152,7 +128,7 @@ export function AppShell() {
           aria-label="Open navigation"
         >
           <Menu className="size-4" aria-hidden />
-          Channels
+          Chats
         </Button>
         <Button
           variant="outline"
@@ -166,14 +142,14 @@ export function AppShell() {
         </Button>
       </div>
 
-      {/* 3-column layout */}
+      {/* 3-column layout — fills remaining height; each column scrolls internally */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left rail — hidden on mobile; sheet-triggered */}
-        <aside className="hidden md:flex md:w-64 md:shrink-0" aria-label="Navigation">
+        {/* Left rail — fixed, never scrolls with the page; internal ScrollArea handles overflow */}
+        <aside className="hidden md:flex md:shrink-0" aria-label="Navigation" style={{ width: 'calc(48px + 240px)' }}>
           <LeftRail />
         </aside>
 
-        {/* Main content */}
+        {/* Main content — scrolls internally */}
         <main className="flex-1 overflow-hidden" role="main">
           {activeView === 'chat' ? <ChatView /> : null}
           {activeView === 'decision' ? <DecisionView /> : null}
@@ -191,33 +167,6 @@ export function AppShell() {
           <RightRail />
         </aside>
       </div>
-
-      {/* Sticky footer */}
-      <footer
-        className="mt-auto border-t bg-background px-4 py-2 text-xs text-muted-foreground"
-        role="contentinfo"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span>
-            <span className="font-medium text-foreground">
-              {orgInfoRes.data?.tenant?.name ?? 'Acme'}
-            </span>
-            {' · '}
-            <span className="font-medium text-foreground">
-              {orgInfoRes.data?.org?.name ?? 'Storage Engine Co.'}
-            </span>
-            {' · Vuno v0.1'}
-          </span>
-          <a
-            href="/docs/PRD.md"
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary hover:underline"
-          >
-            Docs
-          </a>
-        </div>
-      </footer>
 
       {/* Mobile left rail sheet */}
       <Sheet

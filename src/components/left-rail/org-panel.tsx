@@ -201,31 +201,91 @@ export function OrgPanel({ onClose }: { onClose?: () => void }) {
                                 </span>
                               </button>
                               {teamExpanded ? (
-                                <ul className="ml-3 flex flex-col border-l border-border/40 pl-2">
-                                  {teamChannels.map((c) => {
-                                    const isActive = activeChannelId === c.id;
-                                    return (
-                                      <li key={c.id}>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setActiveChannel(c.id);
-                                            onClose?.();
-                                          }}
-                                          className={cn(
-                                            'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors',
-                                            isActive
-                                              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                                              : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/40',
-                                          )}
-                                        >
-                                          <Hash className="size-3 opacity-60" aria-hidden />
-                                          <span className="truncate">{c.name}</span>
-                                        </button>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
+                                <div className="ml-3 flex flex-col border-l border-border/40 pl-2">
+                                  {/* Team channels */}
+                                  {teamChannels.length > 0 ? (
+                                    <div className="flex flex-col">
+                                      <div className="px-2 py-0.5 text-[0.5625rem] uppercase tracking-widest text-muted-foreground/70">
+                                        Channels
+                                      </div>
+                                      <ul className="flex flex-col">
+                                        {teamChannels.map((c) => {
+                                          const isActive = activeChannelId === c.id;
+                                          return (
+                                            <li key={c.id}>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setActiveChannel(c.id);
+                                                  onClose?.();
+                                                }}
+                                                className={cn(
+                                                  'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors',
+                                                  isActive
+                                                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                                                    : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/40',
+                                                )}
+                                              >
+                                                <Hash className="size-3 opacity-60" aria-hidden />
+                                                <span className="truncate">{c.name}</span>
+                                              </button>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </div>
+                                  ) : null}
+                                  {/* Team members */}
+                                  <div className="mt-1 flex flex-col">
+                                    <div className="px-2 py-0.5 text-[0.5625rem] uppercase tracking-widest text-muted-foreground/70">
+                                      Members
+                                    </div>
+                                    <ul className="flex flex-col">
+                                      {allMembers
+                                        .filter((m) => {
+                                          // For human members, check if they're in this team via team memberships
+                                          // For agent members, check teamId directly
+                                          if (m.kind === 'human') {
+                                            // v1: the CEO is in all teams (org owner). In a real app, team
+                                            // memberships would be a separate query.
+                                            return m.role === 'CEO';
+                                          }
+                                          // agent — check teamId
+                                          const agent = agents.find((a) => a.id === m.id);
+                                          return agent?.teamId === t.id;
+                                        })
+                                        .map((m) => (
+                                          <li key={m.id}>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                // Open the team's first channel for v1
+                                                const firstChannel = channels.find((c) => c.teamId === t.id);
+                                                if (firstChannel) setActiveChannel(firstChannel.id);
+                                                onClose?.();
+                                              }}
+                                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors hover:bg-sidebar-accent/40"
+                                            >
+                                              <MemberAvatar
+                                                name={m.name}
+                                                kind={m.kind}
+                                                size="sm"
+                                                health={m.status === 'active' ? 'ok' : 'warn'}
+                                              />
+                                              <div className="flex min-w-0 flex-1 flex-col">
+                                                <div className="flex items-center gap-1">
+                                                  <span className="truncate text-xs font-medium leading-none">{m.name}</span>
+                                                  {m.kind !== 'human' ? (
+                                                    <MemberBadge kind={m.kind} ownerName={m.ownerName} />
+                                                  ) : null}
+                                                </div>
+                                              </div>
+                                            </button>
+                                          </li>
+                                        ))}
+                                    </ul>
+                                  </div>
+                                </div>
                               ) : null}
                             </div>
                           );

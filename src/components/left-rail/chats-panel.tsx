@@ -237,21 +237,22 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
             </ul>
           </section>
 
-          {/* Team chats (group chats, NO #) */}
-          <section aria-label="Team chats">
+          {/* Group chats (merged — team-default chats + regular group chats, NO #) */}
+          <section aria-label="Group chats">
             <div className="mb-1 flex items-center gap-1.5 px-2">
               <Users className="size-3 text-muted-foreground" aria-hidden />
               <h3 className="text-[0.625rem] font-semibold uppercase tracking-widest text-muted-foreground">
-                Team Chats
+                Group Chats
               </h3>
             </div>
             <ul className="flex flex-col gap-0.5">
               {teamChats.length === 0 ? (
-                <li className="px-2 py-1 text-xs text-muted-foreground">No team chats</li>
+                <li className="px-2 py-1 text-xs text-muted-foreground">No group chats</li>
               ) : (
                 teamChats.map((t) => {
-                  // For v1, clicking a team chat opens the team's first channel.
-                  // In a real app, this would open the group-chat surface.
+                  // For v1, clicking a group chat opens the team's first channel.
+                  // Team-default group chats get a small "team" badge to distinguish
+                  // from regular group chats.
                   const firstChannel = channels.find((c) => c.teamId === t.id);
                   const isActive =
                     firstChannel && activeChannelId === firstChannel.id;
@@ -277,6 +278,10 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
                           {t.name.charAt(0).toUpperCase()}
                         </span>
                         <span className="truncate">{t.name}</span>
+                        {/* Small "team" badge to distinguish team-default chats */}
+                        <span className="ml-auto rounded bg-primary/10 px-1 py-0 text-[0.5625rem] font-medium leading-none text-primary">
+                          team
+                        </span>
                       </button>
                     </li>
                   );
