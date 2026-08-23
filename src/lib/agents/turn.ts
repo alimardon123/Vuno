@@ -76,7 +76,7 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
   const resolved = resolveAdapter(manifest);
   if (!resolved.ok) throw new NoHarness(`${agent.name}: ${resolved.reason}`);
 
-  const [events, claims] = await Promise.all([
+  const [events, claims, held] = await Promise.all([
     db.event.findMany({
       where: { orgId: req.orgId, scopeType: req.scopeType, scopeId: req.scopeId },
       orderBy: { seq: 'desc' },
@@ -88,6 +88,14 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
         : { orgId: req.orgId, scopeType: req.scopeType, scopeId: req.scopeId },
       select: { id: true, statement: true, status: true, scopeType: true, scopeId: true },
       take: 40,
+    }),
+    // What this agent has been trained on. Assigning a skill is a staffing
+    // decision, so it changes what the agent is told rather than sitting in a
+    // table nothing reads (docs/IA-NAVIGATION.md).
+    db.memberSkill.findMany({
+      where: { memberId: req.memberId },
+      select: { skill: { select: { name: true, content: true } } },
+      orderBy: { createdAt: 'asc' },
     }),
   ]);
 
@@ -105,7 +113,11 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
     },
   };
 
-  const adapter = resolved.adapter as { run?: (c: AgentContext) => Promise<AgentRun> };
+  const adapter = resolved.adapter as {
+    run?: (c: AgentContext) => Promise<AgentRun>;
+    skills?: Array<{ name: string; content: string }>;
+  };
+  adapter.skills = held.map((h) => h.skill);
   if (typeof adapter.run !== 'function') {
     throw new Error(`The ${manifest.harnessName} harness does not report what a run cost`);
   }

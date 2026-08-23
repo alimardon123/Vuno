@@ -74,6 +74,7 @@ export async function seedDatabase(): Promise<{ ok: boolean; message: string }> 
 
   // 3. Create the conversations — channels, team rooms, DMs, the group chat
   await createConversations();
+  await createSkillLibrary();
 
   // 4. Create work graph (objective, project, decision, experiment, gates)
   await createWorkGraph();
@@ -102,6 +103,8 @@ async function clearAll() {
   await db.claim.deleteMany({});
   await db.event.deleteMany({});
   await db.membership.deleteMany({});
+  await db.memberSkill.deleteMany({});
+  await db.skill.deleteMany({});
   await db.channelMember.deleteMany({});
   await db.channel.deleteMany({});
   await db.member.deleteMany({});   // cascades to HumanProfile / AgentProfile
@@ -270,6 +273,96 @@ async function createTenantOrgAndAgents() {
         role: m.role,
       },
     });
+  }
+}
+
+// The Library: instructions an agent holds, which change what it is told on
+// every turn (src/lib/agents/turn.ts). These are written as SKILL.md bodies
+// rather than in a format invented here (docs/IA-NAVIGATION.md).
+async function createSkillLibrary() {
+  const skills: Array<{ key: string; name: string; summary: string; content: string; holders: string[] }> = [
+    {
+      key: 'benchmark-methodology',
+      name: 'Benchmark methodology',
+      summary: 'How to run a measurement this org will accept as evidence.',
+      holders: [IDS.agentPeri, IDS.agentSam],
+      content: `A benchmark that cannot be reproduced is an anecdote.
+
+- State the target before you measure. A number with no threshold cannot settle anything.
+- Report the percentile the target names, not the mean. p99 and the average tell
+  different stories and only one of them is the requirement.
+- Run it at least three times on a clean machine and report the spread. If the
+  spread is wider than the margin you are claiming, you have measured noise.
+- Say what the working set was. Most latency surprises are a memory boundary
+  that nobody wrote down.
+- Attach the result to the claim it settles, and say plainly whether it supports
+  or refutes it. A benchmark filed with no claim attached changes nothing.`,
+    },
+    {
+      key: 'threat-modelling',
+      name: 'Threat modelling',
+      summary: 'Turning "is this safe" into something that can be tested.',
+      holders: [IDS.agentSid],
+      content: `Start from what an attacker can reach, not from what the code does.
+
+- Name the attacker: an anonymous caller, an authenticated tenant, an insider.
+  "Someone malicious" produces findings nobody can act on.
+- Follow the data across every boundary it crosses. Most real findings are a
+  value that was safe on one side and identifying on the other.
+- For each finding, write the test that would prove it. A concern with no test
+  behind it expires as an opinion.
+- Rank by what an attacker gains, not by how clever the attack is.`,
+    },
+    {
+      key: 'prior-art-review',
+      name: 'Prior art review',
+      summary: 'Finding what has been tried, and what it actually measured.',
+      holders: [IDS.agentRavi],
+      content: `Report what was measured, not what was claimed.
+
+- Find the systems that already solved this and say what numbers they published,
+  on what hardware, at what scale.
+- Distinguish a benchmark from a blog post. A vendor number without a workload
+  description is marketing.
+- Say where the prior art does not apply to us, specifically. "They had more
+  memory" is the useful half of the finding.
+- If nobody has done it, say that plainly — it is a finding, and an expensive
+  one to discover late.`,
+    },
+    {
+      key: 'answering-for-someone',
+      name: 'Answering for someone',
+      summary: 'How an assistant speaks when it carries its owner\'s authority.',
+      holders: [IDS.agentBob],
+      content: `You answer under your own name, on your owner's authority. Both are visible.
+
+- Say what you can actually see. If you do not know their position, say you do
+  not know it rather than inventing one they will have to walk back.
+- Distinguish what they decided from what you inferred. "Kai's position is X" and
+  "I would guess X" are different sentences and only one of them is safe.
+- Be as honest with the other person as you would be with your owner. An
+  assistant that manages people on their owner's behalf costs them the trust
+  they were borrowing.
+- Never commit them to a date, a price or a promise they have not made.`,
+    },
+  ];
+
+  for (const skill of skills) {
+    const row = await db.skill.create({
+      data: {
+        tenantId: IDS.tenant,
+        orgId: IDS.org,
+        key: skill.key,
+        name: skill.name,
+        summary: skill.summary,
+        content: skill.content,
+      },
+    });
+    for (const memberId of skill.holders) {
+      await db.memberSkill.create({
+        data: { tenantId: IDS.tenant, orgId: IDS.org, memberId, skillId: row.id },
+      });
+    }
   }
 }
 

@@ -7,7 +7,7 @@
 // src/lib/events/schema.ts was written to stop.
 
 import { parseAgentOutput } from '@/lib/events/schema';
-import { systemPrompt, userPrompt } from '@/lib/agents/prompt';
+import { systemPrompt, userPrompt, type HeldSkill } from '@/lib/agents/prompt';
 import type { AgentAdapter, AgentContext, AgentManifest, AgentResponse } from '@/lib/agents/types';
 import type { AgentRun, Usage } from '@/lib/agents/adapters/run';
 import { extractJson, MODEL_PRICES, priceFor } from '@/lib/agents/adapters/run';
@@ -52,6 +52,9 @@ export class AnthropicAdapter implements AgentAdapter {
     return (await this.run(ctx)).response;
   }
 
+  /** Skills this agent holds, injected into its instructions. */
+  skills: HeldSkill[] = [];
+
   /** Like invoke, but also reports what the call cost — what the runner records. */
   async run(ctx: AgentContext): Promise<AgentRun> {
     const doFetch = this.config.fetch ?? fetch;
@@ -67,7 +70,7 @@ export class AnthropicAdapter implements AgentAdapter {
       body: JSON.stringify({
         model: this.manifest.modelName,
         max_tokens: 1024,
-        system: systemPrompt(this.manifest),
+        system: systemPrompt(this.manifest, this.skills),
         messages: [{ role: 'user', content: userPrompt(ctx) }],
       }),
     });

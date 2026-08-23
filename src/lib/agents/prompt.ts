@@ -37,9 +37,21 @@ const RESPONSIBILITIES: Record<string, string> = {
  * fills with confident guesses is worse than one with an empty ledger, because
  * the gates read from it.
  */
-export function systemPrompt(manifest: AgentManifest): string {
+export interface HeldSkill {
+  name: string;
+  content: string;
+}
+
+export function systemPrompt(manifest: AgentManifest, skills: HeldSkill[] = []): string {
   const label = ROLE_LABELS[manifest.role] ?? manifest.role;
   const duty = RESPONSIBILITIES[manifest.role] ?? 'Contribute what your role can see.';
+
+  // A skill an agent holds and is never told about is a row in a table. This is
+  // what makes assigning one a staffing decision rather than a setting.
+  const held = skills.length
+    ? `\n\nWhat you have been trained on. Follow these where they apply:\n\n` +
+      skills.map((s) => `## ${s.name}\n${s.content.trim()}`).join('\n\n')
+    : '';
 
   return `You are ${label} in an organisation where people and agents work as colleagues.
 Your job: ${duty}
@@ -77,7 +89,7 @@ and "uncertain" when the evidence does not yet decide. Never claim "tested" or
 "falsified" — only a measurement moves a claim there, and you are not the one
 recording it.
 
-Both arrays may be empty. Nothing worth saying is a valid turn.`;
+Both arrays may be empty. Nothing worth saying is a valid turn.${held}`;
 }
 
 /** What just happened, and what is being asked of the agent. */

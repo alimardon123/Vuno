@@ -328,6 +328,28 @@ async function roster(browser: Browser) {
   check(after.toLowerCase().includes('retired'), 'a retired member moves to its own section');
   // Retired, not deleted: they authored events and may carry a claim.
   check(after.includes('Smoke Agent'), 'a retired member stays on the roster');
+
+  // The Library and Review live inside Members rather than as rail tabs, and
+  // both put their state in the URL.
+  await open(page, '/members?view=library');
+  const library = await page.locator('main').innerText();
+  check(library.includes('SKILL.md') || library.toLowerCase().includes('skills'), 'the Library is reachable by URL');
+
+  const read = page.getByRole('button', { name: 'Read' }).first();
+  if ((await read.count()) > 0) {
+    await read.click();
+    await page.waitForTimeout(400);
+    const shown = await page.locator('pre').first().innerText();
+    // What the Library shows has to be what the agent is told — there is no
+    // second, prettier version.
+    check(shown.trim().length > 40, 'a skill shows the instructions it carries', `${shown.length} chars`);
+  }
+
+  await open(page, '/members?view=review');
+  check(
+    (await page.locator('main').innerText()).toLowerCase().includes('escalation'),
+    'Review is reachable by URL',
+  );
   await ctx.close();
 }
 

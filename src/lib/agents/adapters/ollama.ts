@@ -6,7 +6,7 @@
 // cannot act at all, and the whole product is agents and people as colleagues.
 
 import { parseAgentOutput } from '@/lib/events/schema';
-import { systemPrompt, userPrompt } from '@/lib/agents/prompt';
+import { systemPrompt, userPrompt, type HeldSkill } from '@/lib/agents/prompt';
 import type { AgentAdapter, AgentContext, AgentManifest, AgentResponse } from '@/lib/agents/types';
 import type { AgentRun, Usage } from '@/lib/agents/adapters/run';
 import { extractJson } from '@/lib/agents/adapters/run';
@@ -60,6 +60,9 @@ export class OllamaAdapter implements AgentAdapter {
     return (await this.run(ctx)).response;
   }
 
+  /** Skills this agent holds, injected into its instructions. */
+  skills: HeldSkill[] = [];
+
   async run(ctx: AgentContext): Promise<AgentRun> {
     const doFetch = this.config.fetch ?? fetch;
     const startedAt = Date.now();
@@ -74,7 +77,7 @@ export class OllamaAdapter implements AgentAdapter {
         // replies arriving as prose about JSON.
         format: 'json',
         messages: [
-          { role: 'system', content: systemPrompt(this.manifest) },
+          { role: 'system', content: systemPrompt(this.manifest, this.skills) },
           { role: 'user', content: userPrompt(ctx) },
         ],
       }),
