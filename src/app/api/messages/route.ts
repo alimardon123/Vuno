@@ -1,14 +1,22 @@
 // Vuno — POST /api/messages
-// Post a MessagePosted event to a channel scope.
-// Also broadcasts via socket.io + triggers the attention router + memory
-// evolution (the collaboration loop). Per the "Functional" principle: regular
-// user messages via the composer MUST trigger the collaboration loop, not just
-// direct API calls to /api/events.
+// Append a MessagePosted event to a channel scope.
+//
+// This used to fan out to /api/attention-router and /api/memory-evolution on
+// every message a person posted. Those matched substrings in the body and
+// replied with hand-written text attributed to agents: one message about
+// security produced five events — an observation from Sid, a counterpoint from
+// Devi, two things Bob had "learned" about you, and a handoff after which Sid
+// posted again, saying "Security-wise on security". It read as an organisation
+// of colleagues and it was a keyword table.
+//
+// CLAUDE.md rules that out ("no scripted theatre standing in for a working
+// mechanism"), so it is gone. Agents act through the orchestrator, which leases
+// work, records what each run cost, and needs a model behind it — and says so
+// when there isn't one.
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { originFrom } from '@/lib/origin';
 import { getMember, getOrgOwner } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended } from '@/lib/realtime/broadcast';
@@ -22,7 +30,6 @@ const bodySchema = z.object({
   actorType: z.enum(['member', 'system']).default('member'),
   actorMemberId: z.string().optional(),
   onBehalfOfMemberId: z.string().optional(),
-  useRealLLM: z.boolean().optional(), // forwarded to attention-router + memory-evolution
 });
 
 export async function POST(req: Request) {
@@ -101,37 +108,6 @@ export async function POST(req: Request) {
     scopeId: channel.id,
     event: created,
   });
-
-  // Trigger the collaboration loop — attention router + memory evolution.
-  // Same pattern as /api/events POST. Fire-and-forget (Performant principle).
-  // Wake the org only when a person posted. An agent's own message must not
-  // re-enter the router, or agents wake each other in a loop. The kind lives on
-  // the member record now, not on the event (ADR-0009).
-  if (parsed.actorType === 'member' && poster?.kind === 'human') {
-    const eventId = created.id;
-    const messageBody = parsed.body;
-    const channelId = channel.id;
-    const useRealLLM = parsed.useRealLLM;
-
-    // Attention router
-    void fetch(`${originFrom(req)}/api/attention-router`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messageEventId: eventId, body: messageBody, channelId, useRealLLM }),
-    }).catch((err) => console.warn('[messages] attention router trigger failed:', err));
-
-    // Memory evolution — the owner whose assistant learns from this message.
-    void getOrgOwner(org.id).then((ownerUser) => {
-      if (ownerUser) {
-        return fetch(`${originFrom(req)}/api/memory-evolution`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messageEventId: eventId, body: messageBody, channelId, ownerUserId: ownerUser.id, useRealLLM }),
-        });
-      }
-      return null;
-    }).catch((err) => console.warn('[messages] memory evolution trigger failed:', err));
-  }
 
   return NextResponse.json({ ok: true, event: created });
 }

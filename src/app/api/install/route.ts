@@ -1,6 +1,12 @@
 // Vuno — POST /api/install
-// Install a new agent: validate body (zod), create Agent row, append AgentInstalled
-// event to the spine (actorType='human', scopeType='org', scopeId=org.id).
+// Install a new agent: validate body (zod), create the member and its agent
+// profile, append AgentInstalled to the spine.
+//
+// `modelName` and `harnessName` used to default to `simulated/echo-1` on the
+// `simulated` harness — an agent installed that way joined the org, appeared in
+// the roster, and could never do anything, because the harness behind it
+// replied with hand-written text. Both are required now: naming what will run
+// an agent is part of hiring it.
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -14,8 +20,10 @@ const bodySchema = z.object({
   name: z.string().min(1).max(120),
   kind: z.enum(['independent', 'personal_assistant']),
   role: z.string().min(1).max(60),
-  modelName: z.string().min(1).max(120).default('simulated/echo-1'),
-  harnessName: z.string().min(1).max(120).default('simulated'),
+  // What will actually run this agent. There is no default: an agent whose
+  // harness is a placeholder is a member who cannot work.
+  modelName: z.string().min(1).max(120),
+  harnessName: z.string().min(1).max(120),
   tools: z.array(z.string()).default([]),
   permissions: z.array(z.string()).default([]),
   teamId: z.string().optional().nullable(),
