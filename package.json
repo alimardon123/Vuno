@@ -17,7 +17,9 @@
     "db:studio": "prisma studio",
     "orchestrator": "bun run scripts/orchestrator.ts",
     "dev:app": "next dev -p ${PORT:-3000}",
-    "smoke": "bun run tests/smoke/smoke.ts"
+    "smoke": "bun run tests/smoke/smoke.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -19,10 +19,16 @@ const dbFile = join(dir, 'test.db');
 
 process.env.DATABASE_URL = `file:${dbFile}`;
 
-const proc = Bun.spawn(
-  ['bunx', 'prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'],
-  { env: { ...process.env, DATABASE_URL: `file:${dbFile}` }, stdout: 'pipe', stderr: 'pipe' },
-);
+// The migration history, not `db push`: the tests then exercise the same path
+// `bun run setup` takes on a real machine, so a migration that does not apply
+// fails the test run rather than production.
+const proc = Bun.spawn(['bunx', 'prisma', 'migrate', 'deploy'], {
+  env: { ...process.env, DATABASE_URL: `file:${dbFile}` },
+  stdout: 'pipe',
+  stderr: 'pipe',
+});
 if ((await proc.exited) !== 0) {
-  throw new Error(`test schema push failed:\n${await new Response(proc.stderr).text()}`);
+  throw new Error(
+    `Could not apply migrations to the test database:\n${await new Response(proc.stderr).text()}`,
+  );
 }

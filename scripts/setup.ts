@@ -40,9 +40,25 @@ await run(['bun', 'install'], 'bun install');
 
 step(3, TOTAL, 'Database');
 await run(['bunx', 'prisma', 'generate'], 'prisma generate');
-await run(['bunx', 'prisma', 'db', 'push', '--skip-generate'], 'prisma db push');
+// `migrate deploy` applies the committed migration history and nothing else.
+// This used to be `db push`, which diffs the schema against the database and
+// drops whatever no longer matches — fine for a scratch database, and a way to
+// lose an org's event spine on the first schema change after it went live.
+// `bun run db:push` is still there for iterating on the schema in development.
+await run(['bunx', 'prisma', 'migrate', 'deploy'], 'prisma migrate deploy');
 
 step(4, TOTAL, 'Seed');
-await run(['bun', 'run', 'scripts/seed.ts'], 'seed');
+// Seeding clears the database first, so running setup a second time on a
+// machine somebody has actually used would take their org and its event spine
+// with it. Setup fills an empty database and leaves a used one alone; `bun run
+// seed` is still there for anyone who does want to start over.
+const { db } = await import('../src/lib/db');
+const existing = await db.organization.count();
+if (existing > 0) {
+  console.log(`  Database already holds ${existing} organisation${existing === 1 ? '' : 's'} — leaving it alone.`);
+  console.log('  To replace it with the sample org: \x1b[1mbun run seed\x1b[0m');
+} else {
+  await run(['bun', 'run', 'scripts/seed.ts'], 'seed');
+}
 
 console.log('\n\x1b[32m✓ Ready.\x1b[0m Start it with:  \x1b[1mbun run dev\x1b[0m\n');
