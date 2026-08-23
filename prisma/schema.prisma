@@ -279,7 +279,11 @@ model Objective {
   constraints      String?
   budget           String?
   autonomyLevel    String   @default("L2")  // L1-L4
-  status          String   @default("filed") // 'filed' | 'routing' | 'in_progress' | 'shipped' | 'killed'
+  status          String   @default("filed") // 'filed' | 'active' | 'shipped' | 'killed'
+  // Where this objective sits in the twelve-stage lifecycle. The orchestrator
+  // advances it; nothing else writes it (ADR-0007).
+  stage           String   @default("filed")
+  stageEnteredAt  DateTime @default(now())
   owningDepartment String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -420,3 +424,83 @@ model AgentMemory {
   @@index([orgId, agentId])
 }
 
+
+
+// ─── Orchestrator (ADR-0007) ─────────────────────────────────────────────────
+
+/// A unit of work the orchestrator owns. Leases are what make it crash-safe: a
+/// worker that dies mid-run lets its lease expire and the item is picked up
+/// again rather than lost.
+model WorkItem {
+  id            String    @id @default(cuid())
+  tenantId      String
+  orgId         String
+  kind          String    // 'route_objective' | 'define_problem' | 'propose' | ...
+  subjectType   String    // 'objective' | 'decision' | 'claim' | 'channel'
+  subjectId     String
+  objectiveId   String?   // set when the item belongs to an objective's lifecycle
+  /// Which member should do this. Null means "any member matching the kind's
+  /// role" — resolved at dispatch. A human and an agent are equally assignable.
+  assigneeId    String?
+
+  state         String    @default("pending") // 'pending'|'leased'|'done'|'failed'|'cancelled'
+  priority      Int       @default(0)         // higher runs first
+  runAfter      DateTime  @default(now())     // not eligible before this
+
+  leasedBy      String?                       // worker id holding the lease
+  leaseExpiresAt DateTime?
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(3)
+  lastError     String?
+
+  /// Stops the same work being enqueued twice. Unique among items that have not
+  /// finished, so a completed item does not block re-running the same step later.
+  dedupeKey     String?
+
+  input         String    @default("{}")      // JSON
+  result        String?                       // JSON, set on completion
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  sessions      WorkSession[]
+
+  @@index([orgId, state, runAfter, priority])
+  @@index([objectiveId, state])
+  @@index([leaseExpiresAt])
+  @@unique([orgId, dedupeKey])
+}
+
+/// One attempt at a work item by one member. Universal on purpose: a human
+/// working an item has a start, an end and a cost in time; an agent has the same
+/// plus model and token detail. HR reads this for both (ADR-0009 Part 3).
+model WorkSession {
+  id            String    @id @default(cuid())
+  tenantId      String
+  orgId         String
+  workItemId    String
+  memberId      String
+
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  durationMs    Int?
+  outcome       String    @default("running") // 'running'|'succeeded'|'failed'|'abandoned'
+  error         String?
+
+  /// Cost in whole cents. Agent runs convert tokens; human work can carry time
+  /// at a rate, or nothing. Either way "cost per resolved decision" is a query.
+  costCents     Int       @default(0)
+
+  // Agent execution detail. Null for a human's session.
+  modelName     String?
+  harnessName   String?
+  tokensIn      Int?
+  tokensOut     Int?
+
+  workItem      WorkItem  @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, memberId, startedAt])
+  @@index([workItemId])
+}

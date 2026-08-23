@@ -7,26 +7,13 @@
 // These tests are the guard on that. Each one fails against the old schema.
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-const dir = mkdtempSync(join(tmpdir(), 'vuno-parity-'));
-const dbFile = join(dir, 'test.db');
-process.env.DATABASE_URL = `file:${dbFile}`;
-
-const { PrismaClient } = await import('@prisma/client');
-const db = new PrismaClient({ datasources: { db: { url: `file:${dbFile}` } }, log: ['error'] });
+// The shared test database is created by tests/setup.ts before any import.
+import { db } from '@/lib/db';
 
 const TENANT = 'tnt-parity';
 const ORG = 'org-parity';
 
 beforeAll(async () => {
-  const proc = Bun.spawn(
-    ['bunx', 'prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'],
-    { env: { ...process.env, DATABASE_URL: `file:${dbFile}` }, stdout: 'pipe', stderr: 'pipe' },
-  );
-  if ((await proc.exited) !== 0) throw new Error(await new Response(proc.stderr).text());
 
   await db.tenant.create({ data: { id: TENANT, name: 'T', slug: 'parity-t' } });
   await db.organization.create({ data: { id: ORG, tenantId: TENANT, name: 'O', slug: 'parity-o' } });
@@ -55,8 +42,18 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.$disconnect();
-  rmSync(dir, { recursive: true, force: true });
+  // Scoped teardown: other test files share this database.
+  await db.workSession.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.workItem.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.claim.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.event.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.membership.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.objective.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.member.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.team.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.department.deleteMany({ where: { orgId: 'org-parity' } });
+  await db.organization.deleteMany({ where: { id: 'org-parity' } });
+  await db.tenant.deleteMany({ where: { id: 'tnt-parity' } });
 });
 
 describe('parity is a schema property', () => {

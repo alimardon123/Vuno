@@ -7,37 +7,30 @@
 // implementation and pass once the database owns the sequence.
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-const dir = mkdtempSync(join(tmpdir(), 'vuno-spine-'));
-const dbFile = join(dir, 'test.db');
-
-process.env.DATABASE_URL = `file:${dbFile}`;
-
-// Imported after DATABASE_URL is set — the Prisma client reads it at construction.
-const { PrismaClient } = await import('@prisma/client');
-const db = new PrismaClient({ datasources: { db: { url: `file:${dbFile}` } }, log: ['error'] });
+// The shared test database is created by tests/setup.ts before any import.
+import { db } from '@/lib/db';
 
 const TENANT = 'tnt-test';
 const ORG = 'org-test';
 
 beforeAll(async () => {
-  const proc = Bun.spawn(
-    ['bunx', 'prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'],
-    { env: { ...process.env, DATABASE_URL: `file:${dbFile}` }, stdout: 'pipe', stderr: 'pipe' },
-  );
-  const code = await proc.exited;
-  if (code !== 0) throw new Error(`prisma db push failed: ${await new Response(proc.stderr).text()}`);
-
   await db.tenant.create({ data: { id: TENANT, name: 'Test', slug: 'test' } });
   await db.organization.create({ data: { id: ORG, tenantId: TENANT, name: 'Test Org', slug: 'test-org' } });
 });
 
 afterAll(async () => {
-  await db.$disconnect();
-  rmSync(dir, { recursive: true, force: true });
+  // Scoped teardown: other test files share this database.
+  await db.workSession.deleteMany({ where: { orgId: 'org-test' } });
+  await db.workItem.deleteMany({ where: { orgId: 'org-test' } });
+  await db.claim.deleteMany({ where: { orgId: 'org-test' } });
+  await db.event.deleteMany({ where: { orgId: 'org-test' } });
+  await db.membership.deleteMany({ where: { orgId: 'org-test' } });
+  await db.objective.deleteMany({ where: { orgId: 'org-test' } });
+  await db.member.deleteMany({ where: { orgId: 'org-test' } });
+  await db.team.deleteMany({ where: { orgId: 'org-test' } });
+  await db.department.deleteMany({ where: { orgId: 'org-test' } });
+  await db.organization.deleteMany({ where: { id: 'org-test' } });
+  await db.tenant.deleteMany({ where: { id: 'tnt-test' } });
 });
 
 describe('event spine under concurrency', () => {
