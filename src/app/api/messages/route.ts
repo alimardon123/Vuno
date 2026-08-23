@@ -111,7 +111,11 @@ export async function POST(req: Request) {
   // The turn runs in the orchestrator, not here: it leases the work, records
   // what the run cost, retries what is worth retrying, and survives this
   // request ending.
-  const handles = extractHandles(parsed.body);
+  // Capped: `@a @b @c …` in one message is one turn per agent, each a model
+  // call somebody pays for. Three is enough to bring a working group in and
+  // low enough that a pasted list cannot empty a budget.
+  const MAX_SUMMONED = 3;
+  const handles = extractHandles(parsed.body).slice(0, MAX_SUMMONED);
   const mentioned = handles.length
     ? await db.member.findMany({
         where: { orgId: org.id, kind: 'agent', status: 'active', handle: { in: handles } },

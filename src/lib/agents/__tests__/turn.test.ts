@@ -296,3 +296,13 @@ describe('with a model behind it, an agent turn is a real turn', () => {
     expect(result.summary).toContain('nothing usable');
   });
 });
+
+describe('a message cannot summon the whole org', () => {
+  test('at most three agents are queued from one message', async () => {
+    // Every mention is a model call somebody pays for; a pasted list of handles
+    // should not be able to spend a budget.
+    await post({ channelId: CHANNEL, body: '@bob @sid @bob @sid @nobody @bob please' });
+    const items = await db.workItem.findMany({ where: { orgId: ORG } });
+    expect(items.length).toBeLessThanOrEqual(3);
+  });
+});

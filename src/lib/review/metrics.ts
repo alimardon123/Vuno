@@ -19,6 +19,7 @@
 
 import { db } from '@/lib/db';
 import { isStage, STAGES } from '@/lib/orchestrator/stages';
+import { spendToday, type Spend } from '@/lib/agents/budget';
 
 /** Below this, a rate is noise. Reported as a count, not a percentage. */
 export const ENOUGH_TO_JUDGE = 4;
@@ -52,6 +53,8 @@ export interface OrgReview {
   escalation: { parked: number; total: number; rate: number | null };
   /** What the organisation has spent, and on what. */
   spend: { totalCents: number; runs: number; failedRuns: number };
+  /** Today against the ceiling — the number that stops agents running. */
+  today: Spend;
   gates: { blocked: number; total: number };
   ledger: { total: number; falsified: number; uncertain: number };
 }
@@ -68,7 +71,7 @@ function median(values: number[]): number | null {
 }
 
 export async function reviewOrg(orgId: string): Promise<OrgReview> {
-  const [members, claims, objectionEvents, sessions, objectives, gates] = await Promise.all([
+  const [members, claims, objectionEvents, sessions, objectives, gates, today] = await Promise.all([
     db.member.findMany({
       where: { orgId, status: 'active' },
       orderBy: { displayName: 'asc' },
@@ -88,6 +91,7 @@ export async function reviewOrg(orgId: string): Promise<OrgReview> {
     }),
     db.objective.findMany({ where: { orgId }, select: { stage: true, status: true } }),
     db.gate.findMany({ where: { orgId }, select: { state: true } }),
+    spendToday(orgId),
   ]);
 
   // An objection becomes a claim, and that claim's fate is the objection's
@@ -152,6 +156,7 @@ export async function reviewOrg(orgId: string): Promise<OrgReview> {
       runs: sessions.length,
       failedRuns: sessions.filter((s) => s.outcome === 'failed').length,
     },
+    today,
     gates: { blocked: gates.filter((g) => g.state === 'blocked').length, total: gates.length },
     ledger: {
       total: claims.length,

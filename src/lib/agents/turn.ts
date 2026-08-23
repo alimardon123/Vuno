@@ -18,6 +18,7 @@ import { EventSpine } from '@/lib/events/spine';
 import { assertClaim } from '@/lib/ledger/claims';
 import { getAgentRow } from '@/lib/members';
 import { resolveAdapter } from '@/lib/agents/registry';
+import { BudgetExhausted, spendToday } from '@/lib/agents/budget';
 import type { AgentContext, AgentManifest, ScopeType } from '@/lib/agents/types';
 import type { AgentRun } from '@/lib/agents/adapters/run';
 
@@ -75,6 +76,11 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
 
   const resolved = resolveAdapter(manifest);
   if (!resolved.ok) throw new NoHarness(`${agent.name}: ${resolved.reason}`);
+
+  // Checked before the call, not after: a budget enforced on the way out has
+  // already spent the money it was meant to stop.
+  const spend = await spendToday(req.orgId);
+  if (spend.exhausted) throw new BudgetExhausted(spend);
 
   const [events, claims, held] = await Promise.all([
     db.event.findMany({

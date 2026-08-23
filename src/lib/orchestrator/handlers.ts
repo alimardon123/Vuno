@@ -8,6 +8,7 @@ import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
 import { findAgentByRole, listAgentRows } from '@/lib/members';
 import { NoHarness, runAgentTurn } from '@/lib/agents/turn';
+import { BudgetExhausted } from '@/lib/agents/budget';
 import type { ScopeType } from '@/lib/events/types';
 import { STAGES, type Stage } from './stages';
 import type { LeasedItem } from './queue';
@@ -238,9 +239,9 @@ const agentTurn: Handler = async (item) => {
       },
     };
   } catch (err) {
-    if (err instanceof NoHarness) {
-      // Rethrown as a plain error so the runner records it and stops retrying —
-      // no number of attempts will conjure a key.
+    // Neither of these gets better by trying again: no number of attempts will
+    // conjure an API key, and retrying past a budget is what the budget is for.
+    if (err instanceof NoHarness || err instanceof BudgetExhausted) {
       throw Object.assign(new Error(err.message), { permanent: true });
     }
     throw err;

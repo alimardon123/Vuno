@@ -11,7 +11,7 @@ import type { OrgReview } from '@/lib/review/metrics';
 import { ENOUGH_TO_JUDGE } from '@/lib/review/metrics';
 
 export function Review({ review }: { review: OrgReview }) {
-  const { escalation, spend, gates, ledger } = review;
+  const { escalation, spend, gates, ledger, today } = review;
 
   return (
     <div className="flex flex-col gap-5">
@@ -24,10 +24,17 @@ export function Review({ review }: { review: OrgReview }) {
           alarming={escalation.rate !== null && escalation.rate > 0.5}
         />
         <Stat
-          label="Spent"
-          value={money(spend.totalCents)}
-          detail={`${spend.runs} run${spend.runs === 1 ? '' : 's'}, ${spend.failedRuns} failed`}
-          hint="Every run records what it cost, including the ones that cost nothing."
+          label="Today"
+          value={money(today.spentCents)}
+          detail={
+            today.remainingCents === null
+              ? `No ceiling set · ${money(spend.totalCents)} all time`
+              : today.exhausted
+                ? `At the ${money(today.budgetCents)} ceiling — agents have stopped`
+                : `${money(today.remainingCents)} left of ${money(today.budgetCents)}`
+          }
+          hint="A day's ceiling, so a runaway loop costs a day rather than a month. VUNO_DAILY_BUDGET_CENTS in .env."
+          alarming={today.exhausted}
         />
         <Stat
           label="Gates blocked"
