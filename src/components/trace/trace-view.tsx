@@ -35,8 +35,8 @@ interface TraceEvent {
   type: string;
   payload: Record<string, unknown> | string;
   actorType: string;
-  actorAgentId?: string;
-  actorUserId?: string;
+  actorMemberId?: string;
+  onBehalfOfMemberId?: string | null;
   scopeType: string;
   scopeId: string;
   createdAt: string;

@@ -105,8 +105,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         const thoughts: NewEventInput[] = [
           {
             type: 'AgentThought',
-            actorType: 'agent',
-            actorAgentId: this.manifest.id,
+            actorType: 'member',
+            actorMemberId: this.manifest.id,
             scopeType: 'channel',
             scopeId: 'ch-storage',
             payload: {
@@ -118,8 +118,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
           },
           {
             type: 'AgentThought',
-            actorType: 'agent',
-            actorAgentId: this.manifest.id,
+            actorType: 'member',
+            actorMemberId: this.manifest.id,
             scopeType: 'channel',
             scopeId: 'ch-storage',
             payload: {
@@ -131,8 +131,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
           },
           {
             type: 'AgentThought',
-            actorType: 'agent',
-            actorAgentId: this.manifest.id,
+            actorType: 'member',
+            actorMemberId: this.manifest.id,
             scopeType: 'channel',
             scopeId: 'ch-storage',
             payload: {
@@ -148,8 +148,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         // sharing a link in a Slack channel
         const sharedUrl: NewEventInput<'SharedItem'> = {
           type: 'SharedItem',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -162,8 +162,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
 
         const event: NewEventInput<'ProposalOpened'> = {
           type: 'ProposalOpened',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'decision',
           scopeId: trigger.decisionId,
           payload: {
@@ -176,8 +176,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         };
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -196,8 +196,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         const observation = pickArchitectObservation(trigger.topic, trigger.body);
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
@@ -214,8 +214,8 @@ export class SimulatedArchitectAdapter extends SimulatedBaseAdapter {
         const body = `${trigger.fromAgentName} flagged this for me. Architecturally, ${trigger.focusArea.toLowerCase()} work usually has a few seams worth checking: data flow boundaries, failure modes under load, and whether the existing module structure already supports the change. ${trigger.contextSummary.includes('worried') ? "Given Kai's current concern, I'd sketch the rollback path first — reversible decisions are cheaper." : "Happy to draw an ADR if this turns into a real proposal."}`;
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body },
@@ -300,8 +300,8 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
         const thoughts: NewEventInput[] = [
           {
             type: 'AgentThought',
-            actorType: 'agent',
-            actorAgentId: this.manifest.id,
+            actorType: 'member',
+            actorMemberId: this.manifest.id,
             scopeType: 'channel',
             scopeId: 'ch-storage',
             payload: {
@@ -315,8 +315,8 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
           },
           {
             type: 'AgentThought',
-            actorType: 'agent',
-            actorAgentId: this.manifest.id,
+            actorType: 'member',
+            actorMemberId: this.manifest.id,
             scopeType: 'channel',
             scopeId: 'ch-storage',
             payload: {
@@ -332,8 +332,8 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
 
         const event: NewEventInput<'ObjectionRaised'> = {
           type: 'ObjectionRaised',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'decision',
           scopeId: p.decisionId,
           payload: {
@@ -344,8 +344,8 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
         };
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: { body: `Objection raised: ${claimText}` },
@@ -358,8 +358,8 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
         const observation = pickDevilsAdvocateObservation(trigger.topic, trigger.body);
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
@@ -376,8 +376,8 @@ export class SimulatedDevilsAdvocateAdapter extends SimulatedBaseAdapter {
         const body = `${trigger.fromAgentName} asked me to push back on this. Counterpoint on ${trigger.focusArea.toLowerCase()}: what's the failure mode if we commit to this direction? The "obvious" answer is often the trap. ${trigger.contextSummary.includes('worried') || trigger.contextSummary.includes('concerned') ? "Given Kai's current concern, the risk profile matters even more — let's write down the worst case before committing." : "I'd want to see the second-best option written down before we pick."}`;
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body },
@@ -434,8 +434,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         const experimentId = `exp-${Date.now().toString(36)}`;
         const event: NewEventInput<'ExperimentRequested'> = {
           type: 'ExperimentRequested',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'decision',
           scopeId: o.decisionId,
           payload: {
@@ -447,8 +447,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         };
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -467,8 +467,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         const target = '50';
         const completed: NewEventInput<'ExperimentCompleted'> = {
           type: 'ExperimentCompleted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'decision',
           scopeId: expEvent.scopeId,
           payload: {
@@ -480,8 +480,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         };
         const benchmark: NewEventInput<'BenchmarkReported'> = {
           type: 'BenchmarkReported',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'decision',
           scopeId: expEvent.scopeId,
           payload: {
@@ -496,8 +496,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         };
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -508,8 +508,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         // dropping a results file in the channel
         const sharedReport: NewEventInput<'SharedItem'> = {
           type: 'SharedItem',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -537,8 +537,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         // when bloom filters are proposed."
         const teamThought: NewEventInput<'AgentThought'> = {
           type: 'AgentThought',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -557,8 +557,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         const observation = pickPerfObservation(trigger.topic, trigger.body);
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
@@ -575,8 +575,8 @@ export class SimulatedPerfAdapter extends SimulatedBaseAdapter {
         const body = `${trigger.fromAgentName} asked me to take the perf angle. On ${trigger.focusArea.toLowerCase()}: the tail (p99) is what bites you, not the mean. I'd instrument: (1) the hot path, (2) the lock contention surface, (3) the IO boundaries. ${trigger.contextSummary.includes('latency') || trigger.contextSummary.includes('slow') ? "Given the latency concern, I can spin up a micro-benchmark within the hour." : "Happy to draft a benchmark plan if this becomes a real proposal."}`;
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body },
@@ -629,8 +629,8 @@ export class SimulatedSecurityAdapter extends SimulatedBaseAdapter {
         // Security passes the proposal — no open risks from a security standpoint
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -645,8 +645,8 @@ export class SimulatedSecurityAdapter extends SimulatedBaseAdapter {
         const observation = pickSecurityObservation(trigger.topic, trigger.body, trigger.matchedKeywords);
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
@@ -663,8 +663,8 @@ export class SimulatedSecurityAdapter extends SimulatedBaseAdapter {
         const body = `${trigger.fromAgentName} flagged this for me. Security-wise on ${trigger.focusArea.toLowerCase()}: threat model first — who's the attacker, what's the asset, what's the trust boundary. ${trigger.contextSummary.includes('auth') || trigger.contextSummary.includes('token') ? "For auth/token flows specifically: review token lifetime, replay protection (nonce/timestamp), and storage (httpOnly cookies vs localStorage)." : "I'd review the input validation surface + the auth boundary before this ships."} ${trigger.contextSummary.includes('worried') ? "Given Kai's concern, I can file this as a formal RiskFlag if you want it tracked." : "Happy to do a deeper pass if this turns into a proposal."}`;
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body },
@@ -717,8 +717,8 @@ export class SimulatedVerifierAdapter extends SimulatedBaseAdapter {
         const b = benchmarkEvent.payload as EventPayloadMap['BenchmarkReported'];
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -733,8 +733,8 @@ export class SimulatedVerifierAdapter extends SimulatedBaseAdapter {
         const observation = pickVerifierObservation(trigger.topic, trigger.body);
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
@@ -750,8 +750,8 @@ export class SimulatedVerifierAdapter extends SimulatedBaseAdapter {
         const body = `${trigger.fromAgentName} asked me to take the QA angle. On ${trigger.focusArea.toLowerCase()}: I'd sketch a test plan — happy path, failure modes, regression surface. ${trigger.contextSummary.includes('worried') ? "Given Kai's concern, I'd prioritize the failure-mode tests first — cheap to write, high signal." : "Happy to draft the test matrix if this turns into a real change."}`;
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body },
@@ -800,8 +800,8 @@ export class SimulatedHrAdapter extends SimulatedBaseAdapter {
         const d = decisionEvent.payload as EventPayloadMap['DecisionRecorded'];
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: 'ch-storage',
           payload: {
@@ -816,8 +816,8 @@ export class SimulatedHrAdapter extends SimulatedBaseAdapter {
         const observation = pickHrObservation(trigger.topic, trigger.body);
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body: observation },
@@ -833,8 +833,8 @@ export class SimulatedHrAdapter extends SimulatedBaseAdapter {
         const body = `${trigger.fromAgentName} asked me to log this. Noting the ${trigger.focusArea.toLowerCase()} discussion for the next retro. ${trigger.contextSummary.includes('worried') ? "Given Kai's current concern, I'll flag this as a pattern to watch — if it recurs, it may warrant an OKR." : "I'll track whether this becomes a recurring theme across the team."}`;
         const chatEvent: NewEventInput<'MessagePosted'> = {
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: 'channel',
           scopeId: trigger.channelId,
           payload: { body },

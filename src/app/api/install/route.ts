@@ -19,6 +19,8 @@ const bodySchema = z.object({
   tools: z.array(z.string()).default([]),
   permissions: z.array(z.string()).default([]),
   teamId: z.string().optional().nullable(),
+  // Required when kind is personal_assistant: the member this assistant works for.
+  ownerMemberId: z.string().optional().nullable(),
 });
 
 export async function POST(req: Request) {
@@ -60,28 +62,46 @@ export async function POST(req: Request) {
     teamName = team.name;
   }
 
-  // Create the Agent row.
-  const agent = await db.agent.create({
+  // Installing an agent creates a Member with an agent profile — the same row
+  // shape a human gets. Nothing about installation is agent-specific except the
+  // profile that hangs off it (ADR-0009).
+  const handle = parsed.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent';
+  const member = await db.member.create({
     data: {
       tenantId: org.tenantId,
       orgId: org.id,
-      name: parsed.name,
-      kind: parsed.kind,
-      role: parsed.role,
-      modelName: parsed.modelName,
-      harnessName: parsed.harnessName,
-      tools: JSON.stringify(parsed.tools),
-      permissions: JSON.stringify(parsed.permissions),
+      kind: 'agent',
+      displayName: parsed.name,
+      handle,
       teamId: parsed.teamId ?? null,
       status: 'active',
+      presenceState: 'available',
+      agent: {
+        create: {
+          role: parsed.role,
+          modelName: parsed.modelName,
+          harnessName: parsed.harnessName,
+          tools: JSON.stringify(parsed.tools),
+          permissions: JSON.stringify(parsed.permissions),
+          ownerMemberId: parsed.kind === 'personal_assistant' ? parsed.ownerMemberId ?? null : null,
+        },
+      },
     },
+    include: { agent: true },
   });
+  const agent = {
+    id: member.id,
+    name: member.displayName,
+    role: parsed.role,
+    kind: parsed.kind,
+    modelName: parsed.modelName,
+    harnessName: parsed.harnessName,
+  };
 
-  // Append the AgentInstalled event to the spine (org-scoped).
   const spine = new EventSpine(org.tenantId, org.id);
   const eventInput: NewEventInput<'AgentInstalled'> = {
     type: 'AgentInstalled',
-    actorType: 'human',
+    actorType: 'member',
     scopeType: 'org',
     scopeId: org.id,
     payload: {

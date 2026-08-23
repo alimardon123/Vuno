@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { getMember, getOrgOwner } from '@/lib/members';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,30 +42,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'No organization found' }, { status: 400 });
   }
 
-  // Resolve the current user (org owner = Kai in v1)
-  const owner = await db.user.findFirst({
-    where: { tenantId: org.tenantId, isOrgOwner: true },
-    select: { id: true, name: true, email: true },
-  });
+  // The org owner. Humans and agents resolve through the same helper, so there
+  // is no branch on kind here any more (ADR-0009).
+  const owner = await getOrgOwner(org.id);
   if (!owner) {
     return NextResponse.json({ ok: false, error: 'No org owner found' }, { status: 400 });
   }
 
-  // Resolve the target member's name (for the DM chat name)
-  let targetName: string;
-  if (parsed.withMemberKind === 'agent') {
-    const agent = await db.agent.findUnique({
-      where: { id: parsed.withMemberId },
-      select: { name: true },
-    });
-    targetName = agent?.name ?? 'Unknown';
-  } else {
-    const user = await db.user.findUnique({
-      where: { id: parsed.withMemberId },
-      select: { name: true, email: true },
-    });
-    targetName = user?.name ?? user?.email ?? 'Unknown';
+  const target = await getMember(parsed.withMemberId);
+  if (!target) {
+    return NextResponse.json({ ok: false, error: 'Unknown member' }, { status: 400 });
   }
+  const targetName = target.displayName;
 
   // Deterministic slug: sort the two IDs so dm-a-b == dm-b-a
   const ids = [owner.id, parsed.withMemberId].sort();

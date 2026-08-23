@@ -51,8 +51,8 @@ interface DecisionResponse {
     seq: number;
     type: string;
     payload: unknown;
-    actorAgentId?: string | null;
-    actorUserId?: string | null;
+    actorMemberId?: string | null;
+    onBehalfOfMemberId?: string | null;
     actorType: string;
     createdAt: string;
   }>;
@@ -71,7 +71,7 @@ interface Claim {
   status: ClaimStatus;
   scopeType: string;
   scopeId: string;
-  provenanceAgentId?: string | null;
+  provenanceMemberId?: string | null;
   evidenceIds: string[];
   contradictsIds: string[];
   statusReason?: string | null;

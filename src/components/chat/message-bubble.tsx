@@ -111,7 +111,7 @@ export function MessageBubble({
       return { actorName: 'system', actorKind: 'human' as MemberKind, actorRole: 'system', ownerName: undefined };
     }
     if (message.actorType === 'human') {
-      const u = users.find((x) => x.id === message.actorUserId);
+      const u = users.find((x) => x.id === message.actorMemberId);
       const name = u?.name ?? u?.email ?? 'Kai';
       return {
         actorName: name,
@@ -121,7 +121,7 @@ export function MessageBubble({
       };
     }
     // agent
-    const a = agents.find((x) => x.id === message.actorAgentId);
+    const a = agents.find((x) => x.id === message.actorMemberId);
     const kind: MemberKind =
       a?.kind === 'personal_assistant' ? 'personal_assistant' : 'independent';
     const owner = a?.ownerHumanId
@@ -133,7 +133,7 @@ export function MessageBubble({
       actorRole: a?.role ?? '',
       ownerName: owner,
     };
-  }, [agents, users, message.actorAgentId, message.actorUserId, message.actorType]);
+  }, [agents, users, message.actorMemberId, message.actorMemberId, message.actorType]);
 
   const isTyped = Boolean(message.typeLabel && message.type !== 'MessagePosted');
   const accent = hintColor(message.statusHint);

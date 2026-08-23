@@ -86,8 +86,8 @@ export async function GET(req: Request): Promise<NextResponse> {
         tenantId: e.tenantId,
         orgId: e.orgId,
         actorType: e.actorType as EventRecord['actorType'],
-        actorAgentId: e.actorAgentId ?? undefined,
-        actorUserId: e.actorUserId ?? undefined,
+        actorMemberId: e.actorMemberId ?? undefined,
+        onBehalfOfMemberId: e.actorMemberId ?? undefined,
         scopeType: e.scopeType as EventRecord['scopeType'],
         scopeId: e.scopeId,
         visibility: e.visibility as EventRecord['visibility'],
@@ -117,7 +117,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       relation: 'trigger',
       causalExplanation: 'User posted this message',
     });
-    if (triggerEvent.actorUserId) involvedAgentIds.add(`user:${triggerEvent.actorUserId}`);
+    if (triggerEvent.actorMemberId) involvedAgentIds.add(`user:${triggerEvent.actorMemberId}`);
 
     // Walk forward through all events AFTER the trigger, within a 30s time window
     // (the collaboration loop typically completes in ~5-10s).
@@ -200,7 +200,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           const resp = events[j]!;
           const respTime = new Date(resp.createdAt).getTime();
           if (respTime - handoffTime > 5_000) break;
-          if (resp.type === 'MessagePosted' && resp.actorAgentId === toAgentIdVal && resp.scopeType === e.scopeType && resp.scopeId === e.scopeId) {
+          if (resp.type === 'MessagePosted' && resp.actorMemberId === toAgentIdVal && resp.scopeType === e.scopeType && resp.scopeId === e.scopeId) {
             nodes.push({
               event: resp,
               relation: 'response',

@@ -43,9 +43,10 @@ export interface ChatMessageProjection {
   seq: number;
   type: EventType;
   payload: EventRecord['payload'];
-  actorType: 'agent' | 'human' | 'system';
-  actorAgentId?: string;
-  actorUserId?: string;
+  actorType: 'member' | 'human' | 'system';
+  actorMemberId?: string;
+  /** Set only when the action carried another member's authority. */
+  onBehalfOfMemberId?: string;
   // Carried through so a message can be traced back to what it was about.
   scopeType: EventRecord['scopeType'];
   scopeId: string;
@@ -107,8 +108,8 @@ export function projectChatMessages(events: EventRecord[]): ChatMessageProjectio
       actorType: e.actorType,
       scopeType: e.scopeType,
       scopeId: e.scopeId,
-      actorAgentId: e.actorAgentId ?? undefined,
-      actorUserId: e.actorUserId ?? undefined,
+      actorMemberId: e.actorMemberId ?? undefined,
+      onBehalfOfMemberId: e.onBehalfOfMemberId ?? undefined,
       createdAt: e.createdAt,
       typeLabel: TYPE_LABELS[e.type],
       statusHint: STATUS_HINTS[e.type],
@@ -128,7 +129,7 @@ export interface LedgerEntry {
   scopeId: string;
   provenanceEventId: string;
   provenanceActorType: string;
-  provenanceAgentId?: string;
+  provenanceMemberId?: string;
   evidenceCount: number;
   contradictsCount: number;
   lastTransitionSeq: number;

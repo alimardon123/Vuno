@@ -25,6 +25,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { findAgentByRole, getAgentRow, getAssistantFor, getMember, listAgentRows } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
 import { detectMemoryFacts, appendToListValue, valueInList, type DetectedFact } from '@/lib/agents/memory-detector';
@@ -128,22 +129,16 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // Find the personal assistant agent owned by this human
-    const pa = await db.agent.findFirst({
-      where: {
-        orgId: org.id,
-        kind: 'personal_assistant',
-        ownerHumanId: body.ownerUserId,
-        status: 'active',
-      },
-    });
+    const paMember = await getAssistantFor(body.ownerUserId);
+    const pa = paMember ? await getAgentRow(paMember.id) : null;
     if (!pa) {
       // No PA installed for this user — silently skip (not an error)
       return NextResponse.json({ ok: true, learned: [], reason: 'no personal assistant for this user' });
     }
 
     // Resolve the owner's display name
-    const owner = await db.user.findUnique({ where: { id: body.ownerUserId }, select: { name: true, email: true } });
-    const ownerName = owner?.name ?? owner?.email ?? 'you';
+    const owner = await getMember(body.ownerUserId);
+    const ownerName = owner?.displayName ?? 'you';
 
     const useRust = await isRustAvailable();
     const learned: Array<{ key: string; value: string; factType: string; isNew: boolean }> = [];
@@ -223,8 +218,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       // Queue a MemoryUpdated event
       events.push({
         type: 'MemoryUpdated',
-        actorType: 'agent',
-        actorAgentId: pa.id,
+        actorType: 'member',
+        actorMemberId: pa.id,
         scopeType: 'channel',
         scopeId: body.channelId,
         payload: {
@@ -288,8 +283,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       if (note.body) {
         await streamEvents([{
           type: 'PaProactiveNote',
-          actorType: 'agent',
-          actorAgentId: pa.id,
+          actorType: 'member',
+          actorMemberId: pa.id,
           scopeType: 'channel',
           scopeId: body.channelId,
           payload: {
@@ -316,9 +311,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const handoffTarget = findHandoffTarget(facts);
     if (handoffTarget) {
       // Find the target agent (the expert for this domain)
-      const targetAgent = await db.agent.findFirst({
-        where: { orgId: org.id, role: handoffTarget.targetRole, status: 'active' },
-      });
+      const targetAgent = await findAgentByRole(org.id, handoffTarget.targetRole);
       if (targetAgent) {
         const handoffCtx = buildHandoffContext(
           handoffTarget.focusArea,
@@ -334,8 +327,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         // 1. Fire the AgentHandoff event (visible as a "delegation" badge)
         await streamEvents([{
           type: 'AgentHandoff',
-          actorType: 'agent',
-          actorAgentId: pa.id,
+          actorType: 'member',
+          actorMemberId: pa.id,
           scopeType: 'channel',
           scopeId: body.channelId,
           payload: {
@@ -375,8 +368,8 @@ export async function POST(req: Request): Promise<NextResponse> {
             );
             handoffEvents = [{
               type: 'MessagePosted',
-              actorType: 'agent',
-              actorAgentId: targetAgent.id,
+              actorType: 'member',
+              actorMemberId: targetAgent.id,
               scopeType: 'channel',
               scopeId: body.channelId,
               payload: { body: llmBody },

@@ -25,7 +25,7 @@ interface EventsResponse {
     id: string;
     type: string;
     payload: Record<string, unknown> & { body?: string };
-    actorAgentId?: string | null;
+    actorMemberId?: string | null;
     createdAt: string;
   }>;
 }
@@ -55,7 +55,7 @@ function extractSharedItems(events: EventsResponse['events']): SharedItem[] {
         type: 'link',
         title: urlMatch[0],
         summary: body.slice(0, 120),
-        postedBy: e.actorAgentId ?? 'system',
+        postedBy: e.actorMemberId ?? 'system',
         postedAt: e.createdAt,
         icon: LinkIcon,
       });
@@ -77,7 +77,7 @@ function extractSharedItems(events: EventsResponse['events']): SharedItem[] {
         type,
         title: fileMatch[1] ?? 'file',
         summary: body.slice(0, 120),
-        postedBy: e.actorAgentId ?? 'system',
+        postedBy: e.actorMemberId ?? 'system',
         postedAt: e.createdAt,
         icon,
       });

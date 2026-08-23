@@ -33,8 +33,8 @@ export class EventSpine {
       tenantId: this.tenantId,
       orgId: this.orgId,
       actorType: input.actorType,
-      actorAgentId: input.actorAgentId ?? null,
-      actorUserId: input.actorUserId ?? null,
+      actorMemberId: input.actorMemberId ?? null,
+      onBehalfOfMemberId: input.onBehalfOfMemberId ?? null,
       scopeType: input.scopeType,
       scopeId: input.scopeId,
       visibility: input.visibility ?? 'org',
@@ -83,14 +83,14 @@ export class EventSpine {
 
 function toRecord(row: {
   payload: string | unknown;
-  actorAgentId: string | null;
-  actorUserId: string | null;
+  actorMemberId: string | null;
+  onBehalfOfMemberId: string | null;
   [k: string]: unknown;
 }): EventRecord {
   return {
     ...row,
     payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
-    actorAgentId: row.actorAgentId ?? undefined,
-    actorUserId: row.actorUserId ?? undefined,
+    actorMemberId: row.actorMemberId ?? undefined,
+    onBehalfOfMemberId: row.onBehalfOfMemberId ?? undefined,
   } as unknown as EventRecord;
 }

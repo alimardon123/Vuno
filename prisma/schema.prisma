@@ -25,24 +25,78 @@ model Tenant {
   updatedAt   DateTime @updatedAt
 
   orgs        Organization[]
-  agents      Agent[]
+  members     Member[]
   events      Event[]
   claims      Claim[]
-  users       User[]
 }
 
-model User {
-  id          String   @id @default(cuid())
-  tenantId    String
-  email       String   @unique
-  name        String?
-  isOrgOwner  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// ─── Member — one identity for humans and agents (ADR-0009) ──────────────────
+// Parity is a schema property: any column that can hold an agent must be able to
+// hold a human, and the reverse. There is no separate User or Agent table, so a
+// feature physically cannot be built that works for one and not the other.
+model Member {
+  id            String   @id @default(cuid())
+  tenantId      String
+  orgId         String
+  kind          String   // 'human' | 'agent'
+  displayName   String
+  handle        String   // @-mention handle
+  avatarGlyph   String?
+  status        String   @default("active")   // 'active' | 'suspended' | 'retired'
+  // One presence vocabulary for every member. An agent's is written by the
+  // orchestrator; a human sets theirs. Same field, same rendering.
+  presenceState String   @default("offline")  // 'available' | 'busy' | 'away' | 'offline' | 'dnd'
+  presenceNote  String?                       // the activity line, e.g. "running tests on #wal-format"
+  teamId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  human         HumanProfile?
+  agent         AgentProfile?
+  assistants    AgentProfile[] @relation("AssistantOwner")
 
-  @@index([tenantId])
+  authoredEvents  Event[]      @relation("EventActor")
+  delegatedEvents Event[]      @relation("EventOnBehalfOf")
+  claims          Claim[]      @relation("ClaimProvenance")
+  memberships     Membership[]
+
+  @@unique([orgId, handle])
+  @@index([orgId, kind, status])
+  @@index([teamId])
+}
+
+model HumanProfile {
+  memberId   String   @id
+  email      String   @unique
+  timezone   String?
+  isOrgOwner Boolean  @default(false)
+
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+model AgentProfile {
+  memberId      String    @id
+  role          String    // 'architect' | 'security' | 'perf' | 'hr' | ...
+  modelName     String    @default("harness/deterministic")
+  harnessName   String    @default("deterministic")
+  tools         String    @default("[]")   // JSON array of tool ids
+  permissions   String    @default("[]")   // JSON array of scoped capability ids
+  // Set only for a personal assistant. An assistant is a member like any other;
+  // this is who it works for, not who it renders as.
+  ownerMemberId String?
+  packageId     String?
+  version       String?
+  installedAt   DateTime  @default(now())
+  retiredAt     DateTime?
+  metadata      String?
+
+  member        Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  owner         Member?   @relation("AssistantOwner", fields: [ownerMemberId], references: [id], onDelete: SetNull)
+
+  @@index([role])
+  @@index([ownerMemberId])
 }
 
 // ─── Organization ──────────────────────────────────────────────────────────────
@@ -58,7 +112,7 @@ model Organization {
   departments Department[]
   teams       Team[]
   channels    Channel[]
-  agents      Agent[]
+  members     Member[]
   events      Event[]
   claims      Claim[]
   objectives  Objective[]
@@ -106,55 +160,23 @@ model Team {
   @@index([orgId, departmentId])
 }
 
-// Polymorphic membership: a team can contain agents and humans.
-// We store memberType as discriminator; memberId as the FK string.
+// A team contains members. No discriminator, no polymorphic string id —
+// one foreign key, because a team member is a member (ADR-0009).
 model Membership {
   id          String   @id @default(cuid())
   tenantId    String
   orgId       String
   teamId      String
-  memberType  String   // 'agent' | 'human'
-  memberId    String   // Agent.id or User.id
+  memberId    String
   role        String   // 'ORG_OWNER' | 'DEPARTMENT_HEAD' | 'TEAM_LEAD' | 'MEMBER' | 'HR_META'
   createdAt   DateTime @default(now())
 
   team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  @@unique([teamId, memberType, memberId])
+  @@unique([teamId, memberId])
   @@index([teamId, role])
-  @@index([memberType, memberId])
-}
-
-// ─── Agents ────────────────────────────────────────────────────────────────────
-// Per ADR-0006. Independent or personal-assistant. v1 = simulated harness.
-model Agent {
-  id            String   @id @default(cuid())
-  tenantId      String
-  orgId         String
-  name          String
-  kind          String   // 'independent' | 'personal_assistant'
-  role          String   // 'architect' | 'engineer' | 'security' | 'perf' | 'hr' | 'product' | 'research' | 'devils_advocate' | 'verifier' | ...
-  modelName     String   @default("simulated/echo-1")
-  harnessName   String   @default("simulated")
-  tools         String   @default("[]")    // JSON array of tool IDs
-  permissions   String   @default("[]")    // JSON array of permission IDs
-  ownerHumanId  String?  // set only for personal_assistant
-  teamId        String?
-  status        String   @default("active") // 'active' | 'retired' | 'pending'
-  installedAt   DateTime @default(now())
-  retiredAt     DateTime?
-  metadata      String?  // JSON — model-specific config (temperature, system prompt path, etc.)
-  avatarGlyph   String?  // single lucide icon name, optional override
-
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-
-  events        Event[]      @relation("ActorAgent")
-  claims        Claim[]      @relation("ProvenanceAgent")
-
-  @@index([tenantId, orgId, teamId])
-  @@index([kind, status])
-  @@index([role, status])
+  @@index([memberId])
 }
 
 // ─── Channels (chat surface) ───────────────────────────────────────────────────
@@ -189,9 +211,14 @@ model Event {
   payload       String                     // JSON-encoded, typed via TS
   tenantId      String
   orgId         String
-  actorType     String                     // 'agent' | 'human' | 'system'
-  actorAgentId  String?
-  actorUserId   String?
+  // 'member' for anything a person or an agent did; 'system' for events the
+  // runtime emits on nobody's behalf. There is no per-kind actor column.
+  actorType     String
+  actorMemberId String?
+  // Set only when the action carried another member's authority — an assistant
+  // acting under a delegation. The assistant still renders as itself; this is
+  // the authority, not the identity (ADR-0009 §1).
+  onBehalfOfMemberId String?
   scopeType     String                     // 'channel' | 'decision' | 'project' | 'team' | 'org' | 'tenant'
   scopeId       String
   visibility    String   @default("org")   // 'tenant' | 'org' | 'team' | 'private'
@@ -199,14 +226,16 @@ model Event {
 
   tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  actorAgent    Agent?       @relation("ActorAgent", fields: [actorAgentId], references: [id], onDelete: SetNull)
+  actor         Member?      @relation("EventActor", fields: [actorMemberId], references: [id], onDelete: SetNull)
+  onBehalfOf    Member?      @relation("EventOnBehalfOf", fields: [onBehalfOfMemberId], references: [id], onDelete: SetNull)
   // NOTE: scopeId is intentionally NOT a foreign key. Events are polymorphic —
   // scopeId may reference a Channel, Decision, Project, Objective, Team, Org,
   // or Tenant. Queries filter by (scopeType, scopeId).
 
   @@index([tenantId, orgId, scopeType, scopeId, seq])
   @@index([type, createdAt])
-  @@index([actorAgentId])
+  @@index([actorMemberId])
+  @@index([onBehalfOfMemberId])
 }
 
 // ─── Epistemic Ledger ──────────────────────────────────────────────────────────
@@ -221,7 +250,9 @@ model Claim {
   scopeId         String
   provenanceEventId String // the Event that originated this claim
   provenanceActorType String
-  provenanceAgentId  String?
+  // Whoever made the claim, human or agent. There is no agent-only column:
+  // HR cannot score a person whose claims have no author (ADR-0009).
+  provenanceMemberId String?
   supersedesId    String?  // optional: if this claim supersedes an earlier one
   evidenceIds     String   @default("[]")    // JSON array of evidence Event IDs
   contradictsIds  String   @default("[]")    // JSON array of claim IDs this contradicts
@@ -231,11 +262,11 @@ model Claim {
 
   tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  provenanceAgent Agent?       @relation("ProvenanceAgent", fields: [provenanceAgentId], references: [id], onDelete: SetNull)
+  provenanceMember Member?     @relation("ClaimProvenance", fields: [provenanceMemberId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, orgId, status])
   @@index([scopeType, scopeId])
-  @@index([provenanceAgentId])
+  @@index([provenanceMemberId])
 }
 
 // ─── Work Graph ────────────────────────────────────────────────────────────────
@@ -347,8 +378,8 @@ model PersonalMemory {
   id            String   @id @default(cuid())
   tenantId      String
   orgId         String
-  agentId       String   // the personal assistant agent
-  ownerHumanId  String   // the owner (human)
+  agentId       String   // the assistant's member id
+  ownerHumanId  String   // the owner's member id
   key           String   // e.g. "preferred_language", "coding_style", "meeting_preferences"
   value         String   // the stored value (JSON or plain text)
   category      String   @default("preference") // "preference" | "fact" | "history" | "context"

@@ -87,7 +87,7 @@ export function LedgerView() {
         !ledgerFilters.status.includes(c.status)
       )
         return false;
-      if (ledgerFilters.actorId && c.provenanceAgentId !== ledgerFilters.actorId)
+      if (ledgerFilters.actorId && c.provenanceMemberId !== ledgerFilters.actorId)
         return false;
       if (ledgerFilters.scopeId && c.scopeId !== ledgerFilters.scopeId)
         return false;

@@ -71,7 +71,7 @@ export async function POST(req: Request) {
   const spine = new EventSpine(org.tenantId, org.id);
   const eventInput: NewEventInput<'ObjectiveFiled'> = {
     type: 'ObjectiveFiled',
-    actorType: 'human',
+    actorType: 'member',
     scopeType,
     scopeId,
     payload: {

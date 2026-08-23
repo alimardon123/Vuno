@@ -59,7 +59,7 @@ interface EventsResponse {
     type: string;
     payload: MemoryEventPayload | string;
     createdAt: string;
-    actorAgentId?: string;
+    actorMemberId?: string;
   }>;
 }
 

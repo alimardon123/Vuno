@@ -22,6 +22,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { listAgentRows } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
 import type { NewEventInput, EventRecord, ClaimStatus } from '@/lib/events/types';
@@ -87,9 +88,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     const projectId = project.id;
 
     // Fetch the agents we need
-    const agents = await db.agent.findMany({
-      where: { orgId: org.id, status: 'active' },
-    });
+    const agents = await listAgentRows(org.id);
     const architect = agents.find((a) => a.role === 'architect');
     const security = agents.find((a) => a.role === 'security');
     const devilsAdvocate = agents.find((a) => a.role === 'devils_advocate');
@@ -271,7 +270,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
           seq: -1,
           type: 'ProposalOpened',
           payload: architectResponse.events.find((e) => e.type === 'ProposalOpened')!.payload,
-          tenantId: org.tenantId, orgId: org.id, actorType: 'agent', actorAgentId: architect.id,
+          tenantId: org.tenantId, orgId: org.id, actorType: 'member', actorMemberId: architect.id,
           scopeType: 'decision', scopeId: decisionId, visibility: 'org', createdAt: new Date().toISOString(),
         };
 
@@ -297,8 +296,8 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     await sleep(150); // Short delay — the DA is quick to interrupt (low cognitive load for preemption)
     await streamEvents([{
       type: 'PreemptIssued',
-      actorType: 'agent',
-      actorAgentId: devilsAdvocate.id,
+      actorType: 'member',
+      actorMemberId: devilsAdvocate.id,
       scopeType: 'channel',
       scopeId: channelId,
       payload: {
@@ -373,7 +372,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       }]);
       // RiskFlagged (project-scoped)
       await streamEvents([{
-        type: 'RiskFlagged', actorType: 'agent', actorAgentId: perf.id, scopeType: 'project', scopeId: project.id,
+        type: 'RiskFlagged', actorType: 'member', actorMemberId: perf.id, scopeType: 'project', scopeId: project.id,
         payload: { scopeType: 'project', scopeId: project.id, severity: 'high',
           description: `Architecture proposal falsified by benchmark. p99=${benchmarkValue}ms exceeds ${benchmarkTarget}ms target.`,
           claimId },
@@ -398,7 +397,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       await sleep(400);
       const proposalPayload = proposalEventRecord!.payload as { title: string; body: string; alternatives?: Array<{ name: string; rejectedReason: string }> };
       const decisionCreated = await streamEvents([{
-        type: 'DecisionRecorded', actorType: 'agent', actorAgentId: architect.id, scopeType: 'decision', scopeId: decisionId,
+        type: 'DecisionRecorded', actorType: 'member', actorMemberId: architect.id, scopeType: 'decision', scopeId: decisionId,
         payload: { decisionId, outcome: 'falsified', chosen: proposalPayload.title,
           rationale: `Architecture proposal falsified by Performance team benchmark. p99=${benchmarkValue}ms (target ${benchmarkTarget}ms) at 10k concurrent readers. Working set exceeded RAM.`,
           rejectedAlternatives: [
@@ -423,7 +422,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
           statement: claimStatement, status: 'falsified',
           scopeType: 'project', scopeId: project.id,
           provenanceEventId: proposalDbEvent?.id ?? benchmarkEventRecord.id,
-          provenanceActorType: 'agent', provenanceAgentId: architect.id,
+          provenanceActorType: 'agent', provenanceMemberId: architect.id,
           evidenceIds: JSON.stringify([benchmarkEventRecord.id]),
           contradictsIds: JSON.stringify([]),
           statusReason: `Falsified by benchmark: p99=${benchmarkValue}ms vs target=${benchmarkTarget}ms at 10k concurrent readers.`,

@@ -105,7 +105,7 @@ Available event types and their payloads:
     // Build the user prompt — describes the trigger + recent context
     const recentEvents = events.slice(-10).map((e) => ({
       type: e.type,
-      actor: e.actorAgentId ?? e.actorType,
+      actor: e.actorMemberId ?? e.actorType,
       payload: e.payload,
       createdAt: e.createdAt,
     }));
@@ -150,8 +150,8 @@ Respond now as ${roleLabel}. Output ONLY the JSON object.`;
         .filter((t) => typeof t?.content === 'string' && t.content.trim().length > 0)
         .map((thought) => ({
           type: 'AgentThought',
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: ctx.scope.scopeType,
           scopeId: ctx.scope.scopeId,
           payload: {
@@ -165,7 +165,7 @@ Respond now as ${roleLabel}. Output ONLY the JSON object.`;
       const validated = parseAgentOutput(
         { events: parsed.events ?? [], claims: parsed.claims ?? [] },
         {
-          actorAgentId: this.manifest.id,
+          actorMemberId: this.manifest.id,
           defaultScopeType: ctx.scope.scopeType,
           defaultScopeId: ctx.scope.scopeId,
           defaultClaimScopeType: 'project',
@@ -191,8 +191,8 @@ Respond now as ${roleLabel}. Output ONLY the JSON object.`;
       return {
         events: [{
           type: 'MessagePosted' as const,
-          actorType: 'agent',
-          actorAgentId: this.manifest.id,
+          actorType: 'member',
+          actorMemberId: this.manifest.id,
           scopeType: ctx.scope.scopeType,
           scopeId: ctx.scope.scopeId,
           payload: { body: `[${roleLabel}] LLM call failed: ${err instanceof Error ? err.message : String(err)}. Falling back to simulated behavior.` },

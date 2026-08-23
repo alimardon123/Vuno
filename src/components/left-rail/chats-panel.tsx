@@ -32,13 +32,14 @@ interface Agent {
   kind: string;
   teamId: string | null;
   status: string;
-  ownerHumanId: string | null;
+  // Resolved server-side — the roster already knows whose assistant this is,
+  // so the client no longer joins it against a separate users list.
+  ownerName: string | null;
 }
 
 interface User {
   id: string;
-  name: string | null;
-  email: string;
+  name: string;
   isOrgOwner: boolean;
 }
 
@@ -93,13 +94,6 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
   // DMs = channels with isDm=true (these are the chats created by /api/dms)
   const dmChats = allChats.filter((c) => c.isDm);
 
-  // Owner-name lookup
-  const ownerName = (ownerId: string | null) => {
-    if (!ownerId) return undefined;
-    const owner = users.find((u) => u.id === ownerId);
-    return owner?.name ?? owner?.email ?? 'unknown';
-  };
-
   // DM contacts — all agents + humans (excluding current user)
   // Clicking creates a real DM chat via /api/dms
   const independentAgents = agents.filter((a) => a.kind === 'independent');
@@ -107,7 +101,7 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
   const dmContacts = [
     ...otherHumans.map((u) => ({
       id: u.id,
-      name: u.name ?? u.email,
+      name: u.name,
       kind: 'human' as MemberKind,
       role: u.isOrgOwner ? 'Org Owner (CEO)' : undefined,
       memberKind: 'human' as const,
@@ -209,10 +203,10 @@ export function ChatsPanel({ onClose }: { onClose?: () => void }) {
                         <div className="flex min-w-0 flex-1 flex-col">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate font-medium leading-none">{a.name}</span>
-                            <MemberBadge kind="personal_assistant" ownerName={ownerName(a.ownerHumanId)} />
+                            <MemberBadge kind="personal_assistant" ownerName={a.ownerName ?? undefined} />
                           </div>
                           <span className="mt-0.5 truncate text-[0.6875rem] text-muted-foreground">
-                            {ownerName(a.ownerHumanId)}&apos;s assistant
+                            {a.ownerName ? `${a.ownerName}'s assistant` : 'assistant'}
                           </span>
                         </div>
                       </button>
@@ -355,7 +349,7 @@ function CreateGroupChatDialog({ open, onOpenChange, agents, users, onCreated }:
   const [submitting, setSubmitting] = useState(false);
 
   const allMembers = [
-    ...users.map((u) => ({ id: u.id, name: u.name ?? u.email, kind: 'human' as const })),
+    ...users.map((u) => ({ id: u.id, name: u.name, kind: 'human' as const })),
     ...agents.map((a) => ({ id: a.id, name: a.name, kind: 'agent' as const })),
   ];
 

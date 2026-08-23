@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { parseAgentOutput, type AgentOutputContext } from '../schema';
 
 const ctx: AgentOutputContext = {
-  actorAgentId: 'agent-aris',
+  actorMemberId: 'agent-aris',
   defaultScopeType: 'channel',
   defaultScopeId: 'ch-storage-engine',
   defaultClaimScopeType: 'project',
@@ -24,8 +24,8 @@ describe('parseAgentOutput — accepts what is valid', () => {
     expect(out.events).toHaveLength(1);
     expect(out.events[0]).toMatchObject({
       type: 'MessagePosted',
-      actorType: 'agent',
-      actorAgentId: 'agent-aris',
+      actorType: 'member',
+      actorMemberId: 'agent-aris',
       scopeType: 'channel',
       scopeId: 'ch-storage-engine',
       payload: { body: 'Benchmark is running.' },

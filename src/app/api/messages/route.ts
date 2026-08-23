@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { originFrom } from '@/lib/origin';
+import { getMember, getOrgOwner } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended } from '@/lib/realtime/broadcast';
 import type { NewEventInput } from '@/lib/events/types';
@@ -17,9 +19,9 @@ export const dynamic = 'force-dynamic';
 const bodySchema = z.object({
   body: z.string().min(1).max(4000),
   channelId: z.string().min(1),
-  actorType: z.enum(['agent', 'human', 'system']).default('human'),
-  actorAgentId: z.string().optional(),
-  actorUserId: z.string().optional(),
+  actorType: z.enum(['member', 'system']).default('member'),
+  actorMemberId: z.string().optional(),
+  onBehalfOfMemberId: z.string().optional(),
   useRealLLM: z.boolean().optional(), // forwarded to attention-router + memory-evolution
 });
 
@@ -61,8 +63,8 @@ export async function POST(req: Request) {
   const eventInput: NewEventInput<'MessagePosted'> = {
     type: 'MessagePosted',
     actorType: parsed.actorType,
-    actorAgentId: parsed.actorAgentId,
-    actorUserId: parsed.actorUserId ?? 'user-kai',
+    actorMemberId: parsed.actorMemberId,
+    onBehalfOfMemberId: parsed.onBehalfOfMemberId,
     scopeType: 'channel',
     scopeId: channel.id,
     payload: { body: parsed.body },
@@ -79,26 +81,27 @@ export async function POST(req: Request) {
 
   // Trigger the collaboration loop — attention router + memory evolution.
   // Same pattern as /api/events POST. Fire-and-forget (Performant principle).
-  if (parsed.actorType === 'human') {
+  // Wake the org only when a person posted. An agent's own message must not
+  // re-enter the router, or agents wake each other in a loop. The kind lives on
+  // the member record now, not on the event (ADR-0009).
+  const poster = parsed.actorMemberId ? await getMember(parsed.actorMemberId) : await getOrgOwner(org.id);
+  if (parsed.actorType === 'member' && poster?.kind === 'human') {
     const eventId = created.id;
     const messageBody = parsed.body;
     const channelId = channel.id;
     const useRealLLM = parsed.useRealLLM;
 
     // Attention router
-    void fetch('http://localhost:3000/api/attention-router', {
+    void fetch(`${originFrom(req)}/api/attention-router`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messageEventId: eventId, body: messageBody, channelId, useRealLLM }),
     }).catch((err) => console.warn('[messages] attention router trigger failed:', err));
 
-    // Memory evolution — resolve the org owner (Kai)
-    void db.user.findFirst({
-      where: { tenantId: org.tenantId, isOrgOwner: true },
-      select: { id: true },
-    }).then((ownerUser) => {
+    // Memory evolution — the owner whose assistant learns from this message.
+    void getOrgOwner(org.id).then((ownerUser) => {
       if (ownerUser) {
-        return fetch('http://localhost:3000/api/memory-evolution', {
+        return fetch(`${originFrom(req)}/api/memory-evolution`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messageEventId: eventId, body: messageBody, channelId, ownerUserId: ownerUser.id, useRealLLM }),

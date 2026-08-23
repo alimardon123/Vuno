@@ -142,7 +142,7 @@ export interface ParsedAgentOutput {
 }
 
 export interface AgentOutputContext {
-  actorAgentId: string;
+  actorMemberId: string;
   /** Used when the model omits a scope — it should not be inventing one. */
   defaultScopeType: (typeof SCOPE_TYPES)[number];
   defaultScopeId: string;
@@ -220,8 +220,8 @@ export function parseAgentOutput(
 
     events.push({
       type: parsed.data.type,
-      actorType: 'agent',
-      actorAgentId: ctx.actorAgentId,
+      actorType: 'member',
+      actorMemberId: ctx.actorMemberId,
       scopeType: parsed.data.scopeType ?? ctx.defaultScopeType,
       scopeId: parsed.data.scopeId ?? ctx.defaultScopeId,
       ...(parsed.data.visibility ? { visibility: parsed.data.visibility } : {}),

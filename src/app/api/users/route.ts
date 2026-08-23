@@ -1,29 +1,30 @@
-// Vuno — Users API
-// Returns all humans in the org (currently just the CEO Kai for v1).
-// Used by the Chats panel (DM list) and Org panel (members roster).
+// Vuno — GET /api/users
+// Transitional: a filtered view of /api/members, same as /api/agents. New code
+// should call /api/members; removed when the shell rebuild lands.
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { listMembers } from '@/lib/members';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const org = await db.organization.findFirst({
     orderBy: { createdAt: 'asc' },
-    select: { tenantId: true, id: true },
+    select: { id: true },
   });
   if (!org) return NextResponse.json({ users: [] });
 
-  const users = await db.user.findMany({
-    where: { tenantId: org.tenantId },
-    orderBy: { name: 'asc' },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      isOrgOwner: true,
-    },
+  const members = await listMembers(org.id, { kind: 'human' });
+  return NextResponse.json({
+    users: members.map((m) => ({
+      id: m.id,
+      name: m.displayName,
+      handle: m.handle,
+      isOrgOwner: m.isOrgOwner,
+      teamId: m.teamId,
+      presenceState: m.presenceState,
+      presenceNote: m.presenceNote,
+    })),
   });
-
-  return NextResponse.json({ users });
 }

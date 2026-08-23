@@ -14,6 +14,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { actorLookup } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import type { EventPayloadMap } from '@/lib/events/types';
 
@@ -58,18 +59,14 @@ export async function GET(req: Request) {
   });
 
   // Agent lookup for name/role resolution
-  const agents = await db.agent.findMany({
-    where: { orgId: org.id },
-    select: { id: true, name: true, role: true },
-  });
-  const agentById = new Map(agents.map((a) => [a.id, a]));
+  const agentById = await actorLookup(org.id);
 
   // Filter + map thoughts
   const thoughts = allEvents
     .filter((e) => {
       const p = e.payload as EventPayloadMap['AgentThought'];
       if (!p) return false;
-      if (agentId && e.actorAgentId !== agentId) return false;
+      if (agentId && e.actorMemberId !== agentId) return false;
       if (topic && !p.topic.toLowerCase().includes(topic.toLowerCase())) return false;
       if (thoughtType && p.thoughtType !== thoughtType) return false;
       if (relatedEventId && p.relatedEventId !== relatedEventId) return false;
@@ -77,14 +74,14 @@ export async function GET(req: Request) {
     })
     .map((e) => {
       const p = e.payload as EventPayloadMap['AgentThought'];
-      const agent = e.actorAgentId ? agentById.get(e.actorAgentId) : null;
+      const agent = e.actorMemberId ? agentById.get(e.actorMemberId) : null;
       return {
         id: e.id,
         seq: e.seq,
-        agentId: e.actorAgentId,
+        agentId: e.actorMemberId,
         agentName: agent?.name ?? 'Unknown',
         agentRole: agent?.role ?? '',
-        agentRoleLabel: agent ? ROLE_LABELS[agent.role] ?? agent.role : '',
+        agentRoleLabel: agent?.role ? ROLE_LABELS[agent.role] ?? agent.role : '',
         thoughtType: p.thoughtType,
         content: p.content,
         topic: p.topic,

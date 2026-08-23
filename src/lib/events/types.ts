@@ -35,7 +35,10 @@ export type EventType =
   | 'PaProactiveNote'
   | 'AgentHandoff';
 
-export type ActorType = 'agent' | 'human' | 'system';
+// An event is authored by a member — human or agent, the spine does not care —
+// or by the runtime itself. Which kind of member it was lives on the Member
+// record, not duplicated onto every row (ADR-0009).
+export type ActorType = 'member' | 'system';
 
 export type ScopeType =
   | 'channel'
@@ -261,8 +264,9 @@ export interface EventRecord<T extends EventType = EventType> {
   tenantId: string;
   orgId: string;
   actorType: ActorType;
-  actorAgentId?: string | null;
-  actorUserId?: string | null;
+  actorMemberId?: string | null;
+  /** The member whose authority the action carried, when it carried one. */
+  onBehalfOfMemberId?: string | null;
   scopeType: ScopeType;
   scopeId: string;
   visibility: Visibility;
@@ -274,8 +278,8 @@ export type NewEventInput<T extends EventType = EventType> = {
   type: T;
   payload: EventPayloadMap[T];
   actorType: ActorType;
-  actorAgentId?: string;
-  actorUserId?: string;
+  actorMemberId?: string;
+  onBehalfOfMemberId?: string;
   scopeType: ScopeType;
   scopeId: string;
   visibility?: Visibility;

@@ -1,34 +1,33 @@
+// Vuno — GET /api/agents
+// Transitional: a filtered view of /api/members kept so surfaces written before
+// the Member migration keep working. New code should call /api/members.
+// Removed when the shell rebuild lands.
+
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { listMembers } from '@/lib/members';
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/agents?teamId=<id>
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const params = url.searchParams;
-  const teamId = params.get('teamId') ?? undefined;
-
+export async function GET() {
   const org = await db.organization.findFirst({
     orderBy: { createdAt: 'asc' },
-    select: { tenantId: true, id: true },
+    select: { id: true },
   });
   if (!org) return NextResponse.json({ agents: [] });
 
-  const where: Record<string, unknown> = { orgId: org.id, status: 'active' };
-  if (teamId) where.teamId = teamId;
-
-  const agents = await db.agent.findMany({
-    where,
-    orderBy: [{ role: 'asc' }, { name: 'asc' }],
-    take: 200,
-  });
-
+  const members = await listMembers(org.id, { kind: 'agent' });
   return NextResponse.json({
-    agents: agents.map((a) => ({
-      ...a,
-      tools: JSON.parse(a.tools),
-      permissions: JSON.parse(a.permissions),
+    agents: members.map((m) => ({
+      id: m.id,
+      name: m.displayName,
+      role: m.role ?? 'agent',
+      status: m.status,
+      kind: m.ownerMemberId ? 'personal_assistant' : 'independent',
+      ownerName: m.ownerName,
+      teamId: m.teamId,
+      presenceState: m.presenceState,
+      presenceNote: m.presenceNote,
     })),
   });
 }

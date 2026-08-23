@@ -11,7 +11,8 @@ import type { NewEventInput } from '@/lib/events/types';
 const IDS = {
   tenant: 'tenant-acme',
   org: 'org-storage-co',
-  userCeo: 'user-kai',
+  memberKai: 'mbr-kai',        // org owner (human)
+  memberMira: 'mbr-mira',      // staff engineer (human) — parity is only real if a human works here too
   deptProduct: 'dept-product',
   deptEng: 'dept-eng',
   deptSecurity: 'dept-security',
@@ -25,15 +26,15 @@ const IDS = {
   teamHR: 'team-hr',
   teamQA: 'team-qa',
   // agents
-  agentMaya: 'agent-maya',     // product lead
-  agentAris: 'agent-aris',     // architect
-  agentPeri: 'agent-peri',     // performance
-  agentSid: 'agent-sid',       // security
-  agentDevi: 'agent-devi',     // devil's advocate
-  agentSam: 'agent-sam',       // verifier (QA)
-  agentHana: 'agent-hana',     // HR / meta
-  agentRavi: 'agent-ravi',     // research
-  agentBob: 'agent-bob',       // Bob — Kai's personal assistant
+  agentMaya: 'mbr-maya',       // product lead
+  agentAris: 'mbr-aris',     // architect
+  agentPeri: 'mbr-peri',     // performance
+  agentSid: 'mbr-sid',       // security
+  agentDevi: 'mbr-devi',     // devil's advocate
+  agentSam: 'mbr-sam',       // verifier (QA)
+  agentHana: 'mbr-hana',     // HR / meta
+  agentRavi: 'mbr-ravi',     // research
+  agentBob: 'mbr-bob',       // Bob — Kai's personal assistant
   // work objects
   objective: 'obj-17',
   project: 'proj-storage-engine',
@@ -86,11 +87,10 @@ async function clearAll() {
   await db.event.deleteMany({});
   await db.membership.deleteMany({});
   await db.channel.deleteMany({});
-  await db.agent.deleteMany({});
+  await db.member.deleteMany({});   // cascades to HumanProfile / AgentProfile
   await db.team.deleteMany({});
   await db.department.deleteMany({});
   await db.organization.deleteMany({});
-  await db.user.deleteMany({});
   await db.tenant.deleteMany({});
 }
 
@@ -104,17 +104,7 @@ async function createTenantOrgAndAgents() {
     },
   });
 
-  // CEO user
-  await db.user.create({
-    data: {
-      id: IDS.userCeo,
-      tenantId: IDS.tenant,
-      email: 'kai@acme.storage',
-      name: 'Kai',
-      isOrgOwner: true,
-    },
-  });
-
+  // Humans are created after the org (they carry orgId), below.
   // org
   await db.organization.create({
     data: {
@@ -157,82 +147,114 @@ async function createTenantOrgAndAgents() {
     },
   });
 
-  // agents
-  const agents = [
-    {
-      id: IDS.agentMaya, name: 'Maya', role: 'product', kind: 'independent',
-      teamId: IDS.teamProduct, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentAris, name: 'Aris', role: 'architect', kind: 'independent',
-      teamId: IDS.teamEng, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search', 'github.read'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentPeri, name: 'Peri', role: 'perf', kind: 'independent',
-      teamId: IDS.teamPerf, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['benchmark.run', 'load.test'], permissions: ['repo.read', 'sandbox.run'],
-    },
-    {
-      id: IDS.agentSid, name: 'Sid', role: 'security', kind: 'independent',
-      teamId: IDS.teamSecurity, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['scan.security', 'github.read'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentDevi, name: 'Devi', role: 'devils_advocate', kind: 'independent',
-      teamId: IDS.teamQA, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: [], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentSam, name: 'Sam', role: 'verifier', kind: 'independent',
-      teamId: IDS.teamQA, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['test.run', 'github.read'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentHana, name: 'Hana', role: 'hr', kind: 'independent',
-      teamId: IDS.teamHR, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: [], permissions: ['org.read'],
-    },
-    {
-      id: IDS.agentRavi, name: 'Ravi', role: 'research', kind: 'independent',
-      teamId: IDS.teamProduct, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search', 'papers.read'], permissions: ['repo.read'],
-    },
-    // Bob — Kai's personal assistant. Personal assistants are owned by a human,
-    // live in their private chat, and enter channels via @-mention. Pinned at
-    // the top of Kai's chat list.
-    {
-      id: IDS.agentBob, name: 'Bob', role: 'product', kind: 'personal_assistant',
-      teamId: null, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search', 'github.read'], permissions: ['repo.read'],
-      ownerHumanId: IDS.userCeo,
-    },
+  // ── The roster ─────────────────────────────────────────────────────────────
+  // Humans and agents are the same table. The only difference is which profile
+  // hangs off the member (ADR-0009). Read this list top to bottom: nothing about
+  // it says "and then, separately, the humans".
+  const roster: Array<{
+    id: string;
+    kind: 'human' | 'agent';
+    displayName: string;
+    handle: string;
+    teamId: string | null;
+    presenceState: string;
+    presenceNote?: string;
+    human?: { email: string; isOrgOwner?: boolean };
+    agent?: { role: string; tools: string[]; permissions: string[]; ownerMemberId?: string };
+  }> = [
+    { id: IDS.memberKai, kind: 'human', displayName: 'Kai Alvarez', handle: 'kai', teamId: null,
+      presenceState: 'available',
+      human: { email: 'kai@acme.storage', isOrgOwner: true } },
+
+    { id: IDS.memberMira, kind: 'human', displayName: 'Mira Okonkwo', handle: 'mira', teamId: IDS.teamEng,
+      presenceState: 'busy', presenceNote: 'reviewing the WAL format proposal',
+      human: { email: 'mira@acme.storage' } },
+
+    { id: IDS.agentMaya, kind: 'agent', displayName: 'Maya', handle: 'maya', teamId: IDS.teamProduct,
+      presenceState: 'available',
+      agent: { role: 'product', tools: ['web.search'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentAris, kind: 'agent', displayName: 'Aris', handle: 'aris', teamId: IDS.teamEng,
+      presenceState: 'busy', presenceNote: 'drafting the LSM proposal',
+      agent: { role: 'architect', tools: ['web.search', 'github.read'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentPeri, kind: 'agent', displayName: 'Peri', handle: 'peri', teamId: IDS.teamPerf,
+      presenceState: 'busy', presenceNote: 'running the 10k-reader benchmark',
+      agent: { role: 'perf', tools: ['benchmark.run', 'load.test'], permissions: ['repo.read', 'sandbox.run'] } },
+
+    { id: IDS.agentSid, kind: 'agent', displayName: 'Sid', handle: 'sid', teamId: IDS.teamSecurity,
+      presenceState: 'available',
+      agent: { role: 'security', tools: ['scan.security', 'github.read'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentDevi, kind: 'agent', displayName: 'Devi', handle: 'devi', teamId: IDS.teamQA,
+      presenceState: 'available',
+      agent: { role: 'devils_advocate', tools: [], permissions: ['repo.read'] } },
+
+    { id: IDS.agentSam, kind: 'agent', displayName: 'Sam', handle: 'sam', teamId: IDS.teamQA,
+      presenceState: 'away',
+      agent: { role: 'verifier', tools: ['test.run', 'github.read'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentHana, kind: 'agent', displayName: 'Hana', handle: 'hana', teamId: IDS.teamHR,
+      presenceState: 'available',
+      agent: { role: 'hr', tools: [], permissions: ['org.read'] } },
+
+    { id: IDS.agentRavi, kind: 'agent', displayName: 'Ravi', handle: 'ravi', teamId: IDS.teamProduct,
+      presenceState: 'available',
+      agent: { role: 'research', tools: ['web.search', 'papers.read'], permissions: ['repo.read'] } },
+
+    // Bob works for Kai. He posts as Bob, everywhere, with the chip that says
+    // whose assistant he is — never as Kai (ADR-0009 §1).
+    { id: IDS.agentBob, kind: 'agent', displayName: 'Bob', handle: 'bob', teamId: null,
+      presenceState: 'available',
+      agent: { role: 'assistant', tools: ['web.search', 'github.read'], permissions: ['repo.read'],
+               ownerMemberId: IDS.memberKai } },
   ];
 
-  for (const a of agents) {
-    await db.agent.create({
+  for (const m of roster) {
+    await db.member.create({
       data: {
-        ...a,
+        id: m.id,
         tenantId: IDS.tenant,
         orgId: IDS.org,
-        tools: JSON.stringify(a.tools),
-        permissions: JSON.stringify(a.permissions),
+        kind: m.kind,
+        displayName: m.displayName,
+        handle: m.handle,
+        teamId: m.teamId,
+        presenceState: m.presenceState,
+        presenceNote: m.presenceNote ?? null,
         status: 'active',
+        ...(m.human
+          ? { human: { create: { email: m.human.email, isOrgOwner: m.human.isOrgOwner ?? false } } }
+          : {}),
+        ...(m.agent
+          ? {
+              agent: {
+                create: {
+                  role: m.agent.role,
+                  tools: JSON.stringify(m.agent.tools),
+                  permissions: JSON.stringify(m.agent.permissions),
+                  ownerMemberId: m.agent.ownerMemberId ?? null,
+                },
+              },
+            }
+          : {}),
       },
     });
   }
 
-  // memberships (assign agents to teams with MEMBER role; Maya = TEAM_LEAD of product)
+  // ── Team membership ────────────────────────────────────────────────────────
+  // One list. A human lead and an agent lead are the same row shape.
   const memberships = [
-    { agentId: IDS.agentMaya, teamId: IDS.teamProduct, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentRavi, teamId: IDS.teamProduct, role: 'MEMBER' },
-    { agentId: IDS.agentAris, teamId: IDS.teamEng, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentPeri, teamId: IDS.teamPerf, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentSid, teamId: IDS.teamSecurity, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentDevi, teamId: IDS.teamQA, role: 'MEMBER' },
-    { agentId: IDS.agentSam, teamId: IDS.teamQA, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentHana, teamId: IDS.teamHR, role: 'TEAM_LEAD' },
+    { memberId: IDS.memberKai, teamId: IDS.teamProduct, role: 'ORG_OWNER' },
+    { memberId: IDS.memberMira, teamId: IDS.teamEng, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentMaya, teamId: IDS.teamProduct, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentRavi, teamId: IDS.teamProduct, role: 'MEMBER' },
+    { memberId: IDS.agentAris, teamId: IDS.teamEng, role: 'MEMBER' },
+    { memberId: IDS.agentPeri, teamId: IDS.teamPerf, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentSid, teamId: IDS.teamSecurity, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentDevi, teamId: IDS.teamQA, role: 'MEMBER' },
+    { memberId: IDS.agentSam, teamId: IDS.teamQA, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentHana, teamId: IDS.teamHR, role: 'HR_META' },
   ];
   for (const m of memberships) {
     await db.membership.create({
@@ -240,8 +262,7 @@ async function createTenantOrgAndAgents() {
         tenantId: IDS.tenant,
         orgId: IDS.org,
         teamId: m.teamId,
-        memberType: 'agent',
-        memberId: m.agentId,
+        memberId: m.memberId,
         role: m.role,
       },
     });
@@ -342,8 +363,8 @@ function buildEventArc(): NewEventInput[] {
   // 1. Maya files the objective in #storage-engine
   inputs.push({
     type: 'ObjectiveFiled',
-    actorType: 'agent',
-    actorAgentId: IDS.agentMaya,
+    actorType: 'member',
+    actorMemberId: IDS.agentMaya,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -360,8 +381,8 @@ function buildEventArc(): NewEventInput[] {
   // 2. Maya introduces the work in chat
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentMaya,
+    actorType: 'member',
+    actorMemberId: IDS.agentMaya,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -372,8 +393,8 @@ function buildEventArc(): NewEventInput[] {
   // 3. Ravi (Research) raises prior-art note
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentRavi,
+    actorType: 'member',
+    actorMemberId: IDS.agentRavi,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -384,8 +405,8 @@ function buildEventArc(): NewEventInput[] {
   // 4. Aris opens the proposal — Mmap-LSM with bloom filters
   inputs.push({
     type: 'ProposalOpened',
-    actorType: 'agent',
-    actorAgentId: IDS.agentAris,
+    actorType: 'member',
+    actorMemberId: IDS.agentAris,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -433,8 +454,8 @@ function buildEventArc(): NewEventInput[] {
   // 6. Sid asks about bloom filters
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentSid,
+    actorType: 'member',
+    actorMemberId: IDS.agentSid,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -445,8 +466,8 @@ function buildEventArc(): NewEventInput[] {
   // 7. Devi (devil's advocate) raises a formal objection with evidence
   inputs.push({
     type: 'ObjectionRaised',
-    actorType: 'agent',
-    actorAgentId: IDS.agentDevi,
+    actorType: 'member',
+    actorMemberId: IDS.agentDevi,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -460,8 +481,8 @@ function buildEventArc(): NewEventInput[] {
   // 8. Peri requests an experiment
   inputs.push({
     type: 'ExperimentRequested',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -475,8 +496,8 @@ function buildEventArc(): NewEventInput[] {
   // 9. Peri runs and completes the benchmark
   inputs.push({
     type: 'ExperimentCompleted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -490,8 +511,8 @@ function buildEventArc(): NewEventInput[] {
   // 10. Peri reports the benchmark result — the falsifying evidence
   inputs.push({
     type: 'BenchmarkReported',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -508,8 +529,8 @@ function buildEventArc(): NewEventInput[] {
   // 11. The benchmark report is echoed into the channel as a message
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -534,8 +555,8 @@ function buildEventArc(): NewEventInput[] {
   // 13. Peri flags the risk
   inputs.push({
     type: 'RiskFlagged',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'project',
     scopeId: IDS.project,
     payload: {
@@ -579,8 +600,8 @@ function buildEventArc(): NewEventInput[] {
   // 16. Aris records the decision — outcome=falsified, with full anatomy
   inputs.push({
     type: 'DecisionRecorded',
-    actorType: 'agent',
-    actorAgentId: IDS.agentAris,
+    actorType: 'member',
+    actorMemberId: IDS.agentAris,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -600,8 +621,8 @@ function buildEventArc(): NewEventInput[] {
   // 17. Hana (HR/Meta) records an org retrospective note
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentHana,
+    actorType: 'member',
+    actorMemberId: IDS.agentHana,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -631,7 +652,7 @@ async function createClaims(createdEvents: { id: string; type: string; payload: 
       scopeId: IDS.project,
       provenanceEventId: proposalEvent.id,
       provenanceActorType: 'agent',
-      provenanceAgentId: IDS.agentAris,
+      provenanceMemberId: IDS.agentAris,
       evidenceIds: JSON.stringify([benchmarkEvent.id]),
       contradictsIds: JSON.stringify([]),
       statusReason:
@@ -654,7 +675,7 @@ async function createClaims(createdEvents: { id: string; type: string; payload: 
         scopeId: IDS.decision,
         provenanceEventId: objectionEvent.id,
         provenanceActorType: 'agent',
-        provenanceAgentId: IDS.agentDevi,
+        provenanceMemberId: IDS.agentDevi,
         evidenceIds: JSON.stringify([benchmarkEvent.id]),
         contradictsIds: JSON.stringify([IDS.claimP99]),
         statusReason: 'Confirmed by benchmark: working set exceeded RAM; SSTable disk reads dominated tail latency.',

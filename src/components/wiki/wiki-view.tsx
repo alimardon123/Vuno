@@ -71,7 +71,7 @@ interface WikiClaim {
   status: string;
   scopeType: string;
   scopeId: string;
-  provenanceAgentId: string | null;
+  provenanceMemberId: string | null;
   provenanceAgentName: string | null;
   provenanceAgentRole: string | null;
   evidenceCount: number;

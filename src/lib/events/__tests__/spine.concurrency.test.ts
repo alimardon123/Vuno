@@ -51,7 +51,7 @@ describe('event spine under concurrency', () => {
         spine.append([
           {
             type: 'MessagePosted',
-            actorType: 'human',
+            actorType: 'member',
             scopeType: 'channel',
             scopeId: 'ch-test',
             payload: { body: `concurrent message ${i}` },

@@ -5,6 +5,8 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getOrgOwner } from '@/lib/members';
+import { originFrom } from '@/lib/origin';
 import { EventSpine } from '@/lib/events/spine';
 import { projectChatMessages } from '@/lib/events/project';
 import { broadcastEventAppended } from '@/lib/realtime/broadcast';
@@ -121,10 +123,10 @@ interface PostBody {
 // attention router in the background. This is the "magic moment" — agents
 // auto-wake if the message matches their domain of expertise.
 // Per the "Performant" principle: fire-and-forget, never block the response.
-function triggerAttentionRouter(eventId: string, body: string | undefined, channelId: string, useRealLLM?: boolean): void {
+function triggerAttentionRouter(origin: string, eventId: string, body: string | undefined, channelId: string, useRealLLM?: boolean): void {
   if (!body) return;
   // Fire-and-forget — don't await, don't block the response
-  void fetch('http://localhost:3000/api/attention-router', {
+  void fetch(`${origin}/api/attention-router`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messageEventId: eventId, body, channelId, useRealLLM }),
@@ -140,6 +142,7 @@ function triggerAttentionRouter(eventId: string, body: string | undefined, chann
 // Per the "Powerful" principle: the PA visibly learns from the owner's behavior.
 // Per the "Performant" principle: fire-and-forget, never blocks the response.
 function triggerMemoryEvolution(
+  origin: string,
   eventId: string,
   body: string | undefined,
   channelId: string,
@@ -148,7 +151,7 @@ function triggerMemoryEvolution(
 ): void {
   if (!body) return;
   // Fire-and-forget — don't await, don't block the response
-  void fetch('http://localhost:3000/api/memory-evolution', {
+  void fetch(`${origin}/api/memory-evolution`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messageEventId: eventId, body, channelId, ownerUserId, useRealLLM }),
@@ -181,10 +184,7 @@ export async function POST(req: Request) {
 
     // Resolve the org owner (the human who posts messages — Kai in v1).
     // The PA's memory evolution needs the owner's id to find the right PA.
-    const ownerUser = await db.user.findFirst({
-      where: { tenantId: org.tenantId, isOrgOwner: true },
-      select: { id: true },
-    });
+    const ownerUser = await getOrgOwner(org.id);
 
     // Determine scope
     let scopeType = body.scopeType;
@@ -207,7 +207,7 @@ export async function POST(req: Request) {
     const input: NewEventInput = {
       type: body.type as NewEventInput['type'],
       payload: body.payload as NewEventInput['payload'],
-      actorType: 'human',
+      actorType: 'member',
       scopeType: scopeType as NewEventInput['scopeType'],
       scopeId,
     };
@@ -244,11 +244,11 @@ export async function POST(req: Request) {
               const bodyText = (body.payload as { body?: string }).body;
               const eventId = (event as { id?: unknown }).id;
               if (typeof eventId === 'string' && typeof bodyText === 'string') {
-                triggerAttentionRouter(eventId, bodyText, scopeId, body.useRealLLM);
+                triggerAttentionRouter(originFrom(req), eventId, bodyText, scopeId, body.useRealLLM);
                 // Memory evolution — PA silently learns from the owner's messages.
                 // Fires alongside the attention router (react + learn in parallel).
                 if (ownerUser) {
-                  triggerMemoryEvolution(eventId, bodyText, scopeId, ownerUser.id, body.useRealLLM);
+                  triggerMemoryEvolution(originFrom(req), eventId, bodyText, scopeId, ownerUser.id, body.useRealLLM);
                 }
               }
             }
@@ -273,10 +273,10 @@ export async function POST(req: Request) {
     if (body.type === 'MessagePosted' && scopeType === 'channel') {
       const bodyText = (body.payload as { body?: string }).body;
       if (typeof created[0]?.id === 'string' && typeof bodyText === 'string') {
-        triggerAttentionRouter(created[0].id, bodyText, scopeId, body.useRealLLM);
+        triggerAttentionRouter(originFrom(req), created[0].id, bodyText, scopeId, body.useRealLLM);
         // Memory evolution — PA silently learns (Prisma path)
         if (ownerUser) {
-          triggerMemoryEvolution(created[0].id, bodyText, scopeId, ownerUser.id, body.useRealLLM);
+          triggerMemoryEvolution(originFrom(req), created[0].id, bodyText, scopeId, ownerUser.id, body.useRealLLM);
         }
       }
     }

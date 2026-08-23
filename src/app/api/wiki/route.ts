@@ -9,6 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { actorLookup } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import type { EventRecord, EventPayloadMap } from '@/lib/events/types';
 
@@ -51,7 +52,7 @@ interface WikiClaim {
   status: string;
   scopeType: string;
   scopeId: string;
-  provenanceAgentId: string | null;
+  provenanceMemberId: string | null;
   provenanceAgentName: string | null;
   provenanceAgentRole: string | null;
   evidenceCount: number;
@@ -201,11 +202,9 @@ export async function GET() {
   });
 
   // Agents map for resolving names/roles
-  const agents = await db.agent.findMany({
-    where: { orgId: org.id },
-    select: { id: true, name: true, role: true },
-  });
-  const agentById = new Map(agents.map((a) => [a.id, a]));
+  // Every member, not only the agents — a wiki that omits the humans who took
+  // part is not a record of what happened.
+  const agentById = await actorLookup(org.id);
   const ROLE_LABELS: Record<string, string> = {
     architect: 'Distributed Systems Architect',
     engineer: 'Software Engineer',
@@ -270,7 +269,7 @@ export async function GET() {
       ? (decisionRecorded.payload as EventPayloadMap['DecisionRecorded'])
       : null;
     const roleAssigned = dEvents.filter((e) => e.type === 'RoleAssigned');
-    const proposer = agents.find((a) => a.id === d.proposerAgentId);
+    const proposer = d.proposerAgentId ? agentById.get(d.proposerAgentId) : undefined;
     const decisionGates = gates.filter((g) => g.decisionId === d.id);
 
     return {
@@ -319,14 +318,14 @@ export async function GET() {
   for (const c of claims) {
     const evidenceIds = JSON.parse(c.evidenceIds) as string[];
     const contradictsIds = JSON.parse(c.contradictsIds) as string[];
-    const agent = c.provenanceAgentId ? agentById.get(c.provenanceAgentId) : null;
+    const agent = c.provenanceMemberId ? agentById.get(c.provenanceMemberId) : null;
     const wikiClaim: WikiClaim = {
       id: c.id,
       statement: c.statement,
       status: c.status,
       scopeType: c.scopeType,
       scopeId: c.scopeId,
-      provenanceAgentId: c.provenanceAgentId,
+      provenanceMemberId: c.provenanceMemberId,
       provenanceAgentName: agent?.name ?? null,
       provenanceAgentRole: agent?.role ?? null,
       evidenceCount: evidenceIds.length,
@@ -345,7 +344,7 @@ export async function GET() {
   const riskEvents = projectEvents.filter((e) => e.type === 'RiskFlagged');
   const wikiRisks: WikiRisk[] = riskEvents.map((e) => {
     const p = e.payload as EventPayloadMap['RiskFlagged'];
-    const agent = e.actorAgentId ? agentById.get(e.actorAgentId) : null;
+    const agent = e.actorMemberId ? agentById.get(e.actorMemberId) : null;
     return {
       id: e.id,
       severity: p.severity,
@@ -362,12 +361,12 @@ export async function GET() {
   // ─── Retrospective: HR agent's MessagePosted events ──────────────────────
   // Look for messages from the HR agent that contain retrospective keywords.
   // Also include any HR-scoped event (agentId is the HR agent).
-  const hrAgent = agents.find((a) => a.role === 'hr');
+  const hrAgent = [...agentById.values()].find((a) => a.role === 'hr');
   const retrospective: WikiRetrospective[] = [];
   if (hrAgent) {
     for (const e of channelEvents) {
       if (e.type !== 'MessagePosted') continue;
-      if (e.actorAgentId !== hrAgent.id) continue;
+      if (e.actorMemberId !== hrAgent.id) continue;
       const p = e.payload as EventPayloadMap['MessagePosted'];
       // Heuristic: HR retrospective messages mention objection precision, survival rate,
       // metrics, retrospective, or similar.
@@ -383,7 +382,7 @@ export async function GET() {
       if (keywords.some((k) => body.includes(k))) {
         retrospective.push({
           agentName: hrAgent.name,
-          agentRole: hrAgent.role,
+          agentRole: hrAgent.role ?? '',
           body: p.body,
           postedAt: e.createdAt,
         });
@@ -394,14 +393,14 @@ export async function GET() {
   // ─── Participants (agents who participated in any decision) ─────────────
   const participantMap = new Map<string, WikiParticipant>();
   for (const e of decisionEvents) {
-    if (!e.actorAgentId) continue;
-    const agent = agentById.get(e.actorAgentId);
+    if (!e.actorMemberId) continue;
+    const agent = agentById.get(e.actorMemberId);
     if (!agent) continue;
     const p = participantMap.get(agent.id) ?? {
       agentId: agent.id,
       agentName: agent.name,
-      agentRole: agent.role,
-      roleLabel: ROLE_LABELS[agent.role] ?? agent.role,
+      agentRole: agent.role ?? '',
+      roleLabel: agent.role ? ROLE_LABELS[agent.role] ?? agent.role : '',
       proposalCount: 0,
       objectionCount: 0,
       evidenceCount: 0,
@@ -417,7 +416,7 @@ export async function GET() {
     (a, b) => a.seq - b.seq,
   );
   const eventTimeline = allEvents.map((e) => {
-    const agent = e.actorAgentId ? agentById.get(e.actorAgentId) : null;
+    const agent = e.actorMemberId ? agentById.get(e.actorMemberId) : null;
     return {
       seq: e.seq,
       type: e.type,

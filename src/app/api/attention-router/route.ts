@@ -24,6 +24,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { listAgentRows } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended, broadcastTyping } from '@/lib/realtime/broadcast';
 import { matchAttention } from '@/lib/agents/attention-router';
@@ -141,9 +142,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // Fetch the active agents by role
-    const agents = await db.agent.findMany({
-      where: { orgId: org.id, status: 'active' },
-    });
+    const agents = await listAgentRows(org.id);
 
     const useRust = await isRustAvailable();
     const woken: Array<{ agentId: string; agentName: string; role: string; topic: string; confidence: number }> = [];
@@ -159,8 +158,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       // 1. Fire AttentionWakeup event — visible in chat as "noticed this"
       const wakeupEvent: NewEventInput = {
         type: 'AttentionWakeup',
-        actorType: 'agent',
-        actorAgentId: agent.id,
+        actorType: 'member',
+        actorMemberId: agent.id,
         scopeType: 'channel',
         scopeId: body.channelId,
         payload: {
@@ -193,8 +192,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         );
         observationEvents = [{
           type: 'MessagePosted',
-          actorType: 'agent',
-          actorAgentId: agent.id,
+          actorType: 'member',
+          actorMemberId: agent.id,
           scopeType: 'channel',
           scopeId: body.channelId,
           payload: { body: llmBody },

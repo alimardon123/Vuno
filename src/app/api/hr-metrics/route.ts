@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { listMembers } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import type { EventRecord, EventPayloadMap } from '@/lib/events/types';
 
@@ -26,8 +27,8 @@ interface AgentMetric {
   agentRole: string;
   roleLabel: string;
   teamId: string | null;
+  // 'human' | 'agent' — HR scores both, and the surface says which it is scoring.
   kind: string;
-  modelName: string;
   status: string;
   // counts
   proposalsOpened: number;
@@ -156,10 +157,18 @@ export async function GET() {
   }
 
   // Fetch all agents
-  const agents = await db.agent.findMany({
-    where: { orgId: org.id },
-    orderBy: [{ role: 'asc' }, { name: 'asc' }],
-  });
+  // HR reads the ledger, and the ledger is member-neutral — so evaluation
+  // covers humans and agents by construction, with no second code path
+  // (ADR-0009 Part 3).
+  const roster = await listMembers(org.id);
+  const agents = roster.map((m) => ({
+    id: m.id,
+    name: m.displayName,
+    role: m.role ?? (m.kind === 'human' ? 'human' : 'agent'),
+    kind: m.kind,
+    teamId: m.teamId,
+    status: m.status,
+  }));
 
   // Fetch all claims (for status distribution + objection precision)
   const claims = await db.claim.findMany({
@@ -183,7 +192,7 @@ export async function GET() {
 
   // ─── Per-agent metrics ──────────────────────────────────────────────────
   const agentMetrics: AgentMetric[] = agents.map((a) => {
-    const agentEvents = allEvents.filter((e) => e.actorAgentId === a.id);
+    const agentEvents = allEvents.filter((e) => e.actorMemberId === a.id);
     const proposalsOpened = agentEvents.filter((e) => e.type === 'ProposalOpened').length;
     const objectionsRaised = agentEvents.filter((e) => e.type === 'ObjectionRaised').length;
     const evidenceAttached = agentEvents.filter((e) => e.type === 'EvidenceAttached').length;
@@ -259,7 +268,6 @@ export async function GET() {
       roleLabel: ROLE_LABELS[a.role] ?? a.role,
       teamId: a.teamId,
       kind: a.kind,
-      modelName: a.modelName,
       status: a.status,
       proposalsOpened,
       objectionsRaised,

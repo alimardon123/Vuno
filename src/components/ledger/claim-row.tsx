@@ -31,7 +31,7 @@ export interface ClaimRowData {
   scopeId: string;
   provenanceEventId: string;
   provenanceActorType: string;
-  provenanceAgentId?: string | null;
+  provenanceMemberId?: string | null;
   evidenceIds: string[];
   contradictsIds: string[];
   statusReason?: string | null;
@@ -47,8 +47,8 @@ interface ClaimRowProps {
 
 export function ClaimRow({ claim, agents, onOpenDecision }: ClaimRowProps) {
   const [expanded, setExpanded] = useState(false);
-  const agent = claim.provenanceAgentId
-    ? agents.find((a) => a.id === claim.provenanceAgentId)
+  const agent = claim.provenanceMemberId
+    ? agents.find((a) => a.id === claim.provenanceMemberId)
     : null;
 
   // If the claim scope is a decision, allow click-through to the decision page
