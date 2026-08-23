@@ -8,7 +8,7 @@
 // mismatch of reading the DOM during render and the effect-then-setState dance
 // of syncing it into React.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const THEMES = [
   { id: 'ink', label: 'Ink', hint: 'Deep neutral' },
@@ -18,6 +18,21 @@ const THEMES = [
 
 export function ThemeMenu() {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+
+  // Escape closes it and puts focus back where it came from. Without this a
+  // keyboard user who opens the menu has no way out of it but to pick a theme.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+      trigger.current?.focus();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
 
   function apply(next: string) {
     setOpen(false);
@@ -32,6 +47,7 @@ export function ThemeMenu() {
   return (
     <div className="relative">
       <button
+        ref={trigger}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
@@ -48,9 +64,12 @@ export function ThemeMenu() {
 
       {open ? (
         <>
+          {/* Click-outside only. It is not a focus stop: tabbing into the menu
+              used to land on this invisible button before any theme. */}
           <button
             type="button"
-            aria-label="Close theme menu"
+            tabIndex={-1}
+            aria-hidden
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />

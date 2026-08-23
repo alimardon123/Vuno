@@ -35,7 +35,12 @@ export function ChannelsPane({ conversations }: { conversations: Conversation[] 
   );
 
   return (
-    <ListPane title="Channels" searchPlaceholder="Search channels…" onSearch={setQ}>
+    <ListPane
+      title="Channels"
+      searchPlaceholder="Search channels…"
+      onSearch={setQ}
+      hideOnMobile={pathname !== '/channels'}
+    >
       {rooms.length > 0 ? <SectionLabel count={rooms.length}>Team channels</SectionLabel> : null}
       {rooms.map(row)}
       {open.length > 0 ? <SectionLabel count={open.length}>Channels</SectionLabel> : null}

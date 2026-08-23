@@ -58,7 +58,12 @@ export function ChatsPane({
   const count = (pinned ? 1 : 0) + direct.length + groups.length + rooms.length;
 
   return (
-    <ListPane title="Chats" searchPlaceholder="Search chats…" onSearch={setQ}>
+    <ListPane
+      title="Chats"
+      searchPlaceholder="Search chats…"
+      onSearch={setQ}
+      hideOnMobile={pathname !== '/chats'}
+    >
       {pinned ? (
         <>
           <SectionLabel>Pinned</SectionLabel>

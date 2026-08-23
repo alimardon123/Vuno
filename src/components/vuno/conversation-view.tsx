@@ -4,6 +4,7 @@
 // typed composer — which is the primary composer here, not a mode you switch
 // into: an objection and a message are both things you say.
 
+import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { MessageList } from '@/components/vuno/message-list';
 import { Composer } from '@/components/vuno/composer';
@@ -24,6 +25,9 @@ export function ConversationView({
   conversation: Conversation;
   messages: ConversationMessage[];
 }) {
+  // On a phone the list pane steps aside for the conversation, so this header
+  // is the only way back to it.
+  const backTo = conversation.kind === 'channel' ? '/channels' : '/chats';
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +37,15 @@ export function ConversationView({
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
       <header className="flex shrink-0 items-center gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-2">
+        <Link
+          href={backTo}
+          aria-label={`Back to ${backTo === '/chats' ? 'Chats' : 'Channels'}`}
+          className="-ml-1.5 grid size-7 shrink-0 place-items-center rounded-md text-[var(--fg-3)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] md:hidden"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </Link>
         {conversation.kind === 'channel' || conversation.kind === 'team_room' ? (
           <span className="text-[15px] leading-none text-[var(--fg-3)]" aria-hidden>#</span>
         ) : (

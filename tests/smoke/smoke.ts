@@ -1,0 +1,262 @@
+// Vuno — browser smoke test.
+//
+// The definition of done says "verified in a real browser against real data".
+// That verification kept living in a scratch directory and dying with the
+// session, so the same four bugs could come back unnoticed: a link to a
+// conversation that does not exist, a message posting as "Unknown", a
+// hydration mismatch throwing away the page, and a three-column desktop layout
+// squeezed onto a phone.
+//
+// Run against a server you already started:
+//   bun run dev        # in one terminal
+//   bun run smoke      # in another
+//
+// It needs a Chromium. Playwright's default location is used unless
+// PLAYWRIGHT_CHROMIUM is set. Nothing here is wired into `bun run check`:
+// that stays fast and browserless.
+
+import { chromium, type Browser, type Page } from 'playwright';
+
+const BASE = process.env.SMOKE_BASE_URL ?? 'http://localhost:3000';
+const EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM;
+
+const failures: string[] = [];
+const checks: string[] = [];
+
+function check(ok: boolean, what: string, detail = '') {
+  if (ok) checks.push(what);
+  else failures.push(detail ? `${what} — ${detail}` : what);
+}
+
+/** Records every way a page can be broken without looking broken. */
+function watch(page: Page, problems: string[]) {
+  page.on('pageerror', (e) => problems.push(`page error: ${e.message.split('\n')[0]}`));
+  page.on('console', (m) => {
+    if (m.type() === 'error') problems.push(`console error: ${m.text().split('\n')[0]}`);
+  });
+  page.on('response', (r) => {
+    if (r.status() >= 400) problems.push(`${r.status()} ${r.url()}`);
+  });
+}
+
+async function overflow(page: Page): Promise<number> {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+}
+
+// ── Every route reachable from the rail, and every link on it ────────────────
+async function crawl(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const problems: string[] = [];
+  watch(page, problems);
+
+  const seen = new Set<string>();
+  for (const start of ['/activity', '/chats', '/channels', '/work', '/members', '/ledger']) {
+    await page.goto(BASE + start, { waitUntil: 'networkidle' });
+    seen.add(start);
+    const hrefs = await page.$$eval('a[href^="/"]', (as) =>
+      [...new Set(as.map((a) => a.getAttribute('href') ?? ''))].filter(Boolean),
+    );
+    for (const href of hrefs) {
+      if (seen.has(href)) continue;
+      seen.add(href);
+      await page.goto(BASE + href, { waitUntil: 'networkidle' });
+      const over = await overflow(page);
+      if (over > 0) problems.push(`horizontal overflow on ${href}: ${over}px`);
+
+      // A link with a fragment has to land on something.
+      const [, id] = href.split('#');
+      if (id) {
+        const present = await page.evaluate((i) => !!document.getElementById(i), id);
+        if (!present) problems.push(`${href} points at an element that does not exist`);
+      }
+    }
+  }
+
+  check(seen.size >= 10, `crawled ${seen.size} routes`, `only reached ${seen.size}`);
+  check(problems.length === 0, 'no page errors, no 4xx, no overflow, no dangling anchors', problems.slice(0, 8).join('; '));
+  await ctx.close();
+}
+
+// ── Posting a message, by button and by keyboard, attributed to a person ─────
+async function posting(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+
+  await page.goto(`${BASE}/chats`, { waitUntil: 'networkidle' });
+  const first = page.locator('a[href^="/chats/"]').first();
+  if ((await first.count()) === 0) {
+    check(false, 'a conversation exists to post into', 'the Chats pane listed none');
+    await ctx.close();
+    return;
+  }
+  await first.click();
+  await page.waitForTimeout(600);
+
+  const box = page.locator('textarea');
+  const typed = `smoke ${Date.now()}`;
+  await box.fill(typed);
+  await page.getByRole('button', { name: /send/i }).click();
+  await page.waitForTimeout(2500);
+
+  // It lands twice — in the stream and in the sidebar preview — which is the
+  // preview doing its job, so match the first rather than demanding one.
+  check(await page.getByText(typed).first().isVisible(), 'a message sent with the button appears');
+  check((await box.inputValue()) === '', 'the composer clears after sending');
+
+  const shortcut = `smoke-kbd ${Date.now()}`;
+  await box.fill(shortcut);
+  await page.keyboard.press('Control+Enter');
+  await page.waitForTimeout(2500);
+  check(await page.getByText(shortcut).first().isVisible(), 'a message sent with ⌘↵/Ctrl↵ appears');
+
+  // The event has to name who wrote it — an unattributed one renders "Unknown".
+  const unattributed = await page.getByText('Unknown').count();
+  check(unattributed === 0, 'every message names its author', `${unattributed} rendered as "Unknown"`);
+  await ctx.close();
+}
+
+// ── A phone shows one column, and can get back from it ───────────────────────
+async function phone(browser: Browser) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await ctx.newPage();
+  const problems: string[] = [];
+  watch(page, problems);
+
+  for (const r of ['/activity', '/work', '/members', '/ledger', '/chats', '/channels']) {
+    await page.goto(BASE + r, { waitUntil: 'networkidle' });
+    const over = await overflow(page);
+    if (over > 0) problems.push(`${r}: ${over}px`);
+  }
+  check(problems.length === 0, 'no horizontal overflow on a 390px screen', problems.join('; '));
+
+  await page.goto(`${BASE}/chats`, { waitUntil: 'networkidle' });
+  const pane = page.locator('aside[aria-label="Chats"]');
+  const listWidth = await pane.evaluate((el) => el.getBoundingClientRect().width);
+  check(listWidth > 300, 'the list fills the screen rather than a sliver', `${listWidth}px`);
+
+  await page.locator('a[href^="/chats/"]').first().click();
+  await page.waitForTimeout(800);
+  check(!(await pane.isVisible()), 'the list steps aside for an open conversation');
+
+  const back = page.getByRole('link', { name: /back to chats/i });
+  check((await back.count()) > 0, 'an open conversation has a way back');
+  if ((await back.count()) > 0) {
+    await back.click();
+    await page.waitForTimeout(800);
+    check(page.url().endsWith('/chats'), 'back returns to the list');
+  }
+  await ctx.close();
+}
+
+// ── Keyboard: reach content, see focus, escape a menu ────────────────────────
+async function keyboard(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+
+  await page.goto(`${BASE}/activity`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => document.body.focus());
+  await page.keyboard.press('Tab');
+  const skip = await page.evaluate(() => {
+    const el = document.activeElement;
+    const r = el?.getBoundingClientRect();
+    return { text: (el?.textContent ?? '').trim(), visible: !!r && r.width > 1 && r.height > 1 };
+  });
+  check(skip.text === 'Skip to content' && skip.visible, 'the first Tab is a visible skip link', JSON.stringify(skip));
+
+  // Every focus stop has to be visible and on screen.
+  const noRing: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.press('Tab');
+    const info = await page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body) return null;
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return {
+        label: (el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 24),
+        ring: (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== 'none',
+        onScreen: r.width > 0 && r.height > 0 && r.top >= 0 && r.top < 900,
+      };
+    });
+    if (!info) break;
+    if (!info.ring || !info.onScreen) noRing.push(info.label);
+  }
+  check(noRing.length === 0, 'every focus stop is visible and on screen', noRing.join(', '));
+
+  // The theme menu must be escapable, or a keyboard user is stuck in it.
+  const themeButton = page.getByRole('button', { name: 'Theme' });
+  await themeButton.focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Tab');
+  const landed = await page.evaluate(() => (document.activeElement?.textContent ?? '').trim());
+  check(landed.length > 0, 'tabbing into the theme menu lands on a theme', 'landed on an empty element');
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check((await page.getByRole('menu').count()) === 0, 'Escape closes the theme menu');
+  check(
+    await page.evaluate(() => document.activeElement?.getAttribute('title') === 'Theme'),
+    'Escape returns focus to the button that opened it',
+  );
+  await ctx.close();
+}
+
+// ── Each theme applies, and survives a reload ────────────────────────────────
+async function themes(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/activity`, { waitUntil: 'networkidle' });
+
+  for (const [label, id] of [['Ink', 'ink'], ['Paper', 'paper'], ['Warm', 'warm']] as const) {
+    await page.getByRole('button', { name: 'Theme' }).click();
+    await page.getByRole('menuitem', { name: new RegExp(label) }).click();
+    await page.waitForTimeout(200);
+    const applied = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    check(applied === id, `the ${label} theme applies`, `root said "${applied}"`);
+
+    // A theme that paints nothing is not a theme.
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    check(bg !== 'rgba(0, 0, 0, 0)' && bg !== '', `${label} paints a background`, bg);
+  }
+
+  await page.reload({ waitUntil: 'networkidle' });
+  check(
+    (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === 'warm',
+    'the chosen theme survives a reload',
+  );
+  await ctx.close();
+}
+
+const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {}).catch((e: unknown) => {
+  console.error(
+    'Could not start Chromium. Install it with `bunx playwright install chromium`, ' +
+      'or point PLAYWRIGHT_CHROMIUM at one you already have.\n' +
+      (e instanceof Error ? e.message : String(e)),
+  );
+  process.exit(1);
+});
+
+try {
+  await fetch(BASE).catch(() => {
+    throw new Error(`Nothing is serving ${BASE}. Start it with \`bun run dev\`, or set SMOKE_BASE_URL.`);
+  });
+
+  await crawl(browser);
+  await posting(browser);
+  await phone(browser);
+  await keyboard(browser);
+  await themes(browser);
+} finally {
+  await browser.close();
+}
+
+for (const c of checks) console.log(`  ok    ${c}`);
+for (const f of failures) console.log(`  FAIL  ${f}`);
+console.log(`\n${checks.length} passed, ${failures.length} failed`);
+process.exit(failures.length === 0 ? 0 : 1);

@@ -14,6 +14,7 @@ export function ListPane({
   onSearch,
   children,
   width = 244,
+  hideOnMobile = false,
 }: {
   title: string;
   action?: { label: string; onClick: () => void };
@@ -21,13 +22,24 @@ export function ListPane({
   onSearch?: (q: string) => void;
   children: React.ReactNode;
   width?: number;
+  /**
+   * A phone has room for one column, not three. When a conversation is open the
+   * pane steps aside for it; the list is a page you came from, not a rail you
+   * keep. Below `md` the pane is full width, so the list is readable rather
+   * than a 90px sliver.
+   */
+  hideOnMobile?: boolean;
 }) {
   const [q, setQ] = useState('');
 
   return (
     <aside
-      className="flex shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface)]"
-      style={{ width }}
+      className={cn(
+        'shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface)]',
+        'w-full md:w-[var(--pane-w)]',
+        hideOnMobile ? 'hidden md:flex' : 'flex',
+      )}
+      style={{ '--pane-w': `${width}px` } as React.CSSProperties}
       aria-label={title}
     >
       <header className="flex items-center gap-1.5 px-3 pb-1.5 pt-2.5">
