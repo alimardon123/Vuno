@@ -16,12 +16,14 @@ claim made by a person loses its author and HR cannot score them. ADR-0009 merge
 and `Agent` into one `Member` identity and states the rule that holds the line: **any
 column that can hold an agent must be able to hold a human, and the reverse.**
 
-ADR-0009 also covers delegation — a personal assistant acting in its owner's name, with
-the owner's visibility, under explicit revocable scopes. Attribution stores both the
-executor and the authority, and **the display leads with the owner**: a delegated act
-renders as **Kai** `via Bob`, with an always-visible, non-suppressible chip. An assistant
-acting on its *own* initiative renders plainly as **Bob** — it is not its owner's
-position and must not look like one.
+ADR-0009 also covers delegation. **An assistant always acts under its own name** — Bob
+posts as Bob with the chip that already says whose assistant he is, so there is exactly
+one way a member renders. Identity and authority are separate: when an action carries the
+owner's authority (approving a gate, spending budget), that is marked on **the action** —
+*Bob approved · with Kai's authority* — not on the name.
+
+Both fields are stored on every event regardless: `actorMemberId` and
+`onBehalfOfMemberId`.
 
 Corollary for the schema: `Channel` gets a `kind` discriminator —
 `dm | group | team_room | channel` — resolved once on the server. Today four components

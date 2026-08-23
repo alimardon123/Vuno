@@ -68,58 +68,40 @@ Delegation     id, principalMemberId, agentMemberId, scopes[],
 
 Four rules, all load-bearing:
 
-1. **Two fields, and the owner is the one that leads.** An event produced under
-   delegation stores both: `actorMemberId = Bob` (who executed) and
-   `onBehalfOfMemberId = Kai` (whose authority). Neither is ever overwritten. But the
-   *display* identity is the accountable party, not the executor:
+1. **An assistant always acts under its own name.** Bob posts as **Bob**, everywhere,
+   with the chip that already says whose assistant he is. That chip carries the
+   ownership chain, so nothing is hidden, and it means there is exactly one way a member
+   renders — no second display mode where an agent wears its owner's name. It is also
+   simply true: Bob produced the tokens.
 
-   > **Kai** `via Bob`
-
-   The reasoning: when Kai lends Bob his authority, the socially relevant fact is that
-   this is *Kai's* position and Kai is accountable for it. Leading with "Bob" makes
-   people mentally discount delegated work — which both defeats the point of delegating
-   and quietly makes it second-class. Git has had exactly this two-field model for
-   twenty years: `Author` and `Committer` are both recorded, `git log` shows the author,
-   and nobody finds that confusing.
-
-   Three properties the marker must have, all non-negotiable:
-
-   - **Always visible.** A chip on the name line, not a tooltip and not a hover state —
-     hover does not exist on touch, and an invisible distinction is not a distinction.
-   - **Legible in a dense list.** It has to survive at 12px in a sidebar preview, so it
-     is a short chip plus an avatar badge in the corner slot where Slack puts its app
-     marker, not a sentence.
-   - **Not suppressible.** No setting hides it. The moment it can be turned off, the
-     guarantee is gone.
-
-   The chip is clickable, and opens the delegation: which scopes were granted, when,
-   what this specific action did, and a revoke control.
-
-1b. **An assistant acting on its own initiative is itself, not its owner.** If Bob posts
-   because he noticed a failing benchmark — rather than because Kai asked, or within a
-   standing grant Kai gave — then this is not Kai's position and Kai may not have seen
-   it. Displaying "Kai" there would be a lie.
-
-   No extra field is needed: `onBehalfOfMemberId` is set **only** for delegated acts. When
-   it is null, Bob is the sole actor and renders plainly as **Bob**. So:
+   Identity and authority are separate things, and only identity belongs on the name.
+   When an action *carries* the owner's authority — approving a gate, spending budget,
+   committing to a decision — that is a property of **the action**, and it is marked
+   there:
 
    | What happened | Renders as |
    |---|---|
    | Kai posts | **Kai** |
-   | Bob posts under delegation | **Kai** `via Bob` |
-   | Bob posts on his own initiative | **Bob** |
+   | Bob posts | **Bob** · `Kai's assistant` |
+   | Bob approves a gate under delegation | **Bob** approved · `with Kai's authority` |
 
-1c. **High-stakes events elevate the attribution.** For anything that changes a gate,
-   moves a claim's status, or spends budget, the chip is promoted to a full line rather
-   than a subtle marker — those are exactly the actions where you most need to see that
-   it was delegated. And in the owner's own **Activity**, delegated actions always render
-   executor-first (*Bob did X for you*), because that view exists precisely to audit what
-   was done in your name.
+   Both fields are still stored on every event and neither is ever overwritten:
+   `actorMemberId = Bob`, `onBehalfOfMemberId = Kai`. The display just stops trying to
+   merge them. Most messages need no authority marker at all; the consequential ones
+   carry it where a reader is actually looking for it.
 
-2. **Visibility is inherited, not copied.** Bob's readable set is computed at read time
-   as *Kai's readable set ∩ Bob's granted scopes*. When Kai leaves a channel, Bob loses
-   it in the same query — no revocation job, no drift. Copying grants at delegation time
-   produces stale access, which is a security bug that only shows up months later.
+2. **Visibility is inherited, not copied — but private conversations are carved out.**
+   Bob's readable set is computed at read time as *Kai's readable set ∩ Bob's granted
+   scopes*. When Kai leaves a channel, Bob loses it in the same query — no revocation
+   job, no drift. Copying grants at delegation time produces stale access, which is a
+   security bug that only surfaces months later.
+
+   **The carve-out matters.** Applied naively, inheritance would give Bob every direct
+   message Kai has ever received. Mira wrote to *Kai* in confidence, not to Kai's agent,
+   and she never agreed to the delegation. So **direct messages and private group chats
+   are excluded from inherited visibility by default.** Bob gets access to one only by
+   an explicit per-conversation grant from Kai — and when that grant is made, **the other
+   participants see that Bob has been added.** Never silently. See §4.
 
 3. **Scopes are explicit and revocable**, not one boolean: `post`, `react`, `propose`,
    `object`, `attach_evidence`, `run_experiment`, `write_code`, `spend:<cap>`,
@@ -154,3 +136,40 @@ same rule to agents costs nothing and keeps the mechanism uniform.
   resolved decision then means something for both kinds of member.
 - Presence becomes one field with one vocabulary for everyone.
 - Personal assistants become genuinely useful without becoming unauditable.
+
+
+## Part 4 — Assistants in private conversations
+
+A direct message is a two-party space, so summoning a third party into it is genuinely
+awkward. The awkwardness is real because "call my assistant in here" actually means
+three different things, and collapsing them is what makes it feel wrong.
+
+**Mode 1 — Private aside. The default.** Kai `@`-mentions Bob inside the DM with Mira.
+Bob answers **visible to Kai only**, marked *"Only you can see this"* — the same
+ephemeral-response mechanism Slack has used for app replies for a decade. Bob does not
+join the conversation. Mira sees nothing, not even that Bob was asked. This covers most
+of what you actually want: *"Bob, what did we agree with Mira last quarter?"* is not
+something to broadcast.
+
+The composer shows the ephemeral state **before** you send, so there is never a surprise
+about who is about to see it.
+
+**Mode 2 — Bring it into the room.** Bob's private answer carries a *Share to
+conversation* action. One click posts it into the DM, attributed to Bob with his
+assistant chip, visible to both. Explicit, reversible in the sense that you chose it,
+and it keeps the default safe.
+
+**Mode 3 — Bob joins properly.** Kai adds Bob as a participant. The conversation becomes
+a three-member group chat and Bob is a full member of it — which is the honest
+representation, and it is why *Chats* holds DMs and group chats under one model.
+
+Two rules on joining, both about Mira rather than Bob:
+
+- **Bob sees forward, not backward.** He gets the conversation from the moment he joins.
+  History before that requires Kai to share specific messages, deliberately.
+- **Mira is told.** A system line in the conversation: *"Kai added Bob (Kai's
+  assistant)."* Adding an agent that can read what you write is not a silent act.
+
+The same three modes work in any conversation, including channels. DMs are only where
+the distinction is load-bearing, because a channel already has an audience and a DM does
+not.
