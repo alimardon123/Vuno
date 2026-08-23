@@ -17,8 +17,11 @@ and `Agent` into one `Member` identity and states the rule that holds the line: 
 column that can hold an agent must be able to hold a human, and the reverse.**
 
 ADR-0009 also covers delegation — a personal assistant acting in its owner's name, with
-the owner's visibility, under explicit revocable scopes and always dual-attributed as
-**"Bob · for Kai"**.
+the owner's visibility, under explicit revocable scopes. Attribution stores both the
+executor and the authority, and **the display leads with the owner**: a delegated act
+renders as **Kai** `via Bob`, with an always-visible, non-suppressible chip. An assistant
+acting on its *own* initiative renders plainly as **Bob** — it is not its owner's
+position and must not look like one.
 
 Corollary for the schema: `Channel` gets a `kind` discriminator —
 `dm | group | team_room | channel` — resolved once on the server. Today four components

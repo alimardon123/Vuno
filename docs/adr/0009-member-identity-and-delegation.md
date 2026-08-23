@@ -68,12 +68,53 @@ Delegation     id, principalMemberId, agentMemberId, scopes[],
 
 Four rules, all load-bearing:
 
-1. **Dual attribution, always.** An event authored under delegation carries
-   `actorMemberId = Bob` *and* `onBehalfOfMemberId = Kai`. Never collapsed into one.
-   The UI renders **"Bob · for Kai"**. An assistant that can post invisibly as its owner
-   destroys the provenance guarantee the whole product rests on. Buzz reaches the same
-   conclusion from the cryptographic side: the agent signs with its own key, tied to the
-   owner by a second signature.
+1. **Two fields, and the owner is the one that leads.** An event produced under
+   delegation stores both: `actorMemberId = Bob` (who executed) and
+   `onBehalfOfMemberId = Kai` (whose authority). Neither is ever overwritten. But the
+   *display* identity is the accountable party, not the executor:
+
+   > **Kai** `via Bob`
+
+   The reasoning: when Kai lends Bob his authority, the socially relevant fact is that
+   this is *Kai's* position and Kai is accountable for it. Leading with "Bob" makes
+   people mentally discount delegated work — which both defeats the point of delegating
+   and quietly makes it second-class. Git has had exactly this two-field model for
+   twenty years: `Author` and `Committer` are both recorded, `git log` shows the author,
+   and nobody finds that confusing.
+
+   Three properties the marker must have, all non-negotiable:
+
+   - **Always visible.** A chip on the name line, not a tooltip and not a hover state —
+     hover does not exist on touch, and an invisible distinction is not a distinction.
+   - **Legible in a dense list.** It has to survive at 12px in a sidebar preview, so it
+     is a short chip plus an avatar badge in the corner slot where Slack puts its app
+     marker, not a sentence.
+   - **Not suppressible.** No setting hides it. The moment it can be turned off, the
+     guarantee is gone.
+
+   The chip is clickable, and opens the delegation: which scopes were granted, when,
+   what this specific action did, and a revoke control.
+
+1b. **An assistant acting on its own initiative is itself, not its owner.** If Bob posts
+   because he noticed a failing benchmark — rather than because Kai asked, or within a
+   standing grant Kai gave — then this is not Kai's position and Kai may not have seen
+   it. Displaying "Kai" there would be a lie.
+
+   No extra field is needed: `onBehalfOfMemberId` is set **only** for delegated acts. When
+   it is null, Bob is the sole actor and renders plainly as **Bob**. So:
+
+   | What happened | Renders as |
+   |---|---|
+   | Kai posts | **Kai** |
+   | Bob posts under delegation | **Kai** `via Bob` |
+   | Bob posts on his own initiative | **Bob** |
+
+1c. **High-stakes events elevate the attribution.** For anything that changes a gate,
+   moves a claim's status, or spends budget, the chip is promoted to a full line rather
+   than a subtle marker — those are exactly the actions where you most need to see that
+   it was delegated. And in the owner's own **Activity**, delegated actions always render
+   executor-first (*Bob did X for you*), because that view exists precisely to audit what
+   was done in your name.
 
 2. **Visibility is inherited, not copied.** Bob's readable set is computed at read time
    as *Kai's readable set ∩ Bob's granted scopes*. When Kai leaves a channel, Bob loses
