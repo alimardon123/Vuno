@@ -48,17 +48,13 @@ await run(['bunx', 'prisma', 'generate'], 'prisma generate');
 await run(['bunx', 'prisma', 'migrate', 'deploy'], 'prisma migrate deploy');
 
 step(4, TOTAL, 'Seed');
-// Seeding clears the database first, so running setup a second time on a
-// machine somebody has actually used would take their org and its event spine
-// with it. Setup fills an empty database and leaves a used one alone; `bun run
-// seed` is still there for anyone who does want to start over.
-const { db } = await import('../src/lib/db');
-const existing = await db.organization.count();
-if (existing > 0) {
-  console.log(`  Database already holds ${existing} organisation${existing === 1 ? '' : 's'} — leaving it alone.`);
-  console.log('  To replace it with the sample org: \x1b[1mbun run seed\x1b[0m');
-} else {
-  await run(['bun', 'run', 'scripts/seed.ts'], 'seed');
-}
+// `--if-empty`, because seeding clears the database first: running setup again
+// on a machine somebody has actually used must not take their org with it.
+//
+// The decision is made inside the seed's own process, not here. This script
+// starts before `bun install` has run, so on a fresh clone Bun has already
+// cached `@prisma/client` as unresolvable by the time we would want to ask the
+// database anything — which is exactly how the first fresh-clone run failed.
+await run(['bun', 'run', 'scripts/seed.ts', '--if-empty'], 'seed');
 
 console.log('\n\x1b[32m✓ Ready.\x1b[0m Start it with:  \x1b[1mbun run dev\x1b[0m\n');

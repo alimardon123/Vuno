@@ -1,5 +1,17 @@
 import { PrismaClient } from '@prisma/client'
 
+// A relative SQLite path in DATABASE_URL is resolved against whatever directory
+// the process runs from, and the entry points do not share one: `next dev` runs
+// from the project root, the standalone production server from
+// `.next/standalone`. `.env` ships `file:../db/dev.db` because that is what the
+// Prisma CLI wants (relative to prisma/schema.prisma), and the production build
+// served 500 on every page reading that same string from somewhere else.
+//
+// The launcher knows where the project is; the bundled runtime does not, and
+// walking up to a package.json finds the one Next writes into the build output.
+// So `scripts/start.ts` makes the path absolute before starting the server, and
+// the deployment scripts already pass an absolute one.
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
   walConfigured: boolean | undefined

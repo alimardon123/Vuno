@@ -6,7 +6,7 @@
     "setup": "bun run scripts/setup.ts",
     "dev": "concurrently -n app,orchestrator -c cyan,magenta \"next dev -p ${PORT:-3000}\" \"bun run scripts/orchestrator.ts\"",
     "build": "next build",
-    "start": "NODE_ENV=production next start -p ${PORT:-3000}",
+    "start": "bun run scripts/start.ts",
     "check": "bun run typecheck && bun run lint && bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
