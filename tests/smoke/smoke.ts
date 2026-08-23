@@ -153,6 +153,78 @@ async function phone(browser: Browser) {
   await ctx.close();
 }
 
+
+// ── A busy conversation: newest first, bounded DOM, and a smooth scroll ──────
+//
+// The claim is 60 fps at 5,000 messages. Seed one with
+// `bun run scripts/load-messages.ts 5000 ch-storage` before running this;
+// without it the check reports what it found and passes, rather than
+// pretending it measured something.
+async function busyConversation(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/channels/ch-storage`, { waitUntil: 'networkidle' });
+
+  const rendered = await page.locator('main p').count();
+  const earlier = page.getByRole('link', { name: 'Earlier messages' });
+  const isBusy = (await earlier.count()) > 0;
+
+  if (!isBusy) {
+    checks.push(`#storage-engine holds one window (${rendered} messages) — nothing to stress`);
+    await ctx.close();
+    return;
+  }
+
+  // However long the conversation, the DOM holds a window, not the log.
+  check(rendered <= 260, 'the DOM holds a bounded window, not the whole log', `${rendered} paragraphs`);
+
+  const newest = await page.locator('main p').last().innerText();
+  await earlier.click();
+  await page.waitForTimeout(1200);
+  check(/\?before=\d+/.test(page.url()), 'a point in history is a URL someone can send');
+  check((await page.locator('main p').last().innerText()) !== newest, 'the window actually moves back');
+
+  const jump = page.getByRole('link', { name: 'Jump to the latest' });
+  check((await jump.count()) > 0, 'there is a way back to the live end');
+  await jump.click();
+  await page.waitForTimeout(1200);
+  check((await page.locator('main p').last().innerText()) === newest, 'jumping returns to the newest message');
+
+  // Frame budget while scrolling the stream.
+  const frames = await page.evaluate(async () => {
+    const el = [...document.querySelectorAll('*')].find(
+      (e) => e.scrollHeight > e.clientHeight + 200 && getComputedStyle(e).overflowY !== 'visible',
+    );
+    if (!el) return null;
+    const times: number[] = [];
+    let last = performance.now();
+    let running = true;
+    const tick = (now: number) => {
+      times.push(now - last);
+      last = now;
+      if (running) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+
+    el.scrollTop = 0;
+    const step = (el.scrollHeight - el.clientHeight) / 60;
+    for (let i = 0; i < 60; i++) {
+      el.scrollTop += step;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    running = false;
+    // Drop the first few: they include the work of starting to observe.
+    const sorted = times.slice(3).sort((a, b) => a - b);
+    return { p95: sorted[Math.floor(sorted.length * 0.95)], n: sorted.length };
+  });
+
+  if (frames && frames.n > 20) {
+    // 16.7ms is one frame at 60 Hz; anything under ~20ms is not dropping them.
+    check(frames.p95 < 20, `scrolling holds the frame budget (p95 ${frames.p95.toFixed(1)}ms)`, `p95 ${frames.p95.toFixed(1)}ms`);
+  }
+  await ctx.close();
+}
+
 // ── Keyboard: reach content, see focus, escape a menu ────────────────────────
 async function keyboard(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -249,6 +321,7 @@ try {
 
   await crawl(browser);
   await posting(browser);
+  await busyConversation(browser);
   await phone(browser);
   await keyboard(browser);
   await themes(browser);

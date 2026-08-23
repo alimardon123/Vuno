@@ -261,6 +261,10 @@ model Event {
   // or Tenant. Queries filter by (scopeType, scopeId).
 
   @@index([tenantId, orgId, scopeType, scopeId, seq])
+  // The read path queries by org, not by tenant — an org belongs to exactly one
+  // tenant, so nothing that reads a conversation carries a tenantId. Without
+  // this, opening a channel was a full scan of the spine (EXPLAIN said so).
+  @@index([orgId, scopeType, scopeId, seq])
   @@index([type, createdAt])
   @@index([actorMemberId])
   @@index([onBehalfOfMemberId])

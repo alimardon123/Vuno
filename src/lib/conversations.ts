@@ -147,18 +147,57 @@ export interface ConversationMessage {
   isSystem: boolean;
 }
 
-export async function listMessages(orgId: string, conversationId: string, limit = 200): Promise<ConversationMessage[]> {
-  const events = await db.event.findMany({
-    where: { orgId, scopeType: 'channel', scopeId: conversationId },
-    orderBy: { seq: 'asc' },
-    take: limit,
+export interface MessageWindow {
+  messages: ConversationMessage[];
+  /**
+   * The seq to ask for next to see what came before this window, or null at the
+   * beginning of the conversation.
+   */
+  earlier: number | null;
+  /** True when this window is history rather than the live end of the stream. */
+  isHistory: boolean;
+}
+
+/**
+ * A window over a conversation, newest first.
+ *
+ * This used to take the *oldest* 200 events — `orderBy: seq asc, take: 200` —
+ * so a channel with five thousand messages opened on the two-week-old ones and
+ * showed none of today's. It also meant "60 fps at 5,000 messages" was never
+ * actually being measured: the page silently rendered two hundred.
+ *
+ * The window is bounded on purpose. A chat surface holds a page of history in
+ * the DOM and reaches further back by asking, rather than mounting the whole
+ * log — which is what keeps the frame budget flat as a channel grows.
+ */
+export async function listMessages(
+  orgId: string,
+  conversationId: string,
+  opts: { limit?: number; before?: number } = {},
+): Promise<MessageWindow> {
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+
+  // One more than asked for, to learn whether anything precedes this window
+  // without a second count query.
+  const rows = await db.event.findMany({
+    where: {
+      orgId,
+      scopeType: 'channel',
+      scopeId: conversationId,
+      ...(opts.before !== undefined ? { seq: { lt: opts.before } } : {}),
+    },
+    orderBy: { seq: 'desc' },
+    take: limit + 1,
   });
 
+  const hasOlder = rows.length > limit;
+  const page = (hasOlder ? rows.slice(0, limit) : rows).reverse();
+
   const members = await memberMap(
-    events.flatMap((e) => [e.actorMemberId, e.onBehalfOfMemberId].filter((v): v is string => Boolean(v))),
+    page.flatMap((e) => [e.actorMemberId, e.onBehalfOfMemberId].filter((v): v is string => Boolean(v))),
   );
 
-  return events.map((e) => {
+  const messages = page.map((e) => {
     let payload: Record<string, unknown> = {};
     try {
       payload = JSON.parse(e.payload as string) as Record<string, unknown>;
@@ -177,4 +216,10 @@ export async function listMessages(orgId: string, conversationId: string, limit 
       isSystem: e.actorType === 'system',
     };
   });
+
+  return {
+    messages,
+    earlier: hasOlder && messages.length > 0 ? messages[0].seq : null,
+    isHistory: opts.before !== undefined,
+  };
 }

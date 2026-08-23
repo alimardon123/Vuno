@@ -195,3 +195,94 @@ describe('participants are rows, not a naming convention', () => {
     expect(g?.participants.map((m) => m.kind).sort()).toEqual(['agent', 'human', 'human']);
   });
 });
+
+describe('a long conversation opens at the end, not the beginning', () => {
+  const BUSY = 'ch-conv-busy';
+
+  beforeAll(async () => {
+    await db.channel.create({
+      data: {
+        id: BUSY, tenantId: TENANT, orgId: ORG, kind: 'channel', name: 'busy', slug: 'conv-busy',
+        members: { create: [{ tenantId: TENANT, orgId: ORG, memberId: KAI }] },
+      },
+    });
+    const { EventSpine } = await import('@/lib/events/spine');
+    const spine = new EventSpine(TENANT, ORG);
+    // 60 messages against a window of 25 — three windows and a remainder.
+    for (let i = 0; i < 60; i += 20) {
+      await spine.append(
+        Array.from({ length: 20 }, (_, k) => ({
+          type: 'MessagePosted' as const,
+          actorType: 'member' as const,
+          actorMemberId: KAI,
+          scopeType: 'channel' as const,
+          scopeId: BUSY,
+          payload: { body: `message ${i + k + 1}` },
+        })),
+      );
+    }
+  });
+
+  test('the newest messages are the ones shown, not the oldest', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+    const { messages } = await listMessages(ORG, BUSY, { limit: 25 });
+
+    expect(messages).toHaveLength(25);
+    // The bug: `orderBy: seq asc, take: n` returned 1..25 and hid everything after.
+    expect(messages[messages.length - 1].body).toBe('message 60');
+    expect(messages[0].body).toBe('message 36');
+  });
+
+  test('messages within a window still read oldest to newest', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+    const { messages } = await listMessages(ORG, BUSY, { limit: 25 });
+    const seqs = messages.map((m) => m.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+  });
+
+  test('the cursor walks back through history and stops at the beginning', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+
+    const first = await listMessages(ORG, BUSY, { limit: 25 });
+    expect(first.earlier).not.toBeNull();
+    expect(first.isHistory).toBe(false);
+
+    const second = await listMessages(ORG, BUSY, { limit: 25, before: first.earlier! });
+    expect(second.messages[second.messages.length - 1].body).toBe('message 35');
+    expect(second.isHistory).toBe(true);
+
+    const third = await listMessages(ORG, BUSY, { limit: 25, before: second.earlier! });
+    expect(third.messages[0].body).toBe('message 1');
+    // Nothing precedes the first message, so there is nothing more to offer.
+    expect(third.earlier).toBeNull();
+  });
+
+  test('walking every window visits each message exactly once', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+    const seen: string[] = [];
+    let cursor: number | undefined;
+    for (let guard = 0; guard < 10; guard++) {
+      const w = await listMessages(ORG, BUSY, { limit: 25, before: cursor });
+      seen.unshift(...w.messages.map((m) => m.body));
+      if (w.earlier === null) break;
+      cursor = w.earlier;
+    }
+    expect(seen).toHaveLength(60);
+    expect(new Set(seen).size).toBe(60);
+    expect(seen[0]).toBe('message 1');
+    expect(seen[59]).toBe('message 60');
+  });
+
+  test('the window is bounded however much is asked for — the DOM cannot be flooded', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+    const { messages } = await listMessages(ORG, BUSY, { limit: 100_000 });
+    expect(messages.length).toBeLessThanOrEqual(500);
+  });
+
+  test('a conversation shorter than the window offers no history', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+    const w = await listMessages(ORG, DM_BOB, { limit: 25 });
+    expect(w.earlier).toBeNull();
+    expect(w.isHistory).toBe(false);
+  });
+});

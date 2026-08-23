@@ -6,8 +6,15 @@ import { ConversationView } from '@/components/vuno/conversation-view';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ChatPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ before?: string }>;
+}) {
   const { id } = await params;
+  const { before } = await searchParams;
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) notFound();
 
@@ -15,6 +22,11 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
   const conversation = await getConversation(org.id, id, owner?.id);
   if (!conversation) notFound();
 
-  const messages = await listMessages(org.id, id);
-  return <ConversationView conversation={conversation} messages={messages} />;
+  // `before` walks back through history, so a point in a long conversation is
+  // a link someone can send.
+  const cursor = Number(before);
+  const window = await listMessages(org.id, id, {
+    before: Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
+  });
+  return <ConversationView conversation={conversation} window={window} />;
 }

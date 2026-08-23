@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 import { MessageList } from '@/components/vuno/message-list';
 import { Composer } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
-import type { Conversation, ConversationMessage } from '@/lib/conversations';
+import type { Conversation, MessageWindow } from '@/lib/conversations';
 
 const KIND_LABEL: Record<Conversation['kind'], string> = {
   dm: 'Direct message',
@@ -20,19 +20,23 @@ const KIND_LABEL: Record<Conversation['kind'], string> = {
 
 export function ConversationView({
   conversation,
-  messages,
+  window: view,
 }: {
   conversation: Conversation;
-  messages: ConversationMessage[];
+  window: MessageWindow;
 }) {
+  const { messages, earlier, isHistory } = view;
   // On a phone the list pane steps aside for the conversation, so this header
   // is the only way back to it.
-  const backTo = conversation.kind === 'channel' ? '/channels' : '/chats';
+  const basePath = conversation.kind === 'channel' ? '/channels' : '/chats';
+  const backTo = basePath;
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length]);
+    // Only when looking at the live end. Jumping to the bottom of a window of
+    // history would undo the reason someone opened it.
+    if (!isHistory) bottom.current?.scrollIntoView({ block: 'end' });
+  }, [messages.length, isHistory]);
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
@@ -68,11 +72,36 @@ export function ConversationView({
       </header>
 
       <div className="scroll-y min-h-0 flex-1">
+        {/* The window is bounded, so history is reached by asking for it — and
+            because the cursor is in the URL, a point in a long conversation is
+            a link someone can send. */}
+        {earlier !== null ? (
+          <div className="flex justify-center py-2">
+            <Link
+              href={`${basePath}/${conversation.id}?before=${earlier}`}
+              className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 text-[11.5px] text-[var(--fg-3)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+            >
+              Earlier messages
+            </Link>
+          </div>
+        ) : null}
+
         {messages.length === 0 ? (
           <Empty title="No messages yet" hint="Say something, or file a proposal — a proposal becomes a claim on the ledger." />
         ) : (
           <MessageList messages={messages} />
         )}
+
+        {isHistory ? (
+          <div className="flex justify-center py-2">
+            <Link
+              href={`${basePath}/${conversation.id}`}
+              className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 text-[11.5px] text-[var(--fg-3)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--fg)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+            >
+              Jump to the latest
+            </Link>
+          </div>
+        ) : null}
         <div ref={bottom} />
       </div>
 
