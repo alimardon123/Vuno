@@ -211,15 +211,17 @@ export function ChatView() {
       {/* Composer */}
       <TypedComposer channelId={activeChannelId} />
 
-      {/* Channel details sheet — shared links, files, media */}
+      {/* Details sheet — shared links, files, media. Per the user's direction:
+          clicking the top panel shows shared things (like Teams). */}
       <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
         <SheetContent side="right" className="w-full max-w-md p-0">
-          <SheetTitle className="sr-only">Channel details</SheetTitle>
+          <SheetTitle className="sr-only">{channel?.isDm ? 'Chat details' : 'Channel details'}</SheetTitle>
           {activeChannelId ? (
             <ChannelDetailsContent
               channelId={activeChannelId}
-              channelName={channel?.name ?? 'channel'}
+              channelName={channel?.name ?? 'chat'}
               channelTopic={channel?.topic}
+              isChat={channel?.isDm ?? false}
             />
           ) : null}
         </SheetContent>

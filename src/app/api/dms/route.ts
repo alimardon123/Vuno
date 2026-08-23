@@ -1,12 +1,14 @@
 // Vuno — POST /api/dms
-// Get-or-create a DM channel between the current user (Kai) and another member
-// (agent or human). Per the "Functional" principle: real DMs, not fake scopes.
+// Get-or-create a DM chat between the current user (Kai) and another member
+// (agent or human). Per the user's direction: DMs are CHATS, not channels.
+// The storage uses the Channel table (isDm=true) but the API + UI always
+// refer to these as "chats" — never "channels".
 //
 // Flow:
-//   1. Receive { withMemberId } — the agent or user to DM with
-//   2. Compute a deterministic DM channel slug: dm-{a}-{b} (sorted)
-//   3. Find or create the channel (isDm=true, teamId=null)
-//   4. Return the channel — the Chats panel sets it as active
+//   1. Receive { withMemberId } — the agent or user to chat with
+//   2. Compute a deterministic chat slug: dm-{a}-{b} (sorted)
+//   3. Find or create the chat (isDm=true, teamId=null)
+//   4. Return the chat as a "chat" object (not "channel")
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'No org owner found' }, { status: 400 });
   }
 
-  // Resolve the target member's name (for the DM channel name)
+  // Resolve the target member's name (for the DM chat name)
   let targetName: string;
   if (parsed.withMemberKind === 'agent') {
     const agent = await db.agent.findUnique({
@@ -67,18 +69,19 @@ export async function POST(req: Request) {
   // Deterministic slug: sort the two IDs so dm-a-b == dm-b-a
   const ids = [owner.id, parsed.withMemberId].sort();
   const slug = `dm-${ids[0]}-${ids[1]}`;
-  const channelId = `ch-${slug}`;
+  const chatId = `chat-${slug}`;
 
-  // Find or create the DM channel
-  const existing = await db.channel.findUnique({ where: { id: channelId } });
+  // Find or create the DM chat (stored in Channel table with isDm=true)
+  const existing = await db.channel.findUnique({ where: { id: chatId } });
   if (existing) {
-    return NextResponse.json({ ok: true, channel: existing });
+    // Return as "chat" — never expose "channel" naming to the client
+    return NextResponse.json({ ok: true, chat: { ...existing, isChat: true } });
   }
 
-  // Create a new DM channel (isDm=true, no team)
-  const channel = await db.channel.create({
+  // Create a new DM chat (isDm=true, no team)
+  const chat = await db.channel.create({
     data: {
-      id: channelId,
+      id: chatId,
       tenantId: org.tenantId,
       orgId: org.id,
       teamId: null,
@@ -89,5 +92,6 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true, channel });
+  // Return as "chat" — the UI never refers to these as channels
+  return NextResponse.json({ ok: true, chat: { ...chat, isChat: true } });
 }

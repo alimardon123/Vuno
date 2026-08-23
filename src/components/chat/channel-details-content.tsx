@@ -90,12 +90,14 @@ interface ChannelDetailsSheetProps {
   channelId: string;
   channelName: string;
   channelTopic?: string | null;
+  isChat?: boolean; // true for DMs + group chats — show avatar, not Hash
 }
 
 export function ChannelDetailsContent({
   channelId,
   channelName,
   channelTopic,
+  isChat = false,
 }: ChannelDetailsSheetProps) {
   const eventsRes = useFetch<EventsResponse>(
     `/api/events?scopeType=channel&scopeId=${channelId}`,
@@ -112,10 +114,16 @@ export function ChannelDetailsContent({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Channel header */}
+      {/* Header — avatar for chats, Hash for channels */}
       <div className="border-b border-border/40 p-4">
         <div className="flex items-center gap-2">
-          <Hash className="size-5 text-primary" aria-hidden />
+          {isChat ? (
+            <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold">
+              {channelName.slice(0, 1).toUpperCase()}
+            </span>
+          ) : (
+            <Hash className="size-5 text-primary" aria-hidden />
+          )}
           <h2 className="text-lg font-semibold tracking-tight">{channelName}</h2>
         </div>
         {channelTopic ? (
