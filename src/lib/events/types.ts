@@ -283,6 +283,12 @@ export type NewEventInput<T extends EventType = EventType> = {
   scopeType: ScopeType;
   scopeId: string;
   visibility?: Visibility;
+  /**
+   * When the thing happened, when that differs from when it was recorded —
+   * seeding and importing history. Ordering still comes from `seq`, which the
+   * database assigns; this only sets the timestamp the UI renders.
+   */
+  occurredAt?: Date;
 };
 
 export const CLAIM_STATUSES = [

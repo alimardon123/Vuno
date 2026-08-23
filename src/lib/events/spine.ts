@@ -38,6 +38,7 @@ export class EventSpine {
       scopeType: input.scopeType,
       scopeId: input.scopeId,
       visibility: input.visibility ?? 'org',
+      ...(input.occurredAt ? { createdAt: input.occurredAt } : {}),
     }));
 
     // Single event: one statement, no transaction to hold.

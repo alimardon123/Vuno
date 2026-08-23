@@ -1,13 +1,13 @@
 // Vuno — POST /api/dms
 // Get-or-create a DM chat between the current user (Kai) and another member
 // (agent or human). Per the user's direction: DMs are CHATS, not channels.
-// The storage uses the Channel table (isDm=true) but the API + UI always
+// The storage uses the Channel table (kind='dm') but the API + UI always
 // refer to these as "chats" — never "channels".
 //
 // Flow:
 //   1. Receive { withMemberId } — the agent or user to chat with
 //   2. Compute a deterministic chat slug: dm-{a}-{b} (sorted)
-//   3. Find or create the chat (isDm=true, teamId=null)
+//   3. Find or create the chat (kind='dm', teamId=null)
 //   4. Return the chat as a "chat" object (not "channel")
 
 import { NextResponse } from 'next/server';
@@ -60,24 +60,32 @@ export async function POST(req: Request) {
   const slug = `dm-${ids[0]}-${ids[1]}`;
   const chatId = `chat-${slug}`;
 
-  // Find or create the DM chat (stored in Channel table with isDm=true)
+  // Find or create the DM chat (stored in Channel table with kind='dm')
   const existing = await db.channel.findUnique({ where: { id: chatId } });
   if (existing) {
     // Return as "chat" — never expose "channel" naming to the client
     return NextResponse.json({ ok: true, chat: { ...existing, isChat: true } });
   }
 
-  // Create a new DM chat (isDm=true, no team)
+  // Create a new DM chat (kind='dm', no team). Both participants are recorded,
+  // because a DM titles itself from whoever is reading it.
   const chat = await db.channel.create({
     data: {
       id: chatId,
       tenantId: org.tenantId,
       orgId: org.id,
       teamId: null,
+      kind: 'dm',
       name: targetName,
       slug,
       topic: `Direct message with ${targetName}`,
-      isDm: true,
+      members: {
+        create: [owner.id, target.id].map((memberId) => ({
+          tenantId: org.tenantId,
+          orgId: org.id,
+          memberId,
+        })),
+      },
     },
   });
 

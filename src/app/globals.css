@@ -1,237 +1,243 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is([data-theme="ink"] *));
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Vuno — one token layer, three palettes.
+
+   The rule the whole system rests on: **chrome is quiet, data is loud.** In a
+   product whose claim is evidence, saturated colour belongs to a claim's status
+   or a gate's verdict, never to decoration. That is what keeps the ledger
+   readable and what stops the interface competing with its own content.
+
+   Themes swap the neutrals and the single accent. The epistemic colours barely
+   move, because they carry meaning rather than mood — a falsified claim has to
+   read as falsified in every theme.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-rail: var(--rail);
+  --color-rail-fg: var(--rail-fg);
 
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
 
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
   --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-select: var(--select);
+  --color-hover: var(--hover);
 
-  /* status tokens (load-bearing color system) */
-  --color-status-asserted: var(--status-asserted);
-  --color-status-believed: var(--status-believed);
-  --color-status-tested: var(--status-tested);
-  --color-status-falsified: var(--status-falsified);
-  --color-status-uncertain: var(--status-uncertain);
+  --color-asserted: var(--asserted);
+  --color-believed: var(--believed);
+  --color-tested: var(--tested);
+  --color-falsified: var(--falsified);
+  --color-uncertain: var(--uncertain);
+  --color-asserted-bg: var(--asserted-bg);
+  --color-believed-bg: var(--believed-bg);
+  --color-tested-bg: var(--tested-bg);
+  --color-falsified-bg: var(--falsified-bg);
+  --color-uncertain-bg: var(--uncertain-bg);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 }
 
-/* ─── Buzz-inspired WARM palette (light mode primary) ─────────────────────
-   Block's Buzz uses warm cream + mustard/gold accents, not cold blue.
-   Per VLM analysis of the Buzz screenshot:
-   - Sidebar: warm off-white/cream (#FBF9F1)
-   - Content: pure white
-   - Active: muted mustard tint (#EFEBD6)
-   - Text: dark charcoal
-   - Accent: muted gold/mustard
-   This replaces the previous cold charcoal + emerald palette. */
-:root {
-  --radius: 0.5rem;
+/* ─── Ink — the default. Deep neutral with a faint cool cast, never blue-black.
+   Dark is where density reads best, which is why engineering tools default to
+   it, and it sidesteps the cream-and-gold look entirely. ─────────────────── */
+:root,
+[data-theme="ink"] {
+  --bg:      #0F1215;
+  --surface: #14181C;
+  --raised:  #1A1F24;
+  --sunken:  #0A0C0E;
+  --rail:    #0A0C0E;
+  --rail-fg: #7C8792;
 
-  /* Warm cream backgrounds */
-  --background: oklch(0.98 0.006 85);
-  --foreground: oklch(0.18 0.006 60);
-  --card: oklch(1 0.003 85);
-  --card-foreground: oklch(0.18 0.006 60);
-  --popover: oklch(1 0.003 85);
-  --popover-foreground: oklch(0.18 0.006 60);
+  --fg:   #E8EBEE;
+  --fg-2: #AEB7C0;
+  --fg-3: #7C8792;
+  --fg-4: #575F68;
 
-  /* Mustard/gold accent (replaces emerald) — darkened slightly for WCAG AA */
-  --primary: oklch(0.52 0.13 70);
-  --primary-foreground: oklch(0.99 0.003 85);
+  --line:   #232A31;
+  --line-2: #313A43;
 
-  --secondary: oklch(0.94 0.012 85);
-  --secondary-foreground: oklch(0.18 0.006 60);
-  --muted: oklch(0.94 0.012 85);
-  --muted-foreground: oklch(0.48 0.01 60);
-  --accent: oklch(0.92 0.025 85);
-  --accent-foreground: oklch(0.18 0.006 60);
-  --destructive: oklch(0.55 0.20 25);
-  --border: oklch(0.88 0.008 60 / 50%);
-  --input: oklch(0.92 0.012 85);
-  --ring: oklch(0.58 0.14 75 / 40%);
+  /* One accent, used only for selection, focus and the primary action. */
+  --accent:      #C9D1D9;
+  --accent-fg:   #0F1215;
+  --accent-soft: #1D242B;
+  --select: #1E252C;
+  --hover:  #191F25;
 
-  --chart-1: oklch(0.58 0.14 75);
-  --chart-2: oklch(0.60 0.13 60);
-  --chart-3: oklch(0.55 0.20 25);
-  --chart-4: oklch(0.55 0.13 230);
-  --chart-5: oklch(0.50 0.01 60);
+  --asserted:  #D6A54A;
+  --believed:  #6BA6DE;
+  --tested:    #58BC8C;
+  --falsified: #E4795E;
+  --uncertain: #8A939C;
+  --asserted-bg:  #2C2617;
+  --believed-bg:  #16283A;
+  --tested-bg:    #132C22;
+  --falsified-bg: #33190F;
+  --uncertain-bg: #21262B;
 
-  --sidebar: oklch(0.96 0.01 85);
-  --sidebar-foreground: oklch(0.18 0.006 60);
-  --sidebar-primary: oklch(0.58 0.14 75);
-  --sidebar-primary-foreground: oklch(0.99 0.003 85);
-  --sidebar-accent: oklch(0.90 0.03 85);
-  --sidebar-accent-foreground: oklch(0.18 0.006 60);
-  --sidebar-border: oklch(0.88 0.008 60 / 40%);
-  --sidebar-ring: oklch(0.58 0.14 75 / 40%);
-
-  /* claim status colors — load-bearing, recalibrated for warm light bg */
-  --status-asserted: oklch(0.55 0.13 60);     /* amber */
-  --status-believed: oklch(0.50 0.13 230);    /* sky (cool contrast) */
-  --status-tested: oklch(0.50 0.12 145);      /* warm green */
-  --status-falsified: oklch(0.50 0.20 25);    /* warm red-orange */
-  --status-uncertain: oklch(0.45 0.01 60);    /* warm grey */
+  color-scheme: dark;
 }
 
-/* Warm dark mode — not cold blue-black, but warm charcoal */
-.dark {
-  --background: oklch(0.15 0.008 60);
-  --foreground: oklch(0.94 0.008 80);
-  --card: oklch(0.18 0.008 60);
-  --card-foreground: oklch(0.94 0.008 80);
-  --popover: oklch(0.20 0.008 60);
-  --popover-foreground: oklch(0.94 0.008 80);
-  --primary: oklch(0.70 0.14 75);
-  --primary-foreground: oklch(0.15 0.008 60);
-  --secondary: oklch(0.22 0.008 60);
-  --secondary-foreground: oklch(0.94 0.008 80);
-  --muted: oklch(0.22 0.008 60);
-  --muted-foreground: oklch(0.68 0.01 60);
-  --accent: oklch(0.25 0.012 75);
-  --accent-foreground: oklch(0.94 0.008 80);
-  --destructive: oklch(0.62 0.20 25);
-  --border: oklch(0.25 0.008 60 / 50%);
-  --input: oklch(0.22 0.008 60);
-  --ring: oklch(0.70 0.14 75 / 40%);
+/* ─── Paper — a true light neutral. Not cream: a warm-leaning grey, so it reads
+   as paper rather than as parchment. ──────────────────────────────────────── */
+[data-theme="paper"] {
+  --bg:      #F6F7F8;
+  --surface: #FFFFFF;
+  --raised:  #FFFFFF;
+  --sunken:  #ECEEF0;
+  --rail:    #16191D;
+  --rail-fg: #99A2AC;
 
-  --chart-1: oklch(0.70 0.14 75);
-  --chart-2: oklch(0.70 0.13 60);
-  --chart-3: oklch(0.65 0.20 25);
-  --chart-4: oklch(0.70 0.13 230);
-  --chart-5: oklch(0.66 0.01 60);
+  --fg:   #14181C;
+  --fg-2: #454E57;
+  --fg-3: #6B747E;
+  --fg-4: #99A2AC;
 
-  --sidebar: oklch(0.16 0.008 60);
-  --sidebar-foreground: oklch(0.94 0.008 80);
-  --sidebar-primary: oklch(0.70 0.14 75);
-  --sidebar-primary-foreground: oklch(0.15 0.008 60);
-  --sidebar-accent: oklch(0.24 0.012 75);
-  --sidebar-accent-foreground: oklch(0.94 0.008 80);
-  --sidebar-border: oklch(0.25 0.008 60 / 40%);
-  --sidebar-ring: oklch(0.70 0.14 75 / 40%);
+  --line:   #E2E6EA;
+  --line-2: #CDD4DA;
 
-  --status-asserted: oklch(0.70 0.13 60);
-  --status-believed: oklch(0.70 0.13 230);
-  --status-tested: oklch(0.70 0.14 145);
-  --status-falsified: oklch(0.65 0.20 25);
-  --status-uncertain: oklch(0.66 0.01 60);
+  --accent:      #14181C;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #EDF0F2;
+  --select: #EBEEF1;
+  --hover:  #F1F3F5;
+
+  --asserted:  #9A6B10;
+  --believed:  #24629E;
+  --tested:    #1F6F4B;
+  --falsified: #B03B21;
+  --uncertain: #6B747E;
+  --asserted-bg:  #F7EBD3;
+  --believed-bg:  #DCE9F6;
+  --tested-bg:    #D7EBE0;
+  --falsified-bg: #F8E0D8;
+  --uncertain-bg: #E9ECEF;
+
+  color-scheme: light;
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "ss01", "cv11";
-  }
-  .dense {
-    line-height: 1.375;
-  }
+/* ─── Warm — the original cream and gold, kept because you asked for it. Same
+   tokens, so nothing else in the app knows which palette is on. ──────────── */
+[data-theme="warm"] {
+  --bg:      #FBF9F3;
+  --surface: #FFFFFF;
+  --raised:  #FFFFFF;
+  --sunken:  #F1EDE1;
+  --rail:    #2A2518;
+  --rail-fg: #A99C7E;
+
+  --fg:   #1E1B14;
+  --fg-2: #4E4739;
+  --fg-3: #7A7160;
+  --fg-4: #A99C7E;
+
+  --line:   #E8E1D0;
+  --line-2: #D6CCB4;
+
+  --accent:      #8A6A18;
+  --accent-fg:   #FFFDF7;
+  --accent-soft: #F3ECD9;
+  --select: #F0E9D6;
+  --hover:  #F5F1E5;
+
+  --asserted:  #96690F;
+  --believed:  #26619C;
+  --tested:    #1F6F4B;
+  --falsified: #B03B21;
+  --uncertain: #7A7160;
+  --asserted-bg:  #F7EBD3;
+  --believed-bg:  #DEE9F5;
+  --tested-bg:    #D9EBE1;
+  --falsified-bg: #F8E1D9;
+  --uncertain-bg: #EFEADC;
+
+  color-scheme: light;
 }
 
-/* Custom scrollbar — warm and elegant */
-.scrollbar-sleek::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.scrollbar-sleek::-webkit-scrollbar-track {
-  background: transparent;
-}
-.scrollbar-sleek::-webkit-scrollbar-thumb {
-  background: oklch(0.30 0.008 60 / 50%);
-  border-radius: 4px;
-}
-.scrollbar-sleek::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.40 0.01 60 / 70%);
+/* ─── Base ────────────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; border-color: var(--line); }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* the shell manages its own scroll regions */
 }
 
-/* Status pulse animation for blocked-gate alerts */
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+/* Focus is always visible and always the same shape — the app is meant to be
+   operable without a mouse. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
-.animate-status-pulse {
-  animation: status-pulse 2s ease-in-out infinite;
-}
+:focus:not(:focus-visible) { outline: none; }
 
-/* Framer-motion-friendly fade-in for messages */
-@keyframes msg-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-msg-in {
-  animation: msg-fade-in 0.2s ease-out;
-}
+::selection { background: var(--accent-soft); color: var(--fg); }
 
-/* Panel transition */
-@keyframes panel-slide-in {
-  from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
+/* Scrollbars: present enough to grab, quiet enough to ignore. */
+.scroll-y { overflow-y: auto; overscroll-behavior: contain; }
+.scroll-y::-webkit-scrollbar { width: 10px; }
+.scroll-y::-webkit-scrollbar-track { background: transparent; }
+.scroll-y::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
-.animate-panel-in {
-  animation: panel-slide-in 0.15s ease-out;
-}
+.scroll-y::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--fg-4); }
+.scroll-y { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-status-pulse,
-  .animate-msg-in,
-  .animate-panel-in {
-    animation: none;
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* ─── Appearance: density (data-density attribute on <html>) ────────────────
-   Compact mode reduces padding on common elements for power users who want
-   more content per screen. Comfortable is the default (Buzz-inspired). */
-[data-density="compact"] {
-  --density-gap: 0.25rem;
-}
-[data-density="comfortable"] {
-  --density-gap: 0.5rem;
-}
+/* Numbers that sit in columns line up. */
+.tnum { font-variant-numeric: tabular-nums; }
 
-/* ─── Appearance: font size (data-font-size attribute on <html>) ────────────
-   Small = 14px base, Medium = 16px base (default), Large = 18px base.
-   Applied via the root font-size which Tailwind's rem units inherit from. */
-[data-font-size="small"] { font-size: 14px; }
-[data-font-size="medium"] { font-size: 16px; }
-[data-font-size="large"] { font-size: 18px; }
+/* The theme menu marks its active option from the root attribute, so React
+   holds no state for it and there is nothing to hydrate. */
+[data-theme="ink"]   .theme-option[data-theme-option="ink"]   .theme-dot,
+[data-theme="paper"] .theme-option[data-theme-option="paper"] .theme-dot,
+[data-theme="warm"]  .theme-option[data-theme-option="warm"]  .theme-dot {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+[data-theme="ink"]   .theme-option[data-theme-option="ink"]   span,
+[data-theme="paper"] .theme-option[data-theme-option="paper"] span,
+[data-theme="warm"]  .theme-option[data-theme-option="warm"]  span {
+  color: var(--fg);
+}

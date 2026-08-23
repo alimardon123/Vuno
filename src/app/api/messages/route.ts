@@ -59,11 +59,34 @@ export async function POST(req: Request) {
     );
   }
 
+  // Who is posting. The composer does not send an id — there is one signed-in
+  // member and the server knows who it is — and an event written without an
+  // actor renders as "Unknown" and previews as "System", which is how a message
+  // you just typed yourself came back unattributed.
+  const poster =
+    parsed.actorType === 'system'
+      ? null
+      : parsed.actorMemberId
+        ? await getMember(parsed.actorMemberId)
+        : await getOrgOwner(org.id);
+
+  if (parsed.actorType === 'member' && !poster) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: parsed.actorMemberId
+          ? 'Unknown member for this org.'
+          : 'No org owner to attribute this message to. Seed the database first.',
+      },
+      { status: 400 },
+    );
+  }
+
   const spine = new EventSpine(org.tenantId, org.id);
   const eventInput: NewEventInput<'MessagePosted'> = {
     type: 'MessagePosted',
     actorType: parsed.actorType,
-    actorMemberId: parsed.actorMemberId,
+    actorMemberId: poster?.id,
     onBehalfOfMemberId: parsed.onBehalfOfMemberId,
     scopeType: 'channel',
     scopeId: channel.id,
@@ -84,7 +107,6 @@ export async function POST(req: Request) {
   // Wake the org only when a person posted. An agent's own message must not
   // re-enter the router, or agents wake each other in a loop. The kind lives on
   // the member record now, not on the event (ADR-0009).
-  const poster = parsed.actorMemberId ? await getMember(parsed.actorMemberId) : await getOrgOwner(org.id);
   if (parsed.actorType === 'member' && poster?.kind === 'human') {
     const eventId = created.id;
     const messageBody = parsed.body;

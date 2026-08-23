@@ -61,6 +61,7 @@ model Member {
   delegatedEvents Event[]      @relation("EventOnBehalfOf")
   claims          Claim[]      @relation("ClaimProvenance")
   memberships     Membership[]
+  conversations   ChannelMember[]
 
   @@unique([orgId, handle])
   @@index([orgId, kind, status])
@@ -188,14 +189,41 @@ model Channel {
   name        String   // e.g. "storage-engine"
   slug        String
   topic       String?
-  isDm        Boolean  @default(false)
+  // What kind of conversation this is, stated once. It used to be re-derived
+  // from `isDm` plus a nullable teamId plus a slug prefix, in four places with
+  // four answers (docs/IA-NAVIGATION.md).
+  //   'channel'   — open, org-wide, listed under Channels
+  //   'team_room'  — a team's default channel, listed under Channels
+  //   'group'      — a named group chat, listed under Chats
+  //   'dm'         — two participants, listed under Chats
+  kind        String   @default("channel")
   createdAt   DateTime @default(now())
 
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  members     ChannelMember[]
 
   @@unique([orgId, slug])
   @@index([orgId, teamId])
+  @@index([orgId, kind])
+}
+
+// Who is in a conversation. A DM names itself from these rows relative to the
+// viewer, which is why a DM has no fixed name of its own. Humans and agents
+// join through the same column (ADR-0009).
+model ChannelMember {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  channelId   String
+  memberId    String
+  createdAt   DateTime @default(now())
+
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, memberId])
+  @@index([memberId])
 }
 
 // ─── Event Spine (append-only) ────────────────────────────────────────────────

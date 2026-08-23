@@ -58,4 +58,8 @@ mini-services/*/target/
 
 # SQLite database (environment-specific)
 db/*.db
+# WAL mode (src/lib/db.ts) writes these alongside the database, and they hold
+# its contents — they were tracked before the journal mode changed.
 db/*.db-journal
+db/*.db-wal
+db/*.db-shm

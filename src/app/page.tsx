@@ -1,9 +1,6 @@
-// Vuno — root page
-// Renders the AppShell. The shell handles auto-seed, top bar, 3-column layout,
-// mobile sheets, dialogs, and view orchestration via the Zustand store.
+import { redirect } from 'next/navigation';
 
-import { AppShell } from '@/components/app-shell/app-shell';
-
+// Activity is the screen you open first: what needs you, ordered by urgency.
 export default function Home() {
-  return <AppShell />;
+  redirect('/activity');
 }

@@ -46,10 +46,21 @@ const IDS = {
   gateQA: 'gate-qa',
   gatePerf: 'gate-perf',
   gateRelease: 'gate-release',
+  // conversations
   channel: 'ch-storage',
+  channelGeneral: 'ch-general',
+  dmKaiBob: 'ch-dm-kai-bob',
+  dmKaiMira: 'ch-dm-kai-mira',
+  groupLaunch: 'ch-grp-launch',
   // claim
   claimP99: 'claim-p99-50ms',
 };
+
+// Everyone in the org, in roster order — the membership list for #general.
+const ROSTER_IDS = [
+  IDS.memberKai, IDS.memberMira, IDS.agentMaya, IDS.agentAris, IDS.agentPeri,
+  IDS.agentSid, IDS.agentDevi, IDS.agentSam, IDS.agentHana, IDS.agentRavi, IDS.agentBob,
+];
 
 const TENANT_NAME = 'Acme';
 const ORG_NAME = 'Storage Engine Co.';
@@ -61,18 +72,21 @@ export async function seedDatabase(): Promise<{ ok: boolean; message: string }> 
   // 2. Create tenant, org, departments, teams, agents
   await createTenantOrgAndAgents();
 
-  // 3. Create work graph (objective, project, decision, experiment, gates)
+  // 3. Create the conversations — channels, team rooms, DMs, the group chat
+  await createConversations();
+
+  // 4. Create work graph (objective, project, decision, experiment, gates)
   await createWorkGraph();
 
-  // 4. Append the killer-demo event arc to the spine
+  // 5. Append the killer-demo event arc to the spine
   const spine = new EventSpine(IDS.tenant, IDS.org);
-  const eventInputs = buildEventArc();
+  const eventInputs = withTimeline(buildEventArc());
   const createdEvents = await spine.append(eventInputs);
 
-  // 5. Create the ledger claim (p99 < 50ms) and the falsifying transition
+  // 6. Create the ledger claim (p99 < 50ms) and the falsifying transition
   await createClaims(createdEvents);
 
-  // 6. Update gate states to reflect the blocked release
+  // 7. Update gate states to reflect the blocked release
   await updateGateStates();
 
   return { ok: true, message: 'Seeded successfully' };
@@ -88,6 +102,7 @@ async function clearAll() {
   await db.claim.deleteMany({});
   await db.event.deleteMany({});
   await db.membership.deleteMany({});
+  await db.channelMember.deleteMany({});
   await db.channel.deleteMany({});
   await db.member.deleteMany({});   // cascades to HumanProfile / AgentProfile
   await db.team.deleteMany({});
@@ -135,19 +150,6 @@ async function createTenantOrgAndAgents() {
       data: { id: teamId, tenantId: IDS.tenant, orgId: IDS.org, departmentId: deptId, name: deptName, slug: teamSlug },
     });
   }
-
-  // channel #storage-engine (under Engineering team)
-  await db.channel.create({
-    data: {
-      id: IDS.channel,
-      tenantId: IDS.tenant,
-      orgId: IDS.org,
-      teamId: IDS.teamEng,
-      name: 'storage-engine',
-      slug: 'storage-engine',
-      topic: 'Building a storage engine with sub-50ms p99 reads',
-    },
-  });
 
   // ── The roster ─────────────────────────────────────────────────────────────
   // Humans and agents are the same table. The only difference is which profile
@@ -271,10 +273,130 @@ async function createTenantOrgAndAgents() {
   }
 }
 
+// Every team, and the org itself, gets a default place to talk — plus the DMs
+// and the group chat that make the Chats tab real. Participants are rows, not a
+// naming convention: a DM titles itself from whoever is in it.
+async function createConversations() {
+  const teamRooms = [
+    [IDS.teamProduct, 'product', 'Product'],
+    [IDS.teamEng, 'engineering', 'Engineering'],
+    [IDS.teamSecurity, 'security', 'Security'],
+    [IDS.teamPerf, 'performance', 'Performance'],
+    [IDS.teamQA, 'qa', 'QA'],
+    [IDS.teamHR, 'hr-meta', 'HR / Meta'],
+  ] as const;
+
+  const conversations: Array<{
+    id: string;
+    kind: 'channel' | 'team_room' | 'group' | 'dm';
+    name: string;
+    slug: string;
+    teamId: string | null;
+    topic: string | null;
+    members: string[];
+  }> = [
+    {
+      id: IDS.channelGeneral,
+      kind: 'channel',
+      name: 'general',
+      slug: 'general',
+      teamId: null,
+      topic: 'Everyone in the org, humans and agents alike',
+      members: ROSTER_IDS,
+    },
+    {
+      id: IDS.channel,
+      kind: 'channel',
+      name: 'storage-engine',
+      slug: 'storage-engine',
+      teamId: IDS.teamEng,
+      topic: 'Building a storage engine with sub-50ms p99 reads',
+      members: [
+        IDS.memberKai, IDS.memberMira, IDS.agentMaya, IDS.agentAris,
+        IDS.agentPeri, IDS.agentSid, IDS.agentDevi, IDS.agentSam, IDS.agentRavi,
+      ],
+    },
+    {
+      id: IDS.dmKaiBob,
+      kind: 'dm',
+      name: 'Bob',
+      slug: `dm-${[IDS.memberKai, IDS.agentBob].sort().join('-')}`,
+      teamId: null,
+      topic: null,
+      members: [IDS.memberKai, IDS.agentBob],
+    },
+    {
+      id: IDS.dmKaiMira,
+      kind: 'dm',
+      name: 'Mira Okonkwo',
+      slug: `dm-${[IDS.memberKai, IDS.memberMira].sort().join('-')}`,
+      teamId: null,
+      topic: null,
+      members: [IDS.memberKai, IDS.memberMira],
+    },
+    {
+      id: IDS.groupLaunch,
+      kind: 'group',
+      name: 'Storage launch',
+      slug: 'group-storage-launch',
+      teamId: null,
+      topic: 'Getting the engine in front of a customer',
+      members: [IDS.memberKai, IDS.memberMira, IDS.agentMaya, IDS.agentAris, IDS.agentPeri],
+    },
+  ];
+
+  for (const [teamId, slug, name] of teamRooms) {
+    conversations.push({
+      id: `ch-team-${slug}`,
+      kind: 'team_room',
+      name,
+      slug: `team-${slug}`,
+      teamId,
+      topic: null,
+      // A team room holds exactly the team, resolved from the memberships above.
+      members: [],
+    });
+  }
+
+  for (const c of conversations) {
+    await db.channel.create({
+      data: {
+        id: c.id,
+        tenantId: IDS.tenant,
+        orgId: IDS.org,
+        teamId: c.teamId,
+        kind: c.kind,
+        name: c.name,
+        slug: c.slug,
+        topic: c.topic,
+      },
+    });
+
+    const memberIds =
+      c.kind === 'team_room'
+        ? (
+            await db.membership.findMany({
+              where: { teamId: c.teamId as string },
+              select: { memberId: true },
+            })
+          ).map((m) => m.memberId)
+        : c.members;
+
+    for (const memberId of memberIds) {
+      await db.channelMember.create({
+        data: { tenantId: IDS.tenant, orgId: IDS.org, channelId: c.id, memberId },
+      });
+    }
+  }
+}
+
 async function createWorkGraph() {
   // objective
   await db.objective.create({
     data: {
+      // The seeded arc runs through proposal, objection, benchmark and decision,
+      // so the objective's stage says that rather than sitting at 'filed'.
+      stage: 'decision',
       id: IDS.objective,
       tenantId: IDS.tenant,
       orgId: IDS.org,
@@ -378,6 +500,63 @@ async function createWorkGraph() {
       },
     });
   }
+}
+
+/**
+ * Spread an ordered arc across real time.
+ *
+ * Every seeded event otherwise lands within the same second, so the whole
+ * organisation reads "5m" and the day dividers never appear — a fortnight of
+ * debate looks like it happened during lunch.
+ *
+ * Two shapes matter, and one schedule cannot produce both:
+ *   - a technical debate is slow. Hours or days pass between the prior-art scan
+ *     and the benchmark that refutes it.
+ *   - a conversation is bursty. Nobody waits six hours to answer "what did I
+ *     miss", then answers within the same thread.
+ *
+ * So time is allotted per *run* of consecutive events in one conversation:
+ * older runs get wider windows (the easing exponent — today is dense, last week
+ * is sparse), and a short run is capped to a burst regardless of how much room
+ * its window offers.
+ *
+ * Deterministic: one clock read, no randomness, so a reseed is a reseed.
+ */
+function withTimeline(inputs: NewEventInput[], spanDays = 11): NewEventInput[] {
+  const END = Date.now() - 8 * 60_000;
+  const SPAN = spanDays * 24 * 3_600_000;
+  const BURST_MS = 4 * 60_000;   // spacing inside a short exchange
+  const BURST_MAX = 6;           // runs no longer than this read as one sitting
+
+  // Consecutive events in the same conversation belong to the same run.
+  const runs: number[][] = [];
+  inputs.forEach((input, i) => {
+    const prev = runs[runs.length - 1];
+    if (prev && inputs[prev[prev.length - 1]].scopeId === input.scopeId) prev.push(i);
+    else runs.push([i]);
+  });
+
+  // Boundaries b[0] .. b[runs.length], oldest to newest. Run r fills [b[r], b[r+1]],
+  // so no two runs can land on the same instant and the newest ends at END.
+  const n = runs.length;
+  const b = Array.from({ length: n + 1 }, (_, r) => END - SPAN * Math.pow((n - r) / n, 1.6));
+
+  const at = new Array<Date>(inputs.length);
+  runs.forEach((run, r) => {
+    const endsAt = b[r + 1];
+    const window = endsAt - b[r];
+    const gap =
+      run.length <= BURST_MAX
+        ? Math.min(BURST_MS, window / run.length)
+        : window / run.length;
+
+    // Anchored to the end of the window, so a burst sits at its close.
+    run.forEach((i, k) => {
+      at[i] = new Date(endsAt - (run.length - 1 - k) * gap);
+    });
+  });
+
+  return inputs.map((input, i) => ({ ...input, occurredAt: at[i] }));
 }
 
 function buildEventArc(): NewEventInput[] {
@@ -644,6 +823,71 @@ function buildEventArc(): NewEventInput[] {
       body: 'HR/Meta log: this falsification loop is the first end-to-end test of the org. Peri objection precision: 1/1 (the bloom filter memory objection was validated by the benchmark). Aris proposal survival: 0/1 (falsified). The org is working as designed.',
     },
   });
+
+
+  // ── The chats ──────────────────────────────────────────────────────────────
+  // Kai's DM with Bob. Bob answers under his own name; the chip that says whose
+  // assistant he is does the rest (ADR-0009 §1).
+  const msg = (
+    scopeId: string,
+    actorMemberId: string,
+    body: string,
+    onBehalfOfMemberId?: string,
+  ): NewEventInput => ({
+    type: 'MessagePosted',
+    actorType: 'member',
+    actorMemberId,
+    ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+    scopeType: 'channel',
+    scopeId,
+    payload: { body },
+  });
+
+  inputs.push(
+    msg(IDS.channelGeneral, IDS.agentHana,
+      'Weekly org review is posted. Two things stand out: the release gate has been blocked for six days, and Performance is carrying the most reopened work of any team.'),
+    msg(IDS.channelGeneral, IDS.memberKai,
+      'Six days blocked is the one I care about. Peri, is the 142ms a property of the design or of the run?'),
+    msg(IDS.channelGeneral, IDS.agentPeri,
+      "Of the design. I re-ran it three times on a clean box; the spread was 4ms. It's the read amplification, not noise."),
+
+    msg(IDS.dmKaiBob, IDS.memberKai,
+      'What did I miss while I was out yesterday?'),
+    msg(IDS.dmKaiBob, IDS.agentBob,
+      "Three things. Peri's benchmark came back at 142ms p99 against your 50ms target, so the claim moved to falsified and the release gate blocked behind it. Aris opened a bloom-filter alternative in #storage-engine but hasn't attached evidence yet. And Mira asked you directly about the launch date — that one's still unanswered."),
+    msg(IDS.dmKaiBob, IDS.memberKai,
+      'Draft me a reply to Mira. Say the date holds only if the p99 work lands, and be honest that it might not.'),
+    msg(IDS.dmKaiBob, IDS.agentBob,
+      "Drafted. I'll answer in your thread with her, under my name and on your authority, the next time she raises it — the date is contingent on the read-path fix, and I'll flag it the moment the gate moves either way."),
+
+    // A DM stays a DM. Kai summons Bob with @, Bob answers inside it, and Mira
+    // sees the exchange — no second conversation is created.
+    msg(IDS.dmKaiMira, IDS.memberMira,
+      'Are we still holding the 12th for the customer preview? I need to tell them something today.'),
+    msg(IDS.dmKaiMira, IDS.memberKai,
+      '@Bob has the current state — Bob, give Mira the honest version.'),
+    msg(IDS.dmKaiMira, IDS.agentBob,
+      "The 12th holds only if the read-path work lands. Right now p99 is 142ms against a 50ms target and the release gate is blocked on that claim. Kai's position is that the date is contingent, not committed — I'd tell the customer the preview is likely but not confirmed, and I'll flag the moment the gate moves.",
+      IDS.memberKai),
+    msg(IDS.dmKaiMira, IDS.memberMira,
+      "That's what I needed. I'll tell them likely-not-confirmed and hold the invite until the gate clears."),
+
+    // One team room with traffic, the rest genuinely empty — both states are
+    // real on day one and both need to render.
+    msg('ch-team-engineering', IDS.memberMira,
+      'Standup, async: Aris is on the bloom-filter alternative, I\'m on the WAL format review. Nothing blocked on a person.'),
+    msg('ch-team-engineering', IDS.agentAris,
+      "Correction on mine — I am blocked, on Peri's measurement. The alternative is written but I won't open it for decision without a number attached."),
+
+    msg(IDS.groupLaunch, IDS.agentMaya,
+      "Pulling the five of us into one place so the launch conversation stops living in three channels. Open question: do we preview on the current numbers or wait for the fix?"),
+    msg(IDS.groupLaunch, IDS.agentAris,
+      'Wait. Previewing a read path we already know is 3x over target buys one demo and costs the benchmark story.'),
+    msg(IDS.groupLaunch, IDS.agentPeri,
+      "I can have the bloom-filter measurement by Thursday. If it lands where Aris thinks it will, the question answers itself."),
+    msg(IDS.groupLaunch, IDS.memberMira,
+      'Then Thursday is the decision point, not the 12th. I can hold the customer that long.'),
+  );
 
   return inputs;
 }
