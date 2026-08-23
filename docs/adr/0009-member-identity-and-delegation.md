@@ -90,18 +90,24 @@ Four rules, all load-bearing:
    merge them. Most messages need no authority marker at all; the consequential ones
    carry it where a reader is actually looking for it.
 
-2. **Visibility is inherited, not copied — but private conversations are carved out.**
-   Bob's readable set is computed at read time as *Kai's readable set ∩ Bob's granted
-   scopes*. When Kai leaves a channel, Bob loses it in the same query — no revocation
-   job, no drift. Copying grants at delegation time produces stale access, which is a
-   security bug that only surfaces months later.
+2. **Visibility is inherited in full, including direct messages.** Bob's readable set is
+   computed at read time as *Kai's readable set*, DMs included. Computed rather than
+   copied, so when Kai leaves a channel Bob loses it in the same query — no revocation
+   job, no drift.
 
-   **The carve-out matters.** Applied naively, inheritance would give Bob every direct
-   message Kai has ever received. Mira wrote to *Kai* in confidence, not to Kai's agent,
-   and she never agreed to the delegation. So **direct messages and private group chats
-   are excluded from inherited visibility by default.** Bob gets access to one only by
-   an explicit per-conversation grant from Kai — and when that grant is made, **the other
-   participants see that Bob has been added.** Never silently. See §4.
+   This is a deliberate owner decision, made after the alternative was raised: an
+   assistant that cannot see the conversations you are actually in cannot answer
+   questions about them, and the whole value of a personal assistant is that it shares
+   your context. It is stored as the scope `read:inherit_all`, granted by default — a
+   scope rather than a hardcoded rule, so an organisation that later needs to narrow it
+   can, without a schema change.
+
+   Two engineering consequences, neither a re-litigation of the decision:
+
+   - It belongs in whatever privacy copy the product ships, because other people's
+     messages are inside the inherited set.
+   - Read inheritance is **read only**. It grants no ability to post into a conversation
+     the assistant was not summoned into, which is what rules 3 and 4 govern.
 
 3. **Scopes are explicit and revocable**, not one boolean: `post`, `react`, `propose`,
    `object`, `attach_evidence`, `run_experiment`, `write_code`, `spend:<cap>`,
@@ -138,38 +144,32 @@ same rule to agents costs nothing and keeps the mechanism uniform.
 - Personal assistants become genuinely useful without becoming unauditable.
 
 
-## Part 4 — Assistants in private conversations
+## Part 4 — Assistants inside a conversation
 
-A direct message is a two-party space, so summoning a third party into it is genuinely
-awkward. The awkwardness is real because "call my assistant in here" actually means
-three different things, and collapsing them is what makes it feel wrong.
+**A direct message stays a direct message.** Summoning an assistant does not convert it
+into a group chat, does not change its name, its avatar, its membership or where it sits
+in the sidebar. Mira and Kai are still the two people in it.
 
-**Mode 1 — Private aside. The default.** Kai `@`-mentions Bob inside the DM with Mira.
-Bob answers **visible to Kai only**, marked *"Only you can see this"* — the same
-ephemeral-response mechanism Slack has used for app replies for a decade. Bob does not
-join the conversation. Mira sees nothing, not even that Bob was asked. This covers most
-of what you actually want: *"Bob, what did we agree with Mira last quarter?"* is not
-something to broadcast.
+The mechanism is a distinction the platform needs anyway: **participant vs. responder.**
 
-The composer shows the ephemeral state **before** you send, so there is never a surprise
-about who is about to see it.
+| | Participant | Responder |
+|---|---|---|
+| In the member list | yes | no |
+| Conversation appears in their own sidebar | yes | no |
+| Receives everything | yes | only what they are summoned into |
+| Can post | any time | when `@`-mentioned |
+| Changes the conversation's `kind` | yes | **no** |
 
-**Mode 2 — Bring it into the room.** Bob's private answer carries a *Share to
-conversation* action. One click posts it into the DM, attributed to Bob with his
-assistant chip, visible to both. Explicit, reversible in the sense that you chose it,
-and it keeps the default safe.
+Kai types `@Bob` in the DM with Mira. Bob answers **in the DM, visible to both**, as an
+ordinary message event with `actorMemberId = Bob` and his assistant chip. The
+conversation's `kind` stays `dm` and its participants stay `[Kai, Mira]`. Mira sees the
+exchange, which the owner has explicitly said is fine and which is also the honest
+outcome — a reply that changes the conversation should be visible to everyone in it.
 
-**Mode 3 — Bob joins properly.** Kai adds Bob as a participant. The conversation becomes
-a three-member group chat and Bob is a full member of it — which is the honest
-representation, and it is why *Chats* holds DMs and group chats under one model.
+This is how Slack apps have always behaved, and it is why it does not feel strange there.
 
-Two rules on joining, both about Mira rather than Bob:
-
-- **Bob sees forward, not backward.** He gets the conversation from the moment he joins.
-  History before that requires Kai to share specific messages, deliberately.
-- **Mira is told.** A system line in the conversation: *"Kai added Bob (Kai's
-  assistant)."* Adding an agent that can read what you write is not a silent act.
-
-The same three modes work in any conversation, including channels. DMs are only where
-the distinction is load-bearing, because a channel already has an audience and a DM does
-not.
+**If you want the exchange private, ask Bob in your own DM with Bob.** That conversation
+already exists and is already pinned to the top of Chats. No ephemeral mode, no
+"visible only to you" state, no third rendering path — one behaviour, and an existing
+surface for the private case. Same rule in channels; the DM is only where it needed
+stating.

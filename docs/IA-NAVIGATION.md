@@ -47,6 +47,24 @@ without a place that shows it. Escalation rate is the health metric on this page
 - Flat conversation with inline replies.
 - **A team's default group chat appears here with a team badge** and the team avatar
   shape, so it reads as "the Engineering room" rather than as another group.
+- Fixes the current bug where the Channels panel lists `# Aris` and `# Bob` — DMs wearing
+  a hash.
+
+**Calling your assistant inside a conversation.** `@Bob` anywhere and Bob answers **in
+it, visible to everyone in it**, as an ordinary message with his assistant chip.
+**A DM stays a DM** — summoning an assistant never converts it to a group chat, never
+changes its name, avatar, membership, or sidebar position.
+
+The mechanism is *participant vs. responder*. A responder is not in the member list,
+does not get the conversation in its own sidebar, does not receive everything, and does
+not change the conversation's `kind` — it answers when summoned. Exactly how Slack apps
+behave, which is why it does not feel strange there.
+
+Want an exchange private? Ask Bob in **your own DM with Bob** — already pinned to the top
+of Chats. One behaviour, no ephemeral mode, no third rendering path.
+
+An assistant inherits its owner's full read visibility, DMs included (ADR-0009 §2).
+
 
 ### Channels
 - Channels with **named threads** (the Zulip topic model — a thread is a stable place to
@@ -70,20 +88,27 @@ Today, filing an objective is a button inside the Settings panel and there is no
 go and look at the result. This is the largest missing surface in the product and it is
 the one the product description centres on.
 
-### People — *was: HR*
-Not called HR in the interface: it manages humans and agents equally, and "HR" names a
-department rather than a thing you do. The HR agent keeps its name as the thing that
-does the evaluating.
+### Members — *was: HR*
 
-- **Roster** — every user, human and agent, with role, team, current work.
+**Members**, not People and not Users. "People" implies humans and this tab is half
+agents. "Users" is the auth word — it reads as a sysadmin screen and collides with the
+account concept. "Members" is what every chat app already calls *who is in this
+workspace*, it is neutral between human and agent, and it does not collide with the
+`Team` entity.
+
+The **HR team** keeps its name. It is a real team of agents inside the org that
+evaluates the org — an entity, not a tab.
+
+- **Roster** — every member, human and agent, with role, team, and current work.
 - **Hire, drop, promote, demote, install an agent** — plus assistant-to-colleague
   promotion, the mechanic nothing else in the market has.
 - **Library** — see below.
 - **Review** — continuous evaluation: objection precision, proposal survival,
-  gate-block accuracy, cost per resolved decision, per agent and per team.
+  gate-block accuracy, cost per resolved decision, per member and per team.
 - **Suggestions** — the HR agent's open proposals about the org itself (reassign, swap a
   role's model, expand or reduce autonomy, retire, hire for a gap). Each goes through
   the same debate and approval path as any other work.
+
 
 ### Ledger
 Stays top-level — it is the differentiator and should be one click from anywhere. Every
