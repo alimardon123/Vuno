@@ -10,6 +10,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { useAppStore } from '@/store/app-store';
 import { useFetch } from '@/hooks/use-fetch';
 import { useRealtime } from '@/hooks/use-realtime';
+import { isSameDay, isYesterday, differenceInMinutes, format } from 'date-fns';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { TypedComposer } from '@/components/chat/typed-composer';
 import { ChannelDetailsContent } from '@/components/chat/channel-details-content';
@@ -180,13 +181,35 @@ export function ChatView() {
           ) : messages.length === 0 ? (
             <EmptyMessages />
           ) : (
-            messages.map((m) => (
-              <MessageBubble
-                key={m.id}
-                message={m}
-                onOpenDecision={(id) => setActiveDecision(id)}
-              />
-            ))
+            messages.map((m, i) => {
+              // Slack-style timestamp grouping: insert a date divider when
+              // there's a gap >5min OR a day boundary between messages.
+              const showDivider = i === 0 || (() => {
+                const prev = new Date(messages[i - 1]!.createdAt);
+                const curr = new Date(m.createdAt);
+                if (!isSameDay(prev, curr)) return true;
+                if (differenceInMinutes(curr, prev) >= 5) return true;
+                return false;
+              })();
+
+              return (
+                <div key={m.id}>
+                  {showDivider ? (
+                    <div className="flex items-center gap-3 px-4 py-2" role="separator" aria-label={formatDividerLabel(new Date(m.createdAt))}>
+                      <div className="h-px flex-1 bg-border/40" />
+                      <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
+                        {formatDividerLabel(new Date(m.createdAt))}
+                      </span>
+                      <div className="h-px flex-1 bg-border/40" />
+                    </div>
+                  ) : null}
+                  <MessageBubble
+                    message={m}
+                    onOpenDecision={(id) => setActiveDecision(id)}
+                  />
+                </div>
+              );
+            })
           )}
           <div ref={bottomRef} />
         </div>
@@ -228,6 +251,24 @@ export function ChatView() {
       </Sheet>
     </div>
   );
+}
+
+// ─── Slack-style timestamp divider labels ──────────────────────────────────
+// "Today at 10:42 AM" / "Yesterday at 3:15 PM" / "August 22 at 9:00 AM"
+function formatDividerLabel(date: Date): string {
+  const now = new Date();
+  if (isSameDay(date, now)) {
+    return `Today at ${format(date, 'h:mm a')}`;
+  }
+  if (isYesterday(date)) {
+    return `Yesterday at ${format(date, 'h:mm a')}`;
+  }
+  // Same year — "August 22 at 9:00 AM"
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${format(date, 'MMMM d')} at ${format(date, 'h:mm a')}`;
+  }
+  // Different year — "August 22, 2025 at 9:00 AM"
+  return `${format(date, 'MMMM d, yyyy')} at ${format(date, 'h:mm a')}`;
 }
 
 function ChatSkeleton() {
