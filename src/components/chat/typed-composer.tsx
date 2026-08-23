@@ -3,6 +3,7 @@
 // (Message / Proposal / Objection / Evidence / Benchmark / Decision).
 // v1: only Message is fully wired; the others render the structured form
 // but are UI-only (no actual submit yet).
+// Also includes quick-share buttons (URL, File, Code) like Teams/Slack.
 
 'use client';
 
@@ -20,8 +21,9 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAppStore } from '@/store/app-store';
-import { Send, Loader2, ChevronDown } from 'lucide-react';
+import { Send, Loader2, ChevronDown, Link as LinkIcon, FileText, Code2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ShareDialog } from '@/components/chat/share-dialog';
 
 type ComposerType =
   | 'Message'
@@ -44,6 +46,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
   const [type, setType] = useState<ComposerType>('Message');
   const [submitting, setSubmitting] = useState(false);
   const [useRealLLM, setUseRealLLM] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const { toast } = useToast();
   const bumpChatNonce = useAppStore((s) => s.bumpChatNonce);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -315,9 +318,9 @@ export function TypedComposer({ channelId }: { channelId: string }) {
           />
         )}
 
-        {/* Toolbar — type selector (left) + submit button (right) */}
+        {/* Toolbar — type selector + share buttons (left) + submit button (right) */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Select
               value={type}
               onValueChange={(v) => setType(v as ComposerType)}
@@ -325,7 +328,7 @@ export function TypedComposer({ channelId }: { channelId: string }) {
               <SelectTrigger
                 size="sm"
                 className={cn(
-                  'w-32 shrink-0 gap-1 font-medium',
+                  'w-28 shrink-0 gap-1 font-medium',
                   !isMessage && 'bg-primary/10 text-primary border-primary/30',
                 )}
                 aria-label="Message type"
@@ -341,9 +344,45 @@ export function TypedComposer({ channelId }: { channelId: string }) {
                 ))}
               </SelectContent>
             </Select>
+            {/* Quick-share buttons — like Teams/Slack attachment bar */}
+            <div className="flex items-center gap-0.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setShareOpen(true)}
+                aria-label="Share URL"
+                title="Share a link"
+              >
+                <LinkIcon className="size-3.5" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setShareOpen(true)}
+                aria-label="Share file"
+                title="Share a file"
+              >
+                <FileText className="size-3.5" aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => setShareOpen(true)}
+                aria-label="Share code"
+                title="Share a code snippet"
+              >
+                <Code2 className="size-3.5" aria-hidden />
+              </Button>
+            </div>
             {/* Real LLM toggle — for Message (collaboration loop) + Proposal (debate) */}
             {(isMessage || type === 'Proposal') ? (
-              <label className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+              <label className="ml-1 flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={useRealLLM}
@@ -369,6 +408,8 @@ export function TypedComposer({ channelId }: { channelId: string }) {
           </Button>
         </div>
       </div>
+      {/* Share dialog — URL / File / Code */}
+      <ShareDialog open={shareOpen} onOpenChange={setShareOpen} channelId={channelId} />
     </form>
   );
 }

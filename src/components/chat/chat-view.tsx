@@ -113,7 +113,8 @@ export function ChatView() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header — clickable to open the channel details sheet (shared things) */}
+      {/* Header — clickable to open the details sheet (shared items, members, etc.)
+          Per the user's direction: like Teams — clicking the top panel shows shared things. */}
       <header
         className="group cursor-pointer border-b border-border/70 px-4 py-2.5 transition-colors hover:bg-accent/40"
         onClick={() => setDetailsOpen(true)}
@@ -125,12 +126,19 @@ export function ChatView() {
             setDetailsOpen(true);
           }
         }}
-        aria-label={`Open channel details for ${channel?.name ?? 'channel'}`}
+        aria-label={`Open details for ${channel?.name ?? 'chat'}`}
       >
         <div className="flex items-center gap-2">
-          <Hash className="size-4 text-muted-foreground" aria-hidden />
+          {/* Show avatar for DMs, hash for channels — per the user's direction */}
+          {channel?.isDm ? (
+            <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[0.625rem] font-semibold">
+              {(channel?.name ?? '?').slice(0, 1).toUpperCase()}
+            </span>
+          ) : (
+            <Hash className="size-4 text-muted-foreground" aria-hidden />
+          )}
           <h1 className="text-base font-semibold leading-none tracking-tight">
-            {channel?.name ?? 'channel'}
+            {channel?.name ?? 'chat'}
           </h1>
           <ChevronRight className="size-4 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:text-muted-foreground" aria-hidden />
           <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
