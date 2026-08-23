@@ -19,7 +19,6 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getMember, getOrgOwner } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
-import { broadcastEventAppended } from '@/lib/realtime/broadcast';
 import { extractHandles } from '@/lib/mentions';
 import { enqueue } from '@/lib/orchestrator/queue';
 import type { NewEventInput } from '@/lib/events/types';
@@ -103,13 +102,6 @@ export async function POST(req: Request) {
   };
   const [created] = await spine.append([eventInput]);
 
-  // Broadcast via socket.io for real-time UI update
-  void broadcastEventAppended({
-    channelId: channel.id,
-    scopeType: 'channel',
-    scopeId: channel.id,
-    event: created,
-  });
 
   // `@bob` brings Bob in. A lookup against handles that exist, not a guess at
   // what the message is about — and the conversation is unchanged by it: a DM

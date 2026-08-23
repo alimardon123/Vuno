@@ -6,6 +6,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
+import { useConversationStream } from '@/hooks/use-conversation-stream';
 import { MessageList } from '@/components/vuno/message-list';
 import { Composer } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
@@ -26,6 +27,11 @@ export function ConversationView({
   window: MessageWindow;
 }) {
   const { messages, earlier, isHistory } = view;
+
+  // An agent answering an @mention runs in the orchestrator and lands seconds
+  // later; without this the reply is invisible until you reload. Off while
+  // reading history — a window of the past does not change.
+  useConversationStream(conversation.id, messages[messages.length - 1]?.seq ?? 0, !isHistory);
   // On a phone the list pane steps aside for the conversation, so this header
   // is the only way back to it.
   const basePath = conversation.kind === 'channel' ? '/channels' : '/chats';

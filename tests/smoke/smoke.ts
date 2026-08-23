@@ -39,6 +39,18 @@ function watch(page: Page, problems: string[]) {
   });
 }
 
+/**
+ * `waitUntil: 'networkidle'` cannot be used here. A conversation holds an SSE
+ * connection open for as long as it is on screen (src/app/api/stream), so the
+ * network is never idle and every navigation would sit until it timed out.
+ * Waiting for the app shell to render is the actual condition anyway.
+ */
+async function open(page: Page, path: string): Promise<void> {
+  await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
+  await page.locator('nav[aria-label="Sections"]').waitFor({ timeout: 15_000 });
+  await page.waitForTimeout(350);
+}
+
 async function overflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
@@ -52,7 +64,7 @@ async function crawl(browser: Browser) {
 
   const seen = new Set<string>();
   for (const start of ['/activity', '/chats', '/channels', '/work', '/members', '/ledger']) {
-    await page.goto(BASE + start, { waitUntil: 'networkidle' });
+    await open(page, start);
     seen.add(start);
     const hrefs = await page.$$eval('a[href^="/"]', (as) =>
       [...new Set(as.map((a) => a.getAttribute('href') ?? ''))].filter(Boolean),
@@ -60,7 +72,7 @@ async function crawl(browser: Browser) {
     for (const href of hrefs) {
       if (seen.has(href)) continue;
       seen.add(href);
-      await page.goto(BASE + href, { waitUntil: 'networkidle' });
+      await open(page, href);
       const over = await overflow(page);
       if (over > 0) problems.push(`horizontal overflow on ${href}: ${over}px`);
 
@@ -83,7 +95,7 @@ async function posting(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
 
-  await page.goto(`${BASE}/chats`, { waitUntil: 'networkidle' });
+  await open(page, '/chats');
   const first = page.locator('a[href^="/chats/"]').first();
   if ((await first.count()) === 0) {
     check(false, 'a conversation exists to post into', 'the Chats pane listed none');
@@ -116,6 +128,46 @@ async function posting(browser: Browser) {
   await ctx.close();
 }
 
+
+// ── Something posted elsewhere shows up here, without a reload ───────────────
+//
+// This matters more than it looks: an agent answering an @mention runs in the
+// orchestrator and lands seconds later. Without this, the reply is invisible
+// until someone reloads the page, and the org appears not to have answered.
+async function liveUpdates(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await open(page, '/channels');
+
+  const first = page.locator('a[href^="/channels/"]').first();
+  if ((await first.count()) === 0) {
+    check(false, 'a channel exists to watch', 'the Channels pane listed none');
+    await ctx.close();
+    return;
+  }
+  await first.click();
+  await page.waitForTimeout(800);
+  const channelId = page.url().split('/channels/')[1]?.split('?')[0];
+
+  // Posted from outside the browser entirely: another person, another tab, an agent.
+  const text = `live ${Date.now()}`;
+  const posted = await fetch(`${BASE}/api/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelId, body: text }),
+  });
+  check(posted.ok, 'a message can be posted out of band');
+
+  try {
+    // No reload, no interaction — the page updates itself.
+    await page.getByText(text).first().waitFor({ timeout: 15_000 });
+    check(true, 'a message posted elsewhere appears without a reload');
+  } catch {
+    check(false, 'a message posted elsewhere appears without a reload', 'it never arrived');
+  }
+  await ctx.close();
+}
+
 // ── A phone shows one column, and can get back from it ───────────────────────
 async function phone(browser: Browser) {
   const ctx = await browser.newContext({
@@ -128,13 +180,13 @@ async function phone(browser: Browser) {
   watch(page, problems);
 
   for (const r of ['/activity', '/work', '/members', '/ledger', '/chats', '/channels']) {
-    await page.goto(BASE + r, { waitUntil: 'networkidle' });
+    await open(page, r);
     const over = await overflow(page);
     if (over > 0) problems.push(`${r}: ${over}px`);
   }
   check(problems.length === 0, 'no horizontal overflow on a 390px screen', problems.join('; '));
 
-  await page.goto(`${BASE}/chats`, { waitUntil: 'networkidle' });
+  await open(page, '/chats');
   const pane = page.locator('aside[aria-label="Chats"]');
   const listWidth = await pane.evaluate((el) => el.getBoundingClientRect().width);
   check(listWidth > 300, 'the list fills the screen rather than a sliver', `${listWidth}px`);
@@ -163,7 +215,7 @@ async function phone(browser: Browser) {
 async function busyConversation(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/channels/ch-storage`, { waitUntil: 'networkidle' });
+  await open(page, '/channels/ch-storage');
 
   const rendered = await page.locator('main p').count();
   const earlier = page.getByRole('link', { name: 'Earlier messages' });
@@ -230,7 +282,7 @@ async function keyboard(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
 
-  await page.goto(`${BASE}/activity`, { waitUntil: 'networkidle' });
+  await open(page, '/activity');
   await page.evaluate(() => document.body.focus());
   await page.keyboard.press('Tab');
   const skip = await page.evaluate(() => {
@@ -283,7 +335,7 @@ async function keyboard(browser: Browser) {
 async function themes(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/activity`, { waitUntil: 'networkidle' });
+  await open(page, '/activity');
 
   for (const [label, id] of [['Ink', 'ink'], ['Paper', 'paper'], ['Warm', 'warm']] as const) {
     await page.getByRole('button', { name: 'Theme' }).click();
@@ -297,7 +349,8 @@ async function themes(browser: Browser) {
     check(bg !== 'rgba(0, 0, 0, 0)' && bg !== '', `${label} paints a background`, bg);
   }
 
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('nav[aria-label="Sections"]').waitFor({ timeout: 15_000 });
   check(
     (await page.evaluate(() => document.documentElement.getAttribute('data-theme'))) === 'warm',
     'the chosen theme survives a reload',
@@ -322,6 +375,7 @@ try {
   await crawl(browser);
   await posting(browser);
   await busyConversation(browser);
+  await liveUpdates(browser);
   await phone(browser);
   await keyboard(browser);
   await themes(browser);

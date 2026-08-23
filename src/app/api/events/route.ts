@@ -19,7 +19,6 @@ import { db } from '@/lib/db';
 import { getMember, getOrgOwner } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { projectChatMessages } from '@/lib/events/project';
-import { broadcastEventAppended } from '@/lib/realtime/broadcast';
 import type { EventType, NewEventInput, ScopeType } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -156,12 +155,6 @@ export async function POST(req: Request) {
     } as NewEventInput,
   ]);
 
-  void broadcastEventAppended({
-    channelId: scopeType === 'channel' ? scopeId : undefined,
-    scopeType,
-    scopeId,
-    event: created,
-  });
 
   return NextResponse.json({ ok: true, event: created });
 }
