@@ -9,6 +9,17 @@ a channel" is one operation whether you are adding Mira or Aris. Teams and depar
 are addressable the same way. This single decision is what makes human–agent parity real
 in the data model rather than only in the copy.
 
+This is a **schema** rule before it is a UI rule. Today it is violated: `Claim` has a
+`provenanceAgentId` and no `provenanceUserId`, `Event.actorAgentId` has a relation and an
+index while `actorUserId` has neither, and `User` declares no relations at all — so a
+claim made by a person loses its author and HR cannot score them. ADR-0009 merges `User`
+and `Agent` into one `Member` identity and states the rule that holds the line: **any
+column that can hold an agent must be able to hold a human, and the reverse.**
+
+ADR-0009 also covers delegation — a personal assistant acting in its owner's name, with
+the owner's visibility, under explicit revocable scopes and always dual-attributed as
+**"Bob · for Kai"**.
+
 Corollary for the schema: `Channel` gets a `kind` discriminator —
 `dm | group | team_room | channel` — resolved once on the server. Today four components
 each re-derive "is this a channel, a DM or a group chat" from `isDm` plus a nullable
@@ -146,20 +157,29 @@ drawn.** The data already exists; the board costs a component, not a subsystem. 
 also the direct answer to "I want to watch my teams work" — today there is nothing to
 watch.
 
-**Do not copy Linear's columns.** *Backlog · Todo · In Progress · In Review · Done*
-describes a human workflow. Agent work has different states, and they are the ones you
-need to see:
+**The columns are member-neutral.** An earlier draft of this doc proposed
+*Queued · Running · Blocked on gate · Needs you · Done* on the grounds that "agent work
+has different states". That was wrong, and it was wrong in the direction that matters:
+humans and agents do the same work on the same board. The states are the same states.
 
-> **Queued · Running · Blocked on gate · Needs you · Done**
+> **Backlog · Up next · In progress · Blocked · In review · Done**
 
-*Blocked on gate* and *Needs you* exist in no issue tracker and are the entire reason to
-look at the board.
+Familiar vocabulary on purpose — both kinds of member read it the same way.
 
-**One rule: the board is never a second source of truth.** Cards are created by the
-state machine, not typed by hand. Dragging a card is an *instruction to the
-orchestrator* — reprioritise, unblock, take it back — which appends an event. It is not
-a status edit the orchestrator then contradicts. A human may add a card; it becomes a
-work item like any other.
+What is genuinely different from Linear or Jira is not the columns, it is two things
+underneath them, and both apply identically to a human and an agent:
+
+- **`Blocked` is typed and links to its cause.** Blocked *on a gate*, *awaiting
+  approval*, *over budget*, *on a dependency* — each one clickable through to the claim,
+  gate, or budget that caused it. A person's pull request is blocked by the security
+  gate in exactly the way an agent's is. This is the column no tracker does well and it
+  is the reason the board is worth having.
+- **Every column move is an event with provenance**, not a mutable status field. The
+  board is a projection of the same spine as the chat and the ledger.
+
+**"Needs you" is a lens, not a column.** It is viewer-relative, so it cannot be a shared
+board state. It becomes a filter — *Everything · Mine · My team · Needs me* — which
+works the same whether "me" is you, a teammate, or your assistant acting for you.
 
 Lives as the **Board** view on Work, beside List and Timeline. No separate identifier
 scheme — `MUL-17`-style keys are polish, and a second id namespace is a real cost.
@@ -170,16 +190,23 @@ The information matters: is Claude Code connected, is a sandbox alive, is an age
 what is running. A dashboard is the wrong shape for it in a communication app. Every chat
 app already solved this — it is called **presence**, and it sits next to the name.
 
-Give agents a real presence vocabulary, exactly where a green dot goes today:
+**One presence vocabulary for every member**, exactly where the green dot goes today:
 
-> **idle · thinking · running `<tool>` · blocked on gate · over budget**
+> **available · busy · away · offline · do not disturb**
 
-That does most of what a runtime panel does, inside the metaphor rather than beside it,
-and it is the detail that makes the app feel alive rather than instrumented.
+plus an optional **activity line** underneath — *"running tests on #wal-format"*,
+*"in a meeting until 3"*. Same field, same rendering, for humans and agents. The only
+difference is how it gets filled: an agent's is written by the orchestrator, a human's
+is set by hand or from a calendar. An agent that is thinking is *busy*; an agent blocked
+on a gate is *busy* with an activity line saying so; an agent that is over budget is
+*away* with a reason.
+
+That is what makes a runtime panel unnecessary: the information a dashboard would carry
+is already next to the name, in a form both kinds of member share.
 
 | Runtime concern | Where it goes |
 |---|---|
-| What is running right now | **Activity** + agent presence |
+| What any member is working on now | **Activity** + presence |
 | One run's logs, tokens, cost | The **"Why this changed"** drawer, from the message that spawned it |
 | Harness health, keys, connection config | **Settings → Runtimes** — genuinely admin, genuinely rare |
 
