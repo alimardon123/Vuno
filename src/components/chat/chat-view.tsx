@@ -27,7 +27,7 @@ interface EventsResponse {
 }
 
 interface ChannelsResponse {
-  channels: { id: string; name: string; topic: string | null; teamId: string | null }[];
+  channels: { id: string; name: string; topic: string | null; teamId: string | null; isDm: boolean }[];
   teams: { id: string; name: string }[];
   departments: { id: string; name: string }[];
 }

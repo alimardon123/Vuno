@@ -4,6 +4,9 @@
 
 import type { EventRecord, NewEventInput, ClaimStatus, ScopeType } from '@/lib/events/types';
 
+// Adapters build events; re-exported so they import one module, not two.
+export type { NewEventInput, EventRecord, ClaimStatus, ScopeType };
+
 export type AgentKind = 'independent' | 'personal_assistant';
 
 export interface AgentManifest {

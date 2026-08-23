@@ -46,6 +46,9 @@ export interface ChatMessageProjection {
   actorType: 'agent' | 'human' | 'system';
   actorAgentId?: string;
   actorUserId?: string;
+  // Carried through so a message can be traced back to what it was about.
+  scopeType: EventRecord['scopeType'];
+  scopeId: string;
   createdAt: string;
   // type-label text for rendering, e.g. "PROPOSAL" or "BENCHMARK REPORT"
   typeLabel?: string;
@@ -102,6 +105,8 @@ export function projectChatMessages(events: EventRecord[]): ChatMessageProjectio
       type: e.type,
       payload: e.payload,
       actorType: e.actorType,
+      scopeType: e.scopeType,
+      scopeId: e.scopeId,
       actorAgentId: e.actorAgentId ?? undefined,
       actorUserId: e.actorUserId ?? undefined,
       createdAt: e.createdAt,

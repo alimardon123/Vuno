@@ -57,6 +57,8 @@ export type MemberKind = 'human' | 'independent' | 'personal_assistant';
 interface MemberAvatarProps {
   name: string;
   kind?: MemberKind; // defaults to 'human'
+  /** Rendered into the accessible label — the avatar itself shows initials only. */
+  role?: string;
   size?: 'sm' | 'md' | 'lg';
   health?: 'ok' | 'warn' | 'down';
   className?: string;
@@ -77,6 +79,7 @@ const HEALTH_DOT_CLASS: Record<string, string> = {
 export function MemberAvatar({
   name,
   kind = 'human',
+  role,
   size = 'md',
   health = 'ok',
   className,
@@ -108,6 +111,7 @@ export function MemberAvatar({
       ) : null}
       <span className="sr-only">
         {name}
+        {role ? `, ${role}` : ''}
         {kind !== 'human' ? `, ${kind}` : ''}
         {health !== 'ok' ? `, health ${health}` : ''}
       </span>

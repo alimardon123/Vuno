@@ -179,8 +179,12 @@ model Channel {
 // ─── Event Spine (append-only) ────────────────────────────────────────────────
 // Per ADR-0004. NEVER update or delete rows. The chat surface is a projection.
 model Event {
-  id            String   @id @default(cuid())
-  seq           Int      @unique           // monotonic, for replay ordering
+  // seq is the primary key so SQLite allocates it: AUTOINCREMENT is only
+  // available on an INTEGER PRIMARY KEY, and having the database own the
+  // sequence is what removes the read-MAX-then-insert race (ADR-0008).
+  // Nothing holds a foreign key to Event.id, so moving the PK is safe.
+  seq           Int      @id @default(autoincrement())
+  id            String   @unique @default(cuid())
   type          String                     // discriminated union key
   payload       String                     // JSON-encoded, typed via TS
   tenantId      String

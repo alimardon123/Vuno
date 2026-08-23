@@ -187,6 +187,7 @@ export function FileObjectiveDialog({
               render={({ field }) => (
                 <Textarea
                   {...field}
+                  value={field.value ?? ''}
                   placeholder="single-node first; open-source dependencies only"
                   className="min-h-[3rem] resize-none"
                 />

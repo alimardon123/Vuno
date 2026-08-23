@@ -1,7 +1,15 @@
 // Vuno — Event spine writer
 // Per ADR-0004: append-only. The ONLY way to insert events.
-// Assigns monotonic seq, persists, returns full EventRecord[].
-// Never call db.event.update or db.event.delete from application code.
+// Per ADR-0008: the database owns `seq`. Application code never computes it.
+//
+// The previous implementation read MAX(seq) and then inserted, inside an
+// interactive transaction per call. That had two failure modes under the
+// concurrency the orchestrator introduces: two callers could read the same
+// maximum and collide on the unique index, and 50 concurrent interactive
+// transactions deadlocked against SQLite's single writer and timed out at 5s.
+// Both are gone now that `seq` is an AUTOINCREMENT primary key — there is
+// nothing to read, and a batch is one short transaction rather than a
+// long-held interactive one.
 
 import { db } from '@/lib/db';
 import type { EventRecord, NewEventInput, EventType } from './types';
@@ -13,42 +21,35 @@ export class EventSpine {
   ) {}
 
   /**
-   * Append one or more events atomically. All events share a transaction;
-   * if any fails, none are persisted.
+   * Append one or more events atomically. All events in a batch share a
+   * transaction; if any fails, none are persisted. Never updates or deletes.
    */
   async append(inputs: NewEventInput[]): Promise<EventRecord[]> {
     if (inputs.length === 0) return [];
 
-    // Atomically compute next seq + insert
-    return db.$transaction(async (tx) => {
-      // Find current max seq
-      const last = await tx.event.findFirst({
-        orderBy: { seq: 'desc' },
-        select: { seq: true },
-      });
-      let nextSeq = (last?.seq ?? 0) + 1;
+    const data = inputs.map((input) => ({
+      type: input.type,
+      payload: JSON.stringify(input.payload),
+      tenantId: this.tenantId,
+      orgId: this.orgId,
+      actorType: input.actorType,
+      actorAgentId: input.actorAgentId ?? null,
+      actorUserId: input.actorUserId ?? null,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId,
+      visibility: input.visibility ?? 'org',
+    }));
 
-      const created: EventRecord[] = [];
-      for (const input of inputs) {
-        const row = await tx.event.create({
-          data: {
-            seq: nextSeq++,
-            type: input.type,
-            payload: JSON.stringify(input.payload),
-            tenantId: this.tenantId,
-            orgId: this.orgId,
-            actorType: input.actorType,
-            actorAgentId: input.actorAgentId ?? null,
-            actorUserId: input.actorUserId ?? null,
-            scopeType: input.scopeType,
-            scopeId: input.scopeId,
-            visibility: input.visibility ?? 'org',
-          },
-        });
-        created.push(row as unknown as EventRecord);
-      }
-      return created;
-    });
+    // Single event: one statement, no transaction to hold.
+    if (data.length === 1) {
+      const row = await db.event.create({ data: data[0] });
+      return [toRecord(row)];
+    }
+
+    // Batch: the array form of $transaction is one short-lived transaction,
+    // not an interactive one held open across round trips.
+    const rows = await db.$transaction(data.map((d) => db.event.create({ data: d })));
+    return rows.map(toRecord);
   }
 
   /**
@@ -76,11 +77,20 @@ export class EventSpine {
       take: opts.limit ?? 1000,
     });
 
-    return rows.map((r) => ({
-      ...r,
-      payload: JSON.parse(r.payload as string),
-      actorAgentId: r.actorAgentId ?? undefined,
-      actorUserId: r.actorUserId ?? undefined,
-    })) as unknown as EventRecord[];
+    return rows.map(toRecord);
   }
+}
+
+function toRecord(row: {
+  payload: string | unknown;
+  actorAgentId: string | null;
+  actorUserId: string | null;
+  [k: string]: unknown;
+}): EventRecord {
+  return {
+    ...row,
+    payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
+    actorAgentId: row.actorAgentId ?? undefined,
+    actorUserId: row.actorUserId ?? undefined,
+  } as unknown as EventRecord;
 }

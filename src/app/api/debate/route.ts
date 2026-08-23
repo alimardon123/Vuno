@@ -81,6 +81,11 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       return NextResponse.json({ ok: false, error: `Channel ${channelId} not found.` }, { status: 400 });
     }
 
+    // Bound once, after the guards — the closures below lose TS narrowing on `org`/`project`.
+    const orgId = org.id;
+    const orgTenantId = org.tenantId;
+    const projectId = project.id;
+
     // Fetch the agents we need
     const agents = await db.agent.findMany({
       where: { orgId: org.id, status: 'active' },
@@ -184,7 +189,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
         }));
       } else {
         // Fallback: Prisma
-        const spine = new EventSpine(org.tenantId, org.id);
+        const spine = new EventSpine(orgTenantId, orgId);
         const raw = await spine.append(events);
         created = raw.map((e) => ({
           ...e,
@@ -244,7 +249,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       // Variable thinking time based on role
       const thinkTime = getThinkTime(role);
       await sendTyping(agentId, agentName, channelId, thinkTime);
-      const ctx: AgentContext = { scope: { scopeType: 'channel', scopeId: channelId, projectId: project.id }, events: contextEvents, claims: [], trigger: { type: triggerType, payload: triggerPayload } };
+      const ctx: AgentContext = { scope: { scopeType: 'channel', scopeId: channelId, projectId }, events: contextEvents, claims: [], trigger: { type: triggerType, payload: triggerPayload } };
       const response = await adapter.invoke(ctx);
       return await streamEvents(response.events);
     }
@@ -252,7 +257,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     // ─── Phase 1: Architect proposes ────────────────────────────────────────
     const proposalTriggerPayload = { decisionId, projectId: project.id, title: body.title ?? 'Architecture: simulated proposal' };
     const architectAdapter = adapters[architect.id]!;
-    const architectCtx: AgentContext = { scope: { scopeType: 'channel', scopeId: channelId, projectId: project.id }, events: [], claims: [], trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload } };
+    const architectCtx: AgentContext = { scope: { scopeType: 'channel', scopeId: channelId, projectId }, events: [], claims: [], trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload } };
     await sendTyping(architect.id, architect.name, channelId, getThinkTime('architect'));
     const architectResponse = await architectAdapter.invoke(architectCtx);
     const proposalCreated = await streamEvents(architectResponse.events);
@@ -397,7 +402,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
         payload: { decisionId, outcome: 'falsified', chosen: proposalPayload.title,
           rationale: `Architecture proposal falsified by Performance team benchmark. p99=${benchmarkValue}ms (target ${benchmarkTarget}ms) at 10k concurrent readers. Working set exceeded RAM.`,
           rejectedAlternatives: [
-            ...(proposalPayload.alternatives ?? []),
+            ...(proposalPayload.alternatives ?? []).map((a) => ({ name: a.name, reason: a.rejectedReason })),
             { name: proposalPayload.title, reason: `Falsified by benchmark — see Claim ${claimId}` },
           ] },
       }]);

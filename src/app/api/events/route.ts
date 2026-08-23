@@ -242,12 +242,13 @@ export async function POST(req: Request) {
             // message matches their domain of expertise.
             if (body.type === 'MessagePosted' && scopeType === 'channel') {
               const bodyText = (body.payload as { body?: string }).body;
-              if (typeof event.id === 'string' && typeof bodyText === 'string') {
-                triggerAttentionRouter(event.id, bodyText, scopeId, body.useRealLLM);
+              const eventId = (event as { id?: unknown }).id;
+              if (typeof eventId === 'string' && typeof bodyText === 'string') {
+                triggerAttentionRouter(eventId, bodyText, scopeId, body.useRealLLM);
                 // Memory evolution — PA silently learns from the owner's messages.
                 // Fires alongside the attention router (react + learn in parallel).
                 if (ownerUser) {
-                  triggerMemoryEvolution(event.id, bodyText, scopeId, ownerUser.id, body.useRealLLM);
+                  triggerMemoryEvolution(eventId, bodyText, scopeId, ownerUser.id, body.useRealLLM);
                 }
               }
             }

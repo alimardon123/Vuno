@@ -342,7 +342,7 @@ function ObjectionPrecisionChart({ agents }: { agents: AgentMetric[] }) {
               />
               <ChartTooltip content={<ChartTooltipContent />} />
               {/* Background track: shows the 100% potential as a subtle bar so 0% values are visible */}
-              <Bar dataKey={() => 1} fill="oklch(0.25 0.005 250 / 40%)" radius={[0, 4, 4, 0]} maxBarSize={24} isBackground />
+              <Bar dataKey={() => 1} fill="oklch(0.25 0.005 250 / 40%)" radius={[0, 4, 4, 0]} maxBarSize={24} />
               <Bar dataKey="precision" fill="var(--status-tested)" radius={[0, 4, 4, 0]} maxBarSize={24}>
                 <LabelList
                   dataKey="precision"
@@ -411,7 +411,7 @@ function ProposalSurvivalChart({ agents }: { agents: AgentMetric[] }) {
               />
               <ChartTooltip content={<ChartTooltipContent />} />
               {/* Background track: shows the 100% potential as a subtle bar so 0% values are visible */}
-              <Bar dataKey={() => 1} fill="oklch(0.25 0.005 250 / 40%)" radius={[0, 4, 4, 0]} maxBarSize={24} isBackground />
+              <Bar dataKey={() => 1} fill="oklch(0.25 0.005 250 / 40%)" radius={[0, 4, 4, 0]} maxBarSize={24} />
               <Bar dataKey="survival" fill="var(--status-believed)" radius={[0, 4, 4, 0]} maxBarSize={24}>
                 <LabelList
                   dataKey="survival"

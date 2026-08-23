@@ -155,7 +155,8 @@ export function WikiView() {
   if (wikiRes.loading) {
     return <WikiSkeleton />;
   }
-  if (!wikiRes.data || !wikiRes.data.project) {
+  const wiki = wikiRes.data;
+  if (!wiki || !wiki.project) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
         <span className="text-base font-medium">No project yet</span>
@@ -167,7 +168,7 @@ export function WikiView() {
     );
   }
 
-  const wiki = wikiRes.data;
+  const project = wiki.project;
   const generatedAt = new Date(wiki.generatedAt);
   const lastEventAt = wiki.lastEventAt ? new Date(wiki.lastEventAt) : null;
 
@@ -179,11 +180,11 @@ export function WikiView() {
           <FileText className="size-5 text-primary" aria-hidden />
           <div className="flex-1">
             <h1 className="text-xl font-semibold leading-tight tracking-tight">
-              {wiki.project.name}
+              {project.name}
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              <span className="font-mono">{wiki.project.slug}</span>
-              {wiki.project.description ? ` · ${wiki.project.description}` : ''}
+              <span className="font-mono">{project.slug}</span>
+              {project.description ? ` · ${project.description}` : ''}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">

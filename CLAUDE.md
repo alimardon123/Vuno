@@ -43,6 +43,63 @@ Applied to code, architecture and decisions — not only to visuals.
 | **Beautiful** | Dense information, calm presentation. Colour carries meaning, never decoration. Both themes designed, not inverted. |
 | **Functional** | It works on real workloads, not fixtures. Keyboard-operable. Every surface has a URL. |
 
+## Working guidelines (Karpathy)
+
+Behavioural rules that reduce the mistakes LLMs actually make. They bias toward
+caution over speed; for trivial tasks, use judgment. Source:
+`github.com/multica-ai/andrej-karpathy-skills`.
+
+### 1. Think before coding
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+- State assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity first
+**The minimum code that solves the problem. Nothing speculative.**
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask: *would a senior engineer call this overcomplicated?* If yes, simplify.
+
+### 3. Surgical changes
+**Touch only what you must. Clean up only your own mess.**
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor what isn't broken.
+- Match existing style, even where you'd do it differently.
+- Notice unrelated dead code? Mention it. Don't delete it.
+- Remove imports and variables that *your* change orphaned — nothing older.
+
+The test: every changed line traces directly to the request.
+
+*Where this meets the rebuild:* P3 replaces `src/app/` and `src/components/`
+because the owner asked for it, so those changes do trace to the request. Inside
+any one slice the rule still holds — no drive-by improvements, no opportunistic
+refactors riding along in the diff.
+
+### 4. Goal-driven execution
+**Define success criteria. Loop until verified.**
+Turn tasks into verifiable goals:
+- "Add validation" → "write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "write a test that reproduces it, then make it pass"
+- "Refactor X" → "ensure tests pass before and after"
+
+For multi-step work, state the plan with its checks up front:
+```
+1. [step] → verify: [check]
+2. [step] → verify: [check]
+```
+Strong criteria allow looping independently. Weak criteria ("make it work") force
+constant clarification.
+
+**These are working if:** diffs contain fewer unnecessary changes, fewer rewrites
+follow from overcomplication, and clarifying questions arrive before
+implementation rather than after the mistake.
+
 ## Definition of done
 
 A slice is not done until all of these hold:

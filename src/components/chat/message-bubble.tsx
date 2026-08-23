@@ -369,7 +369,7 @@ function MessageBody({
 
   // For typed messages with an accent color, wrap in a subtle bordered card.
   // Inlined as a fragment wrapper (not a component) to satisfy react-hooks lint.
-  const cardStyle: React.CSSProperties = accent
+  const cardStyle: React.CSSProperties | undefined = accent
     ? { borderColor: accent }
     : undefined;
   const cardClass =

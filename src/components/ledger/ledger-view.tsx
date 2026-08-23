@@ -41,7 +41,7 @@ interface ClaimsResponse {
 }
 
 interface AgentsResponse {
-  agents: { id: string; name: string; role: string }[];
+  agents: { id: string; name: string; role: string; status: string }[];
 }
 
 const ALL_STATUSES: ClaimStatus[] = [

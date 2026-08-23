@@ -82,7 +82,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         id: e.id,
         seq: e.seq,
         type: e.type as EventRecord['type'],
-        payload: payload as EventRecord['payload'],
+        payload: payload as unknown as EventRecord['payload'],
         tenantId: e.tenantId,
         orgId: e.orgId,
         actorType: e.actorType as EventRecord['actorType'],
