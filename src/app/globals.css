@@ -218,3 +218,20 @@
     animation: none;
   }
 }
+
+/* ─── Appearance: density (data-density attribute on <html>) ────────────────
+   Compact mode reduces padding on common elements for power users who want
+   more content per screen. Comfortable is the default (Buzz-inspired). */
+[data-density="compact"] {
+  --density-gap: 0.25rem;
+}
+[data-density="comfortable"] {
+  --density-gap: 0.5rem;
+}
+
+/* ─── Appearance: font size (data-font-size attribute on <html>) ────────────
+   Small = 14px base, Medium = 16px base (default), Large = 18px base.
+   Applied via the root font-size which Tailwind's rem units inherit from. */
+[data-font-size="small"] { font-size: 14px; }
+[data-font-size="medium"] { font-size: 16px; }
+[data-font-size="large"] { font-size: 18px; }

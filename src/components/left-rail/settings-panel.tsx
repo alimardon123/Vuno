@@ -20,10 +20,12 @@ import {
   Brain,
   Radar,
   BookHeart,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/common/theme-toggle';
 import { ATTENTION_PATTERNS } from '@/lib/agents/attention-router';
 import { ROLE_LABELS } from '@/lib/agents/types';
+import { AppearanceSettings } from '@/components/settings/appearance-settings';
 
 export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const { activeView, setView, setFileObjectiveOpen } = useAppStore();
@@ -161,6 +163,16 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                 <span>Theme</span>
               </div>
               <ThemeToggle />
+            </div>
+            {/* Appearance settings — accent color, font size, density */}
+            <div className="mt-2 rounded-md border border-border/30 bg-card/40 p-3">
+              <div className="mb-2 flex items-center gap-1.5">
+                <SettingsIcon className="size-3 text-muted-foreground" aria-hidden />
+                <span className="text-[0.625rem] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Appearance
+                </span>
+              </div>
+              <AppearanceSettings />
             </div>
           </section>
         </div>

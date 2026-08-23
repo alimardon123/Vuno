@@ -267,93 +267,106 @@ export function TypedComposer({ channelId }: { channelId: string }) {
       className="border-t border-border/70 bg-background/95 supports-[backdrop-filter]:bg-background/60 backdrop-blur p-3"
       aria-label="Compose a message"
     >
-      <div className="flex items-start gap-2">
-        <Select
-          value={type}
-          onValueChange={(v) => setType(v as ComposerType)}
-        >
-          <SelectTrigger
-            size="sm"
-            className={cn(
-              'w-36 shrink-0 gap-1 font-medium',
-              !isMessage && 'bg-primary/10 text-primary border-primary/30',
-            )}
-            aria-label="Message type"
-          >
-            <SelectValue />
-            <ChevronDown className="size-3.5 opacity-60" aria-hidden />
-          </SelectTrigger>
-          <SelectContent>
-            {TYPES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col gap-2">
+        {/* Textarea / typed form — full width on top */}
+        {isMessage ? (
+          <Textarea
+            ref={inputRef}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Type a message…  (⌘/Ctrl+Enter to send)"
+            className="min-h-[3rem] resize-none leading-snug"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                handleSubmit(e as unknown as React.FormEvent);
+              }
+            }}
+          />
+        ) : (
+          <TypedForm
+            type={type}
+            proposalTitle={proposalTitle}
+            setProposalTitle={setProposalTitle}
+            proposalBody={proposalBody}
+            setProposalBody={setProposalBody}
+            claimText={claimText}
+            setClaimText={setClaimText}
+            objSeverity={objSeverity}
+            setObjSeverity={setObjSeverity}
+            evidenceLabel={evidenceLabel}
+            setEvidenceLabel={setEvidenceLabel}
+            evidenceSummary={evidenceSummary}
+            setEvidenceSummary={setEvidenceSummary}
+            metric={metric}
+            setMetric={setMetric}
+            value={value}
+            setValue={setValue}
+            unit={unit}
+            setUnit={setUnit}
+            target={target}
+            setTarget={setTarget}
+            decisionChosen={decisionChosen}
+            setDecisionChosen={setDecisionChosen}
+            decisionRationale={decisionRationale}
+            setDecisionRationale={setDecisionRationale}
+            useRealLLM={useRealLLM}
+            setUseRealLLM={setUseRealLLM}
+          />
+        )}
 
-        <div className="flex flex-1 flex-col gap-2">
-          {isMessage ? (
-            <Textarea
-              ref={inputRef}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Type a message…  (⌘/Ctrl+Enter to send)"
-              className="min-h-[2.5rem] resize-none leading-snug"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  handleSubmit(e as unknown as React.FormEvent);
-                }
-              }}
-            />
-          ) : (
-            <TypedForm
-              type={type}
-              proposalTitle={proposalTitle}
-              setProposalTitle={setProposalTitle}
-              proposalBody={proposalBody}
-              setProposalBody={setProposalBody}
-              claimText={claimText}
-              setClaimText={setClaimText}
-              objSeverity={objSeverity}
-              setObjSeverity={setObjSeverity}
-              evidenceLabel={evidenceLabel}
-              setEvidenceLabel={setEvidenceLabel}
-              evidenceSummary={evidenceSummary}
-              setEvidenceSummary={setEvidenceSummary}
-              metric={metric}
-              setMetric={setMetric}
-              value={value}
-              setValue={setValue}
-              unit={unit}
-              setUnit={setUnit}
-              target={target}
-              setTarget={setTarget}
-              decisionChosen={decisionChosen}
-              setDecisionChosen={setDecisionChosen}
-              decisionRationale={decisionRationale}
-              setDecisionRationale={setDecisionRationale}
-              useRealLLM={useRealLLM}
-              setUseRealLLM={setUseRealLLM}
-            />
-          )}
-
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={submitting || !hasContent}
-              className="shadow-sm transition-all hover:shadow-md hover:shadow-primary/20"
+        {/* Toolbar — type selector (left) + submit button (right) */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Select
+              value={type}
+              onValueChange={(v) => setType(v as ComposerType)}
             >
-              {submitting ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              ) : (
-                <Send className="size-3.5" aria-hidden />
-              )}
-              {isMessage ? 'Post' : type === 'Proposal' ? 'File proposal' : `Append ${type}`}
-            </Button>
+              <SelectTrigger
+                size="sm"
+                className={cn(
+                  'w-32 shrink-0 gap-1 font-medium',
+                  !isMessage && 'bg-primary/10 text-primary border-primary/30',
+                )}
+                aria-label="Message type"
+              >
+                <SelectValue />
+                <ChevronDown className="size-3.5 opacity-60" aria-hidden />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Real LLM toggle — for Message (collaboration loop) + Proposal (debate) */}
+            {(isMessage || type === 'Proposal') ? (
+              <label className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={useRealLLM}
+                  onChange={(e) => setUseRealLLM(e.target.checked)}
+                  className="size-3 rounded border-border"
+                />
+                <span className="hidden sm:inline">Real LLM</span>
+              </label>
+            ) : null}
           </div>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={submitting || !hasContent}
+            className="shrink-0 shadow-sm transition-all hover:shadow-md hover:shadow-primary/20"
+          >
+            {submitting ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Send className="size-3.5" aria-hidden />
+            )}
+            {isMessage ? 'Post' : type === 'Proposal' ? 'File proposal' : `Append ${type}`}
+          </Button>
         </div>
       </div>
     </form>
@@ -402,20 +415,7 @@ function TypedForm(props: TypedFormProps) {
           <span>· appends to spine</span>
         )}
       </div>
-      {/* Real LLM toggle — shown for Proposal (debate) and Message (collaboration loop) */}
-      {(props.type === 'Proposal' || props.type === 'Message') && props.useRealLLM !== undefined ? (
-        <label className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={props.useRealLLM}
-            onChange={(e) => props.setUseRealLLM?.(e.target.checked)}
-            className="size-3 rounded border-border"
-          />
-          {props.type === 'Proposal'
-            ? 'Use real LLM agents (z-ai-web-dev-sdk) for the debate'
-            : 'Use real LLM for agent reactions + handoffs (attention router + ACP)'}
-        </label>
-      ) : null}
+      {/* Note: the useRealLLM toggle is now in the toolbar below the form */}
       <div className="grid gap-2">
         {props.type === 'Proposal' ? (
           <>
