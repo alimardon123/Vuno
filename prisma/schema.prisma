@@ -80,8 +80,12 @@ model HumanProfile {
 model AgentProfile {
   memberId      String    @id
   role          String    // 'architect' | 'security' | 'perf' | 'hr' | ...
-  modelName     String    @default("harness/deterministic")
-  harnessName   String    @default("deterministic")
+  // What actually runs this agent. The default points at a harness the registry
+  // knows, so adding a key to .env is the only step between installing an agent
+  // and it working — `deterministic` named nothing that exists, and an agent
+  // set to it failed with "unknown harness" rather than "no key".
+  modelName     String    @default("claude-sonnet-4")
+  harnessName   String    @default("anthropic")
   tools         String    @default("[]")   // JSON array of tool ids
   permissions   String    @default("[]")   // JSON array of scoped capability ids
   // Set only for a personal assistant. An assistant is a member like any other;

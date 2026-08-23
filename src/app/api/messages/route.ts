@@ -20,6 +20,8 @@ import { db } from '@/lib/db';
 import { getMember, getOrgOwner } from '@/lib/members';
 import { EventSpine } from '@/lib/events/spine';
 import { broadcastEventAppended } from '@/lib/realtime/broadcast';
+import { extractHandles } from '@/lib/mentions';
+import { enqueue } from '@/lib/orchestrator/queue';
 import type { NewEventInput } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -109,5 +111,52 @@ export async function POST(req: Request) {
     event: created,
   });
 
-  return NextResponse.json({ ok: true, event: created });
+  // `@bob` brings Bob in. A lookup against handles that exist, not a guess at
+  // what the message is about — and the conversation is unchanged by it: a DM
+  // summoning an assistant is still a DM, with the same members and the same
+  // place in the sidebar (docs/IA-NAVIGATION.md).
+  //
+  // The turn runs in the orchestrator, not here: it leases the work, records
+  // what the run cost, retries what is worth retrying, and survives this
+  // request ending.
+  const handles = extractHandles(parsed.body);
+  const mentioned = handles.length
+    ? await db.member.findMany({
+        where: { orgId: org.id, kind: 'agent', status: 'active', handle: { in: handles } },
+        select: { id: true, handle: true, agent: { select: { ownerMemberId: true } } },
+      })
+    : [];
+
+  for (const agent of mentioned) {
+    if (agent.id === poster?.id) continue; // an agent mentioning itself is not a summons
+    await enqueue({
+      tenantId: org.tenantId,
+      orgId: org.id,
+      kind: 'agent_turn',
+      subjectType: 'channel',
+      subjectId: channel.id,
+      assigneeId: agent.id,
+      // One turn per message per agent: a retry of this request must not queue
+      // a second answer to the same question.
+      dedupeKey: `mention:${created.id}:${agent.id}`,
+      input: {
+        memberId: agent.id,
+        scopeType: 'channel',
+        scopeId: channel.id,
+        reason: `${poster?.displayName ?? 'Someone'} mentioned you: "${parsed.body.slice(0, 400)}"`,
+        // Only your own assistant carries your authority. Calling on Sid gets
+        // you Sid's opinion, not something said in your name — the delegation
+        // is the ownership, not the mention (ADR-0009 §1).
+        ...(poster && agent.agent?.ownerMemberId === poster.id
+          ? { onBehalfOfMemberId: poster.id }
+          : {}),
+      },
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    event: created,
+    ...(mentioned.length ? { summoned: mentioned.map((m) => m.handle) } : {}),
+  });
 }

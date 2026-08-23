@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { memberMap } from '@/lib/members';
 import { isStage, STAGES } from '@/lib/orchestrator/stages';
+import { noHarnessConfiguredMessage } from '@/lib/agents/registry';
 import { Avatar, Empty, GateChip, RelativeTime, StatusPill, gateLabel, type ClaimStatus } from '@/components/vuno/primitives';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,10 @@ export default async function ActivityPage() {
 
   const nothingNeedsYou = blockedGates.length === 0 && failedItems.length === 0 && parked.length === 0;
 
+  // An org whose agents cannot run should say so once, here, rather than
+  // leaving you to work it out from failed work items.
+  const noHarness = noHarnessConfiguredMessage();
+
   return (
     <main className="scroll-y min-w-0 flex-1">
       <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)] px-6 py-3">
@@ -46,6 +51,20 @@ export default async function ActivityPage() {
       </header>
 
       <div className="flex flex-col gap-5 p-6 mx-auto w-full max-w-[70rem]">
+        {noHarness ? (
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3">
+            <p className="text-[12.5px] font-semibold text-[var(--fg)]">No model is configured</p>
+            <p className="mt-1 max-w-[76ch] text-[11.5px] leading-[1.55] text-[var(--fg-3)]">
+              Agents cannot run, so mentioning one queues a turn that fails. Set{' '}
+              <code className="rounded-[3px] bg-[var(--sunken)] px-1 py-px font-mono text-[11px]">ANTHROPIC_API_KEY</code>{' '}
+              for hosted models, or{' '}
+              <code className="rounded-[3px] bg-[var(--sunken)] px-1 py-px font-mono text-[11px]">OLLAMA_BASE_URL</code>{' '}
+              to use a local one — both go in <code className="rounded-[3px] bg-[var(--sunken)] px-1 py-px font-mono text-[11px]">.env</code>.
+              Everything deterministic works without either: objectives route, gates evaluate, claims transition.
+            </p>
+          </div>
+        ) : null}
+
         {nothingNeedsYou ? (
           <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-6 text-center">
             <p className="text-[13px] font-medium text-[var(--fg-2)]">Nothing is waiting on you.</p>
@@ -97,7 +116,10 @@ export default async function ActivityPage() {
         {failedItems.length > 0 ? (
           <Panel title="Work that failed" hint="Retried to its attempt limit and stopped, rather than looping.">
             {failedItems.map((i) => (
-              <Row key={i.id} href={`/work#objective-${i.objectiveId}`}>
+              // Work reached from a mention belongs to no objective, so there
+              // is nothing on /work to point at — the row still shows the
+              // failure and what to do about it.
+              <Row key={i.id} href={i.objectiveId ? `/work#objective-${i.objectiveId}` : undefined}>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate font-mono text-[12px]">{i.kind}</span>
                   <span className="truncate text-[11.5px] text-[var(--falsified)]">{i.lastError}</span>

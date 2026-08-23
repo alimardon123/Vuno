@@ -71,6 +71,9 @@ export async function tick(opts: { orgId: string; workerId: string; onLog?: (l: 
     const result = await handlerFor(item.kind)(item);
     clearInterval(beat);
 
+    // Every run records what it cost, including the ones that cost nothing —
+    // "Efficient: every run records its cost" is only checkable if the zero
+    // ones are recorded too.
     await db.workSession.update({
       where: { id: session.id },
       data: {
@@ -78,6 +81,11 @@ export async function tick(opts: { orgId: string; workerId: string; onLog?: (l: 
         outcome: 'succeeded',
         endedAt: new Date(),
         durationMs: Date.now() - startedAt,
+        costCents: result.usage?.costCents ?? 0,
+        tokensIn: result.usage?.tokensIn ?? null,
+        tokensOut: result.usage?.tokensOut ?? null,
+        modelName: result.usage?.modelName ?? null,
+        harnessName: result.usage?.harnessName ?? null,
       },
     });
 
@@ -104,7 +112,9 @@ export async function tick(opts: { orgId: string; workerId: string; onLog?: (l: 
       },
     });
 
-    const disposition = await fail(item.id, opts.workerId, message);
+    // A handler marks a failure permanent when no number of retries can fix it.
+    const permanent = Boolean((err as { permanent?: boolean } | null)?.permanent);
+    const disposition = await fail(item.id, opts.workerId, message, permanent);
     log(`  ✗ ${message} (${disposition})`);
     return { handled: true, itemId: item.id, kind: item.kind, error: message };
   }

@@ -185,15 +185,24 @@ export async function complete(itemId: string, workerId: string, result?: unknow
  * Record a failure. Retries with backoff until `maxAttempts`, then the item
  * fails for good — it never loops forever, which is the whole point of
  * bounding attempts (ADR-0007).
+ *
+ * @param permanent retrying will not help — a missing API key, an unknown
+ *   harness, an agent that no longer exists. Three more attempts at those burn
+ *   the budget and delay the message that says what to fix.
  */
-export async function fail(itemId: string, workerId: string, error: string): Promise<'retry' | 'failed'> {
+export async function fail(
+  itemId: string,
+  workerId: string,
+  error: string,
+  permanent = false,
+): Promise<'retry' | 'failed'> {
   const row = await db.workItem.findUnique({
     where: { id: itemId },
     select: { attempts: true, maxAttempts: true },
   });
   if (!row) return 'failed';
 
-  const exhausted = row.attempts >= row.maxAttempts;
+  const exhausted = permanent || row.attempts >= row.maxAttempts;
   const backoffMs = Math.min(2 ** row.attempts * 1000, 60_000);
 
   await db.workItem.updateMany({

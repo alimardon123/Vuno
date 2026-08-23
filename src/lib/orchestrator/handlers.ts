@@ -7,6 +7,8 @@
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
 import { findAgentByRole, listAgentRows } from '@/lib/members';
+import { NoHarness, runAgentTurn } from '@/lib/agents/turn';
+import type { ScopeType } from '@/lib/events/types';
 import { STAGES, type Stage } from './stages';
 import type { LeasedItem } from './queue';
 
@@ -17,6 +19,14 @@ export interface HandlerResult {
   summary: string;
   /** The member that did the work, for the session record. */
   memberId?: string;
+  /** What the run cost, when a model was involved. Recorded on the session. */
+  usage?: {
+    costCents?: number;
+    tokensIn?: number;
+    tokensOut?: number;
+    modelName?: string;
+    harnessName?: string;
+  };
 }
 
 export type Handler = (item: LeasedItem) => Promise<HandlerResult>;
@@ -173,6 +183,68 @@ const interrogateObjective: Handler = async (item) => {
   };
 };
 
+/**
+ * One agent turn: the adapter runs, and what it returns lands on the spine.
+ *
+ * This is what makes an @mention real. It was previously served by the
+ * attention router, which matched substrings and posted hand-written replies —
+ * so an agent "answered" without a model behind it and without any record of
+ * what answering cost.
+ *
+ * With no harness configured this fails with the reason, which is the honest
+ * outcome: the item lands in Activity under "Work that failed" saying which
+ * variable to set. It is not retried, because retrying a missing API key just
+ * burns the attempt budget.
+ */
+const agentTurn: Handler = async (item) => {
+  const input = item.input as {
+    memberId?: string;
+    scopeType?: string;
+    scopeId?: string;
+    projectId?: string;
+    reason?: string;
+    onBehalfOfMemberId?: string;
+  };
+
+  const memberId = input.memberId ?? item.assigneeId;
+  if (!memberId) throw new Error('An agent turn needs a member to run it');
+  if (!input.scopeId) throw new Error('An agent turn needs somewhere to act');
+
+  try {
+    const result = await runAgentTurn({
+      tenantId: item.tenantId,
+      orgId: item.orgId,
+      memberId,
+      scopeType: (input.scopeType ?? 'channel') as ScopeType,
+      scopeId: input.scopeId,
+      projectId: input.projectId,
+      reason: input.reason,
+      onBehalfOfMemberId: input.onBehalfOfMemberId,
+      triggerType: item.kind,
+    });
+
+    return {
+      advance: false,
+      summary: result.summary,
+      memberId,
+      usage: {
+        costCents: result.costCents,
+        tokensIn: result.tokensIn,
+        tokensOut: result.tokensOut,
+        modelName: result.modelName,
+        harnessName: result.harnessName,
+      },
+    };
+  } catch (err) {
+    if (err instanceof NoHarness) {
+      // Rethrown as a plain error so the runner records it and stops retrying —
+      // no number of attempts will conjure a key.
+      throw Object.assign(new Error(err.message), { permanent: true });
+    }
+    throw err;
+  }
+};
+
 /** A stage whose handler is not written yet parks the objective rather than failing it. */
 const notImplemented: Handler = async (item) => ({
   advance: false,
@@ -183,6 +255,7 @@ export const HANDLERS: Record<string, Handler> = {
   route_objective: routeObjective,
   assemble_working_group: assembleWorkingGroup,
   interrogate_objective: interrogateObjective,
+  agent_turn: agentTurn,
 };
 
 export function handlerFor(kind: string): Handler {
