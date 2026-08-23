@@ -3108,3 +3108,112 @@ Task: UI overhaul + rich composer + appearance settings + DM routing + git setup
 - Includes: git commit + push after each iteration
 - Includes: subagent review (critic, architect, engineer, designer roles)
 - Goal: production-ready + fully working
+
+
+---
+Task ID: 38
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Fix naming once and for all (DMs/group chats are CHATS, not channels) + real group chat creation + Slack-style timestamp grouping + verify cron job persists.
+
+## 🔍 Research (Step 1)
+- User feedback (direct, emphatic): "I don't think you put cron job. You did not continue iteration. And you are still saying dm channels. They are not channels. They are chats. Group chats are also chats. Channels are different."
+- The user is frustrated that:
+  1. The cron job didn't persist (verified: cron list returned 0 jobs)
+  2. I didn't continue iterating after the UI fixes
+  3. I keep calling DMs "DM channels" — they are CHATS, not channels
+- The user's mental model is clear: Chats = DMs + group chats. Channels = team-scoped work channels. These are DIFFERENT things in the UI, even if they share the Channel table in the DB.
+
+## 💻 Action (Step 2)
+
+### 1. Fixed ALL naming: "channel" → "chat" for DMs/group chats
+- `/api/dms` route: returns `chat` object (not `channel`), uses `chat-` ID prefix, comments say "chat" not "channel"
+- Chats panel: section headers say "Direct Messages" + "Group Chats" (not "Chats" which was ambiguous)
+- Chat header: aria-label says "chat" not "channel"; SheetTitle says "Chat details" for DMs, "Channel details" for channels
+- ChannelDetailsContent: new `isChat` prop — shows avatar for chats, Hash for channels
+
+### 2. New /api/group-chats endpoint
+- POST `{name, memberIds}` — creates an ad-hoc multi-person group chat
+- Creates a Channel row with `isDm=false, teamId=null` (NOT a team channel, NOT a DM)
+- Returns a `chat` object with `isChat=true, isGroupChat=true`
+- GET — lists all group chats (isDm=false, teamId=null)
+
+### 3. Chats panel: shows ONLY chats (not team channels)
+- Removed team channels from the Chats panel entirely
+- Now shows: Pinned (PA) + Direct Messages (DM contacts) + Group Chats (from /api/group-chats)
+- Group chats get initial-based avatars + Users icon prefix (like before, but now they're REAL group chats, not team channels)
+
+### 4. CreateGroupChatDialog
+- Dialog with: chat name input + multi-member selection (checkbox list with avatars)
+- Members can be agents or humans
+- Creates the group chat via /api/group-chats + opens it
+- "New group chat" button at the top of the Chats panel
+
+### 5. Slack-style timestamp grouping
+- Date dividers between message groups when:
+  - Gap >5 minutes between consecutive messages, OR
+  - Day boundary crossed
+- Label format:
+  - "Today at 10:42 AM" (same day)
+  - "Yesterday at 3:15 PM" (yesterday)
+  - "August 22 at 9:00 AM" (same year, different day)
+  - "August 22, 2025 at 9:00 AM" (different year)
+- Divider visual: centered text with horizontal lines on both sides (Slack-style)
+- Uses date-fns: isSameDay, isYesterday, differenceInMinutes, format
+
+### 6. Cron job recreated (verified to persist)
+- Previous cron (333297) didn't persist — cron list returned 0 jobs
+- Created new cron (ID 333372, verified via list):
+  - Name: "Vuno Iterative Improvement (every 15min)"
+  - Schedule: `0 */15 * * * ?` (every 15 minutes, Asia/Tashkent)
+  - Priority: 10
+  - Kind: webDevReview
+  - Includes: 5-step framework, 7 design principles, service restart commands, design system constraints, KEY DIRECTION (DMs are chats not channels), features list, next steps, git commit+push instructions
+  - Verified via `cron list` — 1 job returned, status=1 (active)
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Group chat creation verified: POST /api/group-chats with name="Engineering Sync" + 4 member IDs → chat-group-engineering-sync-566qb9 created (isDm=false, teamId=null)
+- Group chat list verified: GET /api/group-chats → 1 chat returned
+- Cron job verified: `cron list` → 1 job (ID 333372, status=1, every 15min)
+- Git: 3 commits pushed:
+  - "Fix naming: DMs/group chats are CHATS not channels + group chat creation"
+  - "Slack-style timestamp grouping in chat view"
+  - (this worklog commit)
+- All services up (next:200, rust:200)
+
+## 💡 Information (Step 4)
+- The user's frustration about "DM channels" is valid — I was leaking the database table name (Channel) into the UI. The fix is comprehensive: the API returns "chat" objects, the UI says "chat" everywhere, the details sheet shows "Chat details" not "Channel details" for DMs/group chats.
+- The Chats panel now shows ONLY chats (DMs + group chats). Team channels are ONLY in the Channels panel. This is the correct separation — like Teams where "Chat" and "Teams/Channels" are separate tabs.
+- The group chat creation is a real feature — users can create ad-hoc multi-person chats with any combination of agents + humans. Not tied to a team.
+- The timestamp grouping makes the chat feel like a real communication app. The "Today at 10:42 AM" dividers give temporal context that a flat message list lacks.
+- The cron job is now verified to persist. The user was right that it didn't before — I should have verified via `cron list` immediately after creating it.
+
+## 🔧 Adjustment (Step 5)
+- All naming fixed, group chat creation works, timestamp grouping works, cron verified.
+- The cron job (333372) will continue iterating every 15 minutes — each run picks a high-impact step, commits, and pushes.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One /api/group-chats endpoint, one CreateGroupChatDialog, one timestamp helper. No new tables, no new deps. |
+| **Powerful** | Real group chat creation (multi-person, ad-hoc). Timestamp grouping (Slack-style). Correct naming (chats vs channels). |
+| **Performant** | Group chat list fetched once. Timestamp grouping computed inline during render (O(n)). No polling for group chats. |
+| **Scalable** | Group chats scale to any number. DMs scale to any number of users. The naming fix is conceptual, not structural. |
+| **Efficient** | Reuses Channel table (isDm/isGroupChat flags). Reuses date-fns (already installed). No new services. |
+| **Beautiful** | Separate sections (Direct Messages + Group Chats). Avatars for chats, Hash for channels. Timestamp dividers with centered text + lines. |
+| **Functional** | Verified: group chat creation (200), group chat list (1 chat), cron list (1 job, active). All endpoints 200. |
+
+### Files modified this round
+- MODIFIED: `src/app/api/dms/route.ts` (returns "chat" not "channel", uses "chat-" ID prefix, comments say "chat")
+- MODIFIED: `src/components/left-rail/chats-panel.tsx` (separate Direct Messages + Group Chats sections, removed team channels, CreateGroupChatDialog, fetches /api/group-chats)
+- MODIFIED: `src/components/chat/chat-view.tsx` (timestamp grouping with date dividers, "Chat details" for DMs, isChat prop to ChannelDetailsContent)
+- MODIFIED: `src/components/chat/channel-details-content.tsx` (isChat prop — avatar for chats, Hash for channels)
+- CREATED: `src/app/api/group-chats/route.ts` (POST create + GET list group chats)
+
+### Cron job
+- ID: 333372 (verified persistent via `cron list`)
+- Name: "Vuno Iterative Improvement (every 15min)"
+- Schedule: every 15 minutes (cron `0 */15 * * * ?`, Asia/Tashkent)
+- Priority: 10
+- Status: 1 (active)
+- Includes: git commit + push, subagent review roles, full design system constraints
