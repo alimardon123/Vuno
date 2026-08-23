@@ -205,6 +205,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         if (!AdapterClass) continue;
         const adapter: AgentAdapter = new AdapterClass(agent.id);
         const ctx: AgentContext = {
+          scope: { scopeType: 'channel', scopeId: body.channelId },
           events: [],
           claims: [],
           trigger: {

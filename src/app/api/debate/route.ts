@@ -244,7 +244,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
       // Variable thinking time based on role
       const thinkTime = getThinkTime(role);
       await sendTyping(agentId, agentName, channelId, thinkTime);
-      const ctx: AgentContext = { events: contextEvents, claims: [], trigger: { type: triggerType, payload: triggerPayload } };
+      const ctx: AgentContext = { scope: { scopeType: 'channel', scopeId: channelId, projectId: project.id }, events: contextEvents, claims: [], trigger: { type: triggerType, payload: triggerPayload } };
       const response = await adapter.invoke(ctx);
       return await streamEvents(response.events);
     }
@@ -252,7 +252,7 @@ export async function POST(req: Request): Promise<NextResponse<DebateResponse>> 
     // ─── Phase 1: Architect proposes ────────────────────────────────────────
     const proposalTriggerPayload = { decisionId, projectId: project.id, title: body.title ?? 'Architecture: simulated proposal' };
     const architectAdapter = adapters[architect.id]!;
-    const architectCtx: AgentContext = { events: [], claims: [], trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload } };
+    const architectCtx: AgentContext = { scope: { scopeType: 'channel', scopeId: channelId, projectId: project.id }, events: [], claims: [], trigger: { type: 'ProposalRequested', payload: proposalTriggerPayload } };
     await sendTyping(architect.id, architect.name, channelId, getThinkTime('architect'));
     const architectResponse = await architectAdapter.invoke(architectCtx);
     const proposalCreated = await streamEvents(architectResponse.events);

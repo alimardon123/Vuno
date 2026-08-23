@@ -385,6 +385,7 @@ export async function POST(req: Request): Promise<NextResponse> {
             // Simulated adapter — canned context-aware response
             const adapter: AgentAdapter = new AdapterClass(targetAgent.id);
             const ctx: AgentContext = {
+              scope: { scopeType: 'channel', scopeId: body.channelId },
               events: [],
               claims: [],
               trigger: {

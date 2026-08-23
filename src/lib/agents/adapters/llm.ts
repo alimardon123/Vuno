@@ -21,6 +21,7 @@ import type {
   AgentResponse,
 } from '@/lib/agents/types';
 import type { NewEventInput } from '@/lib/events/types';
+import { parseAgentOutput } from '@/lib/events/schema';
 import { ROLE_LABELS } from '@/lib/agents/types';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -138,48 +139,50 @@ Respond now as ${roleLabel}. Output ONLY the JSON object.`;
 
       const responseText = completion.choices[0]?.message?.content ?? '';
 
-      // Parse the JSON response
+      // Parse, then validate at the boundary. The spine is append-only
+      // (ADR-0004), so an event that is wrong here is wrong forever — nothing
+      // reaches it without passing ./events/schema first.
       const parsed = parseLLMResponse(responseText);
 
-      // Convert to NewEventInput[]
-      const events: NewEventInput[] = [];
-
-      // Add thoughts first (they appear before the events in the chat)
-      for (const thought of parsed.thoughts ?? []) {
-        events.push({
+      // Thoughts are the model's own framing and carry no ledger consequence,
+      // so they are normalised here rather than trusted from the response.
+      const thoughtEvents: NewEventInput[] = (parsed.thoughts ?? [])
+        .filter((t) => typeof t?.content === 'string' && t.content.trim().length > 0)
+        .map((thought) => ({
           type: 'AgentThought',
           actorType: 'agent',
           actorAgentId: this.manifest.id,
-          scopeType: 'channel',
-          scopeId: 'ch-storage',
+          scopeType: ctx.scope.scopeType,
+          scopeId: ctx.scope.scopeId,
           payload: {
             thoughtType: thought.thoughtType,
             content: thought.content,
             topic: thought.topic ?? 'general',
             visibility: thought.visibility ?? 'org',
           },
-        });
-      }
+        } as NewEventInput));
 
-      // Add the structured events
-      for (const evt of parsed.events ?? []) {
-        events.push({
-          type: evt.type,
-          actorType: 'agent',
+      const validated = parseAgentOutput(
+        { events: parsed.events ?? [], claims: parsed.claims ?? [] },
+        {
           actorAgentId: this.manifest.id,
-          scopeType: evt.scopeType ?? 'channel',
-          scopeId: evt.scopeId ?? 'ch-storage',
-          payload: evt.payload,
-        });
+          defaultScopeType: ctx.scope.scopeType,
+          defaultScopeId: ctx.scope.scopeId,
+          defaultClaimScopeType: 'project',
+          defaultClaimScopeId: ctx.scope.projectId,
+        },
+      );
+
+      // Refusals are visible, not silent — a model that keeps producing invalid
+      // events is a prompt bug, and it should be findable in the logs.
+      for (const rejection of validated.rejections) {
+        console.warn(
+          `[llm-adapter] ${role}: refused ${rejection.at} — ${rejection.reason} · received ${rejection.received}`,
+        );
       }
 
-      // Convert claims
-      const claims = (parsed.claims ?? []).map((c) => ({
-        statement: c.statement,
-        status: c.status,
-        scopeType: c.scopeType ?? 'project',
-        scopeId: c.scopeId ?? 'proj-storage-engine',
-      }));
+      const events = [...thoughtEvents, ...validated.events];
+      const claims = validated.claims;
 
       return { events, claims };
     } catch (err) {
@@ -190,8 +193,8 @@ Respond now as ${roleLabel}. Output ONLY the JSON object.`;
           type: 'MessagePosted' as const,
           actorType: 'agent',
           actorAgentId: this.manifest.id,
-          scopeType: 'channel',
-          scopeId: 'ch-storage',
+          scopeType: ctx.scope.scopeType,
+          scopeId: ctx.scope.scopeId,
           payload: { body: `[${roleLabel}] LLM call failed: ${err instanceof Error ? err.message : String(err)}. Falling back to simulated behavior.` },
         }],
         claims: [],
