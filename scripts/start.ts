@@ -55,6 +55,19 @@ if (databaseUrl?.startsWith('file:')) {
   console.log(`  Database: ${file}`);
 }
 
+// Loopback by default. There is no authentication in this build — whoever
+// reaches the port is the org owner, and can post as them, hire, retire and
+// change roles. Binding to 0.0.0.0 by default handed that to the network.
+// Exposing it is a decision someone has to make on purpose.
+const hostname = process.env.HOSTNAME ?? '127.0.0.1';
+if (hostname !== '127.0.0.1' && hostname !== 'localhost') {
+  console.warn(
+    `\x1b[33m⚠ Binding to ${hostname}, and this build has no authentication.\x1b[0m\n` +
+      '  Anyone who can reach this port is the org owner. Put it behind something\n' +
+      '  that authenticates, or bind to 127.0.0.1.',
+  );
+}
+
 const proc = Bun.spawn(['bun', server], {
   cwd: standalone,
   stdout: 'inherit',
@@ -64,7 +77,7 @@ const proc = Bun.spawn(['bun', server], {
     ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
     NODE_ENV: 'production',
     PORT: process.env.PORT ?? '3000',
-    HOSTNAME: process.env.HOSTNAME ?? '0.0.0.0',
+    HOSTNAME: hostname,
   },
 });
 process.on('SIGINT', () => proc.kill());
