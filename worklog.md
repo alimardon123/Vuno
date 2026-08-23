@@ -3217,3 +3217,72 @@ Task: Fix naming once and for all (DMs/group chats are CHATS, not channels) + re
 - Priority: 10
 - Status: 1 (active)
 - Includes: git commit + push, subagent review roles, full design system constraints
+
+
+---
+Task ID: 39
+Agent: orchestrator (Z.ai Code main, direct user direction)
+Task: Teams-style threaded channels vs flat chats. Per the user: "inside the channels, messages are like threads like style. In group chats it is just group chats with basic replys. You can double check TEAMS on that."
+
+## 🔍 Research (Step 1)
+- User feedback: channels should use threaded/conversational layout (like Teams channels where each top-level message starts a conversation with replies nested under it). Group chats + DMs should use flat linear layout with basic inline replies (like WhatsApp/Slack DMs).
+- Current state: ALL messages render in a flat list regardless of scope type. ThreadReplyPosted renders inline with a border-l-2 but isn't actually nested under its parent.
+- The distinction:
+  - **Channels** (teamId != null, isDm=false): threaded — each top-level message is a "conversation starter", replies thread under it
+  - **Chats** (isDm=true OR group chat): flat — linear message flow, replies are basic inline
+
+## 💻 Action (Step 2)
+
+### 1. View mode determination
+- Added `isThreadedView` flag: `channel?.teamId != null && !channel?.isDm`
+  - True for team channels (e.g. #storage-engine) → threaded layout
+  - False for DMs (isDm=true) → flat layout
+  - False for group chats (teamId=null, isDm=false) → flat layout
+
+### 2. Threaded message grouping (useMemo)
+- `conversations` computed via useMemo when `isThreadedView` is true:
+  1. Build a `replyMap`: Map<parentId, ThreadReplyPosted[]> — groups all ThreadReplyPosted events by their parentId
+  2. Build conversations: iterate messages, skip ThreadReplyPosted (they're nested), attach replies from replyMap to each top-level message
+  3. Result: array of `{ parent, replies }` conversations
+
+### 3. Threaded rendering (channels)
+- Each conversation renders as a block:
+  - Parent message (full MessageBubble)
+  - If replies exist: nested under `ml-12 border-l-2 border-border/30 pl-2` (indented with left border)
+  - Each reply rendered as a full MessageBubble inside the nested container
+  - Conversation blocks separated by `border-b border-border/20`
+- Timestamp dividers between conversations (same logic as flat view)
+
+### 4. Flat rendering (chats — unchanged)
+- Linear message list (current behavior)
+- ThreadReplyPosted renders inline as a small reply with border-l-2
+- Timestamp dividers between message groups
+
+## 📊 Result (Step 3)
+- Lint: clean
+- Next.js: 200
+- Git: 1 commit pushed ("Teams-style: threaded channels vs flat chats")
+- The chat-view now renders channels in threaded style (conversation blocks with nested replies) and chats in flat style (linear list with basic inline replies)
+
+## 💡 Information (Step 4)
+- The Teams distinction is important: channels are for asynchronous, threaded discussions (like a forum), while chats are for synchronous, linear conversation (like instant messaging).
+- The threaded grouping uses ThreadReplyPosted.parentId to nest replies under their parent. This means the reply feature (which posts ThreadReplyPosted with parentId) now visually creates proper threaded conversations in channels.
+- In chats (DMs + group chats), replies are still inline — they don't nest. This matches WhatsApp/Slack DM behavior where replies are just quoted inline.
+- The `ml-12` indentation for nested replies aligns with the avatar column (avatar is ~32px + gap), so replies visually nest under the message body, not the avatar.
+
+## 🔧 Adjustment (Step 5)
+- Threaded channels + flat chats implemented. The cron job (333372) will continue iterating.
+
+## Design principles
+| Principle | How |
+|---|---|
+| **Simple** | One `isThreadedView` flag, one `conversations` useMemo, two rendering paths. No new components, no new event types. |
+| **Powerful** | Channels now have proper threaded conversations (Teams-style). The reply feature visually creates nested threads. |
+| **Performant** | conversations computed once via useMemo (recomputed only when messages or isThreadedView change). O(n) pass. |
+| **Scalable** | Handles any number of conversations + replies. The replyMap lookup is O(1) per parent. |
+| **Efficient** | Reuses existing ThreadReplyPosted event type + parentId field. No new data, no new queries. |
+| **Beautiful** | Threaded channels: nested replies with left border, conversation blocks with separators. Matches Teams channel layout. |
+| **Functional** | Verified: lint clean, Next.js 200, committed + pushed. |
+
+### Files modified this round
+- MODIFIED: `src/components/chat/chat-view.tsx` (isThreadedView flag + conversations useMemo + threaded rendering path with nested replies)
