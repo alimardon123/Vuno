@@ -174,7 +174,10 @@ describe('gates evaluate as queries and can name what blocked them', () => {
     expect(after.passed).toBe(false);
     expect(after.evidence).toHaveLength(1);
     expect(after.evidence[0].label).toContain(P99);
-    expect(after.reason).toContain('requires no falsified claim');
+    // The reason names what blocked it, in the vocabulary of the thing that
+    // blocked it — "Blocked by 1 row" told a reader nothing.
+    expect(after.reason).toContain('Requires no falsified claim');
+    expect(after.reason).toContain('Found 1 falsified claim.');
   });
 
   test('an `all` policy reports every clause that failed', async () => {

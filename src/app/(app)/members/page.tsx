@@ -3,7 +3,7 @@
 // name — it is a team of agents inside the org, not a tab.
 
 import { db } from '@/lib/db';
-import { listMembers, memberLabel } from '@/lib/members';
+import { listMembers, memberLabel, roleLabel } from '@/lib/members';
 import { Avatar, Empty, PresenceDot, SectionLabel } from '@/components/vuno/primitives';
 
 export const dynamic = 'force-dynamic';
@@ -58,8 +58,12 @@ export default async function MembersPage() {
                       </span>
                     ) : null}
                   </div>
+                  {/* Handle first, so every row starts with the same thing, then
+                      what they are doing if they are doing something. */}
                   <p className="truncate text-[11px] text-[var(--fg-3)]">
-                    {m.presenceNote ?? (assignment ? `${assignment.team} · ${assignment.role.toLowerCase().replace(/_/g, ' ')}` : `@${m.handle}`)}
+                    @{m.handle}
+                    {assignment ? ` · ${roleLabel(assignment.role.toLowerCase())}` : ''}
+                    {m.presenceNote ? ` · ${m.presenceNote}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

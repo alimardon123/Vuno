@@ -119,6 +119,21 @@ async function runQuery(
   return out;
 }
 
+/** What the rows are, counted and named — "1 falsified claim", "2 open high-or-worse risks". */
+function countPhrase(q: Query, n: number): string {
+  const plural = n === 1 ? '' : 's';
+  if (q.subject === 'claim') {
+    const statuses = q.status?.length ? `${q.status.join(' or ')} ` : '';
+    return `${n} ${statuses}claim${plural}`;
+  }
+  const sev = q.severityAtLeast ? `${q.severityAtLeast}-or-worse ` : '';
+  return `${n} open ${sev}risk${plural}`;
+}
+
+function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 async function evaluatePolicy(
   policy: Policy,
   ctx: { orgId: string; projectId: string },
@@ -140,13 +155,15 @@ async function evaluatePolicy(
   const passed = 'none' in policy ? rows.length === 0 : rows.length > 0;
   const described = describePolicy(policy);
 
+  // "Blocked by 1 row" told a reader nothing: a gate has to name what blocked it
+  // in the vocabulary of the thing that blocked it, not of the query that found it.
   return {
     passed,
     reason: passed
-      ? `Satisfied: ${described}.`
+      ? `${sentence(described)}.`
       : 'none' in policy
-        ? `Blocked by ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} — requires ${described}.`
-        : `Blocked: requires ${described}, found none.`,
+        ? `Requires ${described}. Found ${countPhrase(q, rows.length)}.`
+        : `Requires ${described}. Found none.`,
     evidence: passed ? [] : rows.slice(0, 10),
   };
 }

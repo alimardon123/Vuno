@@ -2,7 +2,7 @@
 // The differentiator, so it stays one click from anywhere.
 
 import { db } from '@/lib/db';
-import { memberMap } from '@/lib/members';
+import { memberMap, roleLabel } from '@/lib/members';
 import { claimHistory } from '@/lib/ledger/claims';
 import { Avatar, Empty, RelativeTime, StatusPill, StatusTrail, type ClaimStatus } from '@/components/vuno/primitives';
 
@@ -25,6 +25,7 @@ export default async function LedgerPage() {
   return (
     <main className="scroll-y min-w-0 flex-1">
       <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)] px-6 py-3">
+        <div className="mx-auto w-full max-w-[70rem]">
         <div className="flex items-baseline gap-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.015em]">Ledger</h1>
           <span className="tnum text-[11.5px] text-[var(--fg-4)]">{claims.length} claims</span>
@@ -40,12 +41,13 @@ export default async function LedgerPage() {
             </span>
           ))}
         </div>
+        </div>
       </header>
 
       {claims.length === 0 ? (
         <Empty title="Nothing on the ledger yet" hint="A proposal becomes a claim. Evidence moves it." />
       ) : (
-        <ul className="divide-y divide-[var(--line)]">
+        <ul className="mx-auto w-full max-w-[70rem] divide-y divide-[var(--line)]">
           {claims.map((c, i) => {
             const history = histories[i];
             const member = c.provenanceMemberId ? members.get(c.provenanceMemberId) : null;
@@ -54,7 +56,7 @@ export default async function LedgerPage() {
             try { evidence = JSON.parse(c.evidenceIds || '[]') as string[]; } catch { evidence = []; }
 
             return (
-              <li key={c.id} className="px-6 py-3 transition-colors hover:bg-[var(--hover)]">
+              <li key={c.id} id={`claim-${c.id}`} className="scroll-mt-20 px-6 py-3 transition-colors hover:bg-[var(--hover)]">
                 <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
                   <p className="min-w-0 flex-1 text-[13px] font-medium leading-[1.45] text-[var(--fg)]">{c.statement}</p>
                   <StatusPill status={c.status as ClaimStatus} />
@@ -66,7 +68,7 @@ export default async function LedgerPage() {
                     <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--fg-3)]">
                       <Avatar name={member.displayName} kind={member.kind} size="xs" />
                       {member.displayName}
-                      {member.role ? <span className="text-[var(--fg-4)]">· {member.role}</span> : null}
+                      {member.role ? <span className="text-[var(--fg-4)]">· {roleLabel(member.role)}</span> : null}
                     </span>
                   ) : (
                     <span className="text-[11px] text-[var(--fg-4)]">system</span>

@@ -103,6 +103,8 @@ export interface TransitionInput {
   memberId?: string | null;
   scopeType?: string;
   scopeId?: string;
+  /** When the move happened, when that differs from now — seeding and import. */
+  occurredAt?: Date;
 }
 
 /**
@@ -138,6 +140,7 @@ export async function transitionClaim(input: TransitionInput): Promise<{
         reason: input.reason,
         evidenceEventId: input.evidenceEventIds?.[0],
       },
+      ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
     },
   ]);
 
@@ -148,7 +151,7 @@ export async function transitionClaim(input: TransitionInput): Promise<{
       status: input.to,
       statusReason: input.reason,
       evidenceIds: JSON.stringify([...new Set([...evidence, ...(input.evidenceEventIds ?? [])])]),
-      updatedAt: new Date(),
+      updatedAt: input.occurredAt ?? new Date(),
     },
   });
 

@@ -892,12 +892,18 @@ function buildEventArc(): NewEventInput[] {
   return inputs;
 }
 
-async function createClaims(createdEvents: { id: string; type: string; payload: unknown }[]) {
+async function createClaims(
+  createdEvents: { id: string; type: string; payload: unknown; createdAt: string }[],
+) {
   const proposalEvent = createdEvents.find((e) => e.type === 'ProposalOpened');
   if (!proposalEvent) throw new Error('ProposalOpened event not found in seed arc');
   const benchmarkEvent = createdEvents.find((e) => e.type === 'BenchmarkReported');
   if (!benchmarkEvent) throw new Error('BenchmarkReported event not found in seed arc');
   const objectionEvent = createdEvents.find((e) => e.type === 'ObjectionRaised');
+
+  // A claim moved when the evidence for it landed, not when the seed ran. The
+  // ledger otherwise reports a fortnight of debate as "updated 1m".
+  const when = (iso: string, plusMinutes = 0) => new Date(new Date(iso).getTime() + plusMinutes * 60_000);
 
   // The seed no longer writes a claim that is *born* falsified. It walks the
   // same path the product does: asserted when the proposal opens, believed once
@@ -918,6 +924,7 @@ async function createClaims(createdEvents: { id: string; type: string; payload: 
     to: 'believed',
     reason: 'Architecture proposal reviewed; the team accepted the LSM approach on its reasoning.',
     memberId: IDS.agentAris,
+    occurredAt: when(proposalEvent.createdAt, 90),
   });
 
   await transitionClaim({
@@ -927,6 +934,7 @@ async function createClaims(createdEvents: { id: string; type: string; payload: 
       'Benchmark measured p99 = 142ms at 10k concurrent readers against a 50ms target. Bloom filter memory overhead pushed the working set beyond RAM.',
     evidenceEventIds: [benchmarkEvent.id],
     memberId: IDS.agentPeri,
+    occurredAt: when(benchmarkEvent.createdAt, 4),
   });
 
   // Devi's objection, which the benchmark went on to confirm.
@@ -946,6 +954,7 @@ async function createClaims(createdEvents: { id: string; type: string; payload: 
       to: 'believed',
       reason: 'Raised as an objection with a memory model behind it.',
       memberId: IDS.agentDevi,
+      occurredAt: when(objectionEvent.createdAt, 12),
     });
     await transitionClaim({
       claimId: bloom.id,
@@ -954,6 +963,7 @@ async function createClaims(createdEvents: { id: string; type: string; payload: 
         'Confirmed by the benchmark: working set exceeded RAM and SSTable disk reads dominated tail latency.',
       evidenceEventIds: [benchmarkEvent.id],
       memberId: IDS.agentPeri,
+      occurredAt: when(benchmarkEvent.createdAt, 11),
     });
   }
 

@@ -48,7 +48,11 @@ export default async function WorkPage() {
             const pending = mine.filter((i) => i.state === 'pending').length;
 
             return (
-              <article key={o.id} className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
+              <article
+                key={o.id}
+                id={`objective-${o.id}`}
+                className="scroll-mt-20 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]"
+              >
                 <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5 px-4 pb-2.5 pt-3">
                   <div className="min-w-0 flex-1">
                     <h2 className="text-[14px] font-semibold tracking-[-0.012em]">{o.title}</h2>
@@ -84,7 +88,9 @@ export default async function WorkPage() {
                       </span>
                     ) : null}
                     {!spec.implemented ? (
-                      <span className="ml-auto text-[10.5px] text-[var(--fg-4)]">parked — no handler for this stage yet</span>
+                      // Says what it means for the reader, not what it means for
+                      // the runtime: they are the one this is waiting on.
+                      <span className="ml-auto text-[10.5px] text-[var(--fg-4)]">Waiting on you — the orchestrator cannot advance this stage</span>
                     ) : null}
                   </div>
                   <div className="flex gap-px overflow-hidden rounded-full" role="img" aria-label={`Stage ${progress.index} of ${progress.total}`}>
@@ -138,7 +144,7 @@ export default async function WorkPage() {
                   let evidence: Array<{ label: string }> = [];
                   try { evidence = JSON.parse(g.evidence || '[]') as Array<{ label: string }>; } catch { evidence = []; }
                   return (
-                    <li key={g.id} className="border-b border-[var(--line)] px-4 py-2 last:border-b-0">
+                    <li key={g.id} id={`gate-${g.id}`} className="scroll-mt-20 border-b border-[var(--line)] px-4 py-2 last:border-b-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[12.5px] font-medium">{gateLabel(g.name)}</span>
                         <GateChip state={g.state} />

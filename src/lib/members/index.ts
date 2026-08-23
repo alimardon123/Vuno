@@ -99,7 +99,9 @@ export async function listMembers(
       ...(opts.kind ? { kind: opts.kind } : {}),
       ...(opts.includeRetired ? {} : { status: 'active' }),
     },
-    orderBy: [{ kind: 'asc' }, { displayName: 'asc' }],
+    // One roster, one order. Sorting by kind first put every agent above every
+    // person, which contradicts the parity the surface claims (ADR-0009).
+    orderBy: [{ displayName: 'asc' }],
     select: SELECT,
   });
   return (rows as Row[]).map(toSummary);
@@ -143,13 +145,33 @@ export async function getAssistantFor(ownerMemberId: string): Promise<MemberSumm
  * How a member is labelled wherever their name appears. An assistant reads as
  * itself with the chip that says whose it is — never as its owner (ADR-0009 §1).
  */
+/**
+ * A role is stored as an identifier (`devils_advocate`, `hr`, `perf`) and it is
+ * rendered, so it needs a label — the roster read "devils_advocate" and "hr"
+ * for the same reason a gate read "Qa".
+ */
+export function roleLabel(role: string): string {
+  const known: Record<string, string> = {
+    architect: 'Architect',
+    product: 'Product',
+    perf: 'Performance',
+    security: 'Security',
+    devils_advocate: "Devil's advocate",
+    verifier: 'Verifier',
+    hr: 'HR',
+    research: 'Research',
+    assistant: 'Assistant',
+  };
+  return known[role] ?? role.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
 export function memberLabel(m: MemberSummary): { name: string; chip: string | null } {
   if (m.kind === 'human') {
-    return { name: m.displayName, chip: m.isOrgOwner ? 'owner' : null };
+    return { name: m.displayName, chip: m.isOrgOwner ? 'Owner' : null };
   }
   return {
     name: m.displayName,
-    chip: m.ownerName ? `${m.ownerName}'s assistant` : (m.role ?? 'agent'),
+    chip: m.ownerName ? `${m.ownerName}'s assistant` : (m.role ? roleLabel(m.role) : 'Agent'),
   };
 }
 

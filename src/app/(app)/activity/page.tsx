@@ -4,7 +4,9 @@
 // to you and you become the bottleneck the product was meant to remove. You
 // cannot manage that without a place that shows it.
 
+import Link from 'next/link';
 import { db } from '@/lib/db';
+import { cn } from '@/lib/utils';
 import { memberMap } from '@/lib/members';
 import { isStage, STAGES } from '@/lib/orchestrator/stages';
 import { Avatar, Empty, GateChip, RelativeTime, StatusPill, gateLabel, type ClaimStatus } from '@/components/vuno/primitives';
@@ -57,7 +59,7 @@ export default async function ActivityPage() {
               let evidence: Array<{ label: string }> = [];
               try { evidence = JSON.parse(g.evidence || '[]') as Array<{ label: string }>; } catch { evidence = []; }
               return (
-                <Row key={g.id}>
+                <Row key={g.id} href={`/work#gate-${g.id}`}>
                   <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex items-center gap-2">
                       <span className="text-[12.5px] font-semibold">{gateLabel(g.name)}</span>
@@ -79,7 +81,7 @@ export default async function ActivityPage() {
             {parked.map((o) => {
               const stage = isStage(o.stage) ? o.stage : 'filed';
               return (
-                <Row key={o.id}>
+                <Row key={o.id} href={`/work#objective-${o.id}`}>
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-[12.5px] font-semibold">{o.title}</span>
                     <span className="text-[11.5px] text-[var(--fg-3)]">
@@ -95,7 +97,7 @@ export default async function ActivityPage() {
         {failedItems.length > 0 ? (
           <Panel title="Work that failed" hint="Retried to its attempt limit and stopped, rather than looping.">
             {failedItems.map((i) => (
-              <Row key={i.id}>
+              <Row key={i.id} href={`/work#objective-${i.objectiveId}`}>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate font-mono text-[12px]">{i.kind}</span>
                   <span className="truncate text-[11.5px] text-[var(--falsified)]">{i.lastError}</span>
@@ -110,7 +112,7 @@ export default async function ActivityPage() {
           {recentClaims.map((c) => {
             const m = c.provenanceMemberId ? members.get(c.provenanceMemberId) : null;
             return (
-              <Row key={c.id}>
+              <Row key={c.id} href={`/ledger#claim-${c.id}`}>
                 {m ? <Avatar name={m.displayName} kind={m.kind} size="xs" /> : <span className="size-5" />}
                 <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--fg-2)]">{c.statement}</span>
                 <StatusPill status={c.status as ClaimStatus} />
@@ -156,10 +158,25 @@ function Panel({ title, hint, children }: { title: string; hint?: string; childr
   );
 }
 
-function Row({ children }: { children: React.ReactNode }) {
+/**
+ * A row, and a link to the thing it names when there is one. Activity used to
+ * report a blocked gate and a falsified claim and leave you to go find them —
+ * "every surface has a URL" is only useful if something points at it.
+ */
+function Row({ children, href }: { children: React.ReactNode; href?: string }) {
+  const inner = 'flex items-center gap-2.5 px-4 py-2 transition-colors';
   return (
-    <li className="flex items-center gap-2.5 border-b border-[var(--line)] px-4 py-2 last:border-b-0 transition-colors hover:bg-[var(--hover)]">
-      {children}
+    <li className="border-b border-[var(--line)] last:border-b-0">
+      {href ? (
+        <Link
+          href={href}
+          className={cn(inner, 'hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)]')}
+        >
+          {children}
+        </Link>
+      ) : (
+        <div className={cn(inner, 'hover:bg-[var(--hover)]')}>{children}</div>
+      )}
     </li>
   );
 }
