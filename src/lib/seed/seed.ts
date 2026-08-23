@@ -5,6 +5,8 @@
 
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
+import { assertClaim, transitionClaim } from '@/lib/ledger/claims';
+import { evaluateGate } from '@/lib/gates';
 import type { NewEventInput } from '@/lib/events/types';
 
 // Stable IDs so events can reference each other
@@ -338,10 +340,31 @@ async function createWorkGraph() {
 
   // gates
   const gates = [
-    { id: IDS.gateSecurity, name: 'security', policy: 'no open RiskFlag of severity >= high on this project' },
-    { id: IDS.gateQA, name: 'qa', policy: 'all unit + integration tests pass' },
-    { id: IDS.gatePerf, name: 'performance', policy: 'p99 < 50ms at 10k concurrent readers' },
-    { id: IDS.gateRelease, name: 'release', policy: 'all upstream gates passed AND no open RiskFlag severity >= high' },
+    {
+      id: IDS.gateSecurity,
+      name: 'security',
+      policy: JSON.stringify({ none: { subject: 'risk', severityAtLeast: 'high' } }),
+    },
+    {
+      id: IDS.gateQA,
+      name: 'qa',
+      policy: JSON.stringify({ none: { subject: 'claim', status: ['falsified'], statementContains: 'test' } }),
+    },
+    {
+      id: IDS.gatePerf,
+      name: 'performance',
+      policy: JSON.stringify({ none: { subject: 'claim', status: ['falsified'] } }),
+    },
+    {
+      id: IDS.gateRelease,
+      name: 'release',
+      policy: JSON.stringify({
+        all: [
+          { none: { subject: 'claim', status: ['falsified'] } },
+          { none: { subject: 'risk', severityAtLeast: 'high' } },
+        ],
+      }),
+    },
   ];
   for (const g of gates) {
     await db.gate.create({
@@ -538,19 +561,11 @@ function buildEventArc(): NewEventInput[] {
     },
   });
 
-  // 12. ClaimStatusChanged: believed → falsified (the killer demo transition)
-  inputs.push({
-    type: 'ClaimStatusChanged',
-    actorType: 'system',
-    scopeType: 'channel',
-    scopeId: IDS.channel,
-    payload: {
-      claimId: IDS.claimP99,
-      from: 'believed',
-      to: 'falsified',
-      reason: 'Benchmark refutes: p99=142ms vs target=50ms at 10k concurrent readers. Bloom filter memory overhead pushed working set beyond RAM.',
-    },
-  });
+  // The falsification itself is not scripted here. transitionClaim appends the
+  // ClaimStatusChanged when the claim actually moves, so the log holds one
+  // transition per real move rather than a narrated one alongside it. Writing it
+  // here as well produced an event naming a claim id that did not exist, which
+  // replay would have reported as a phantom claim.
 
   // 13. Peri flags the risk
   inputs.push({
@@ -634,89 +649,89 @@ function buildEventArc(): NewEventInput[] {
 }
 
 async function createClaims(createdEvents: { id: string; type: string; payload: unknown }[]) {
-  // Find the ProposalOpened event — it is the provenance of the believed claim
   const proposalEvent = createdEvents.find((e) => e.type === 'ProposalOpened');
   if (!proposalEvent) throw new Error('ProposalOpened event not found in seed arc');
   const benchmarkEvent = createdEvents.find((e) => e.type === 'BenchmarkReported');
   if (!benchmarkEvent) throw new Error('BenchmarkReported event not found in seed arc');
+  const objectionEvent = createdEvents.find((e) => e.type === 'ObjectionRaised');
 
-  // The believed claim — created when Aris opened the proposal
-  await db.claim.create({
-    data: {
-      id: IDS.claimP99,
-      tenantId: IDS.tenant,
-      orgId: IDS.org,
-      statement: 'p99 read latency < 50ms at 10k concurrent readers',
-      status: 'falsified', // post-falsification status
-      scopeType: 'project',
-      scopeId: IDS.project,
-      provenanceEventId: proposalEvent.id,
-      provenanceActorType: 'agent',
-      provenanceMemberId: IDS.agentAris,
-      evidenceIds: JSON.stringify([benchmarkEvent.id]),
-      contradictsIds: JSON.stringify([]),
-      statusReason:
-        'Falsified by benchmark: p99=142ms vs target=50ms at 10k concurrent readers. Bloom filter memory overhead pushed working set beyond RAM.',
-      updatedAt: new Date(),
-    },
+  // The seed no longer writes a claim that is *born* falsified. It walks the
+  // same path the product does: asserted when the proposal opens, believed once
+  // the team accepts it, falsified when the benchmark comes back. The trail in
+  // the ledger is therefore real, and replaying the log reproduces it.
+  const p99 = await assertClaim({
+    tenantId: IDS.tenant,
+    orgId: IDS.org,
+    statement: 'p99 read latency < 50ms at 10k concurrent readers',
+    scopeType: 'project',
+    scopeId: IDS.project,
+    memberId: IDS.agentAris,
+    provenanceEventId: proposalEvent.id,
   });
 
-  // A second claim: bloom filters add 1.5x memory (Devi's objection) — tested and confirmed
-  const objectionEvent = createdEvents.find((e) => e.type === 'ObjectionRaised');
+  await transitionClaim({
+    claimId: p99.id,
+    to: 'believed',
+    reason: 'Architecture proposal reviewed; the team accepted the LSM approach on its reasoning.',
+    memberId: IDS.agentAris,
+  });
+
+  await transitionClaim({
+    claimId: p99.id,
+    to: 'falsified',
+    reason:
+      'Benchmark measured p99 = 142ms at 10k concurrent readers against a 50ms target. Bloom filter memory overhead pushed the working set beyond RAM.',
+    evidenceEventIds: [benchmarkEvent.id],
+    memberId: IDS.agentPeri,
+  });
+
+  // Devi's objection, which the benchmark went on to confirm.
   if (objectionEvent) {
-    await db.claim.create({
-      data: {
-        id: 'claim-bloom-mem',
-        tenantId: IDS.tenant,
-        orgId: IDS.org,
-        statement: 'Bloom filters add ~1.5x memory overhead at 10M keys, pushing working set beyond RAM under concurrent read pressure.',
-        status: 'tested',
-        scopeType: 'decision',
-        scopeId: IDS.decision,
-        provenanceEventId: objectionEvent.id,
-        provenanceActorType: 'agent',
-        provenanceMemberId: IDS.agentDevi,
-        evidenceIds: JSON.stringify([benchmarkEvent.id]),
-        contradictsIds: JSON.stringify([IDS.claimP99]),
-        statusReason: 'Confirmed by benchmark: working set exceeded RAM; SSTable disk reads dominated tail latency.',
-        updatedAt: new Date(),
-      },
+    const bloom = await assertClaim({
+      tenantId: IDS.tenant,
+      orgId: IDS.org,
+      statement:
+        'Bloom filters add ~1.5x memory overhead at 10M keys, pushing working set beyond RAM under concurrent read pressure.',
+      scopeType: 'project',
+      scopeId: IDS.project,
+      memberId: IDS.agentDevi,
+      provenanceEventId: objectionEvent.id,
+    });
+    await transitionClaim({
+      claimId: bloom.id,
+      to: 'believed',
+      reason: 'Raised as an objection with a memory model behind it.',
+      memberId: IDS.agentDevi,
+    });
+    await transitionClaim({
+      claimId: bloom.id,
+      to: 'tested',
+      reason:
+        'Confirmed by the benchmark: working set exceeded RAM and SSTable disk reads dominated tail latency.',
+      evidenceEventIds: [benchmarkEvent.id],
+      memberId: IDS.agentPeri,
     });
   }
+
+  // A claim nobody has evidence for either way — the ledger should be able to
+  // say "we do not know" as clearly as it says yes or no.
+  await assertClaim({
+    tenantId: IDS.tenant,
+    orgId: IDS.org,
+    statement: 'A single node is sufficient through the first 12 months of load.',
+    scopeType: 'project',
+    scopeId: IDS.project,
+    memberId: IDS.memberMira,
+  });
 }
 
 async function updateGateStates() {
-  // Performance gate — blocked
-  await db.gate.update({
-    where: { id: IDS.gatePerf },
-    data: {
-      state: 'blocked',
-      reason: 'p99=142ms > 50ms target',
-      evaluatedAt: new Date(),
-    },
-  });
-  // Release gate — blocked
-  await db.gate.update({
-    where: { id: IDS.gateRelease },
-    data: {
-      state: 'blocked',
-      reason: 'Performance gate blocked AND open high-severity RiskFlag on this project',
-      evaluatedAt: new Date(),
-    },
-  });
-  // Security gate — passed (no risk on this dimension)
-  await db.gate.update({
-    where: { id: IDS.gateSecurity },
-    data: { state: 'passed', reason: 'No open RiskFlag of severity >= high on this project', evaluatedAt: new Date() },
-  });
-  // QA gate — passed (tests in place)
-  await db.gate.update({
-    where: { id: IDS.gateQA },
-    data: { state: 'passed', reason: 'All unit + integration tests pass', evaluatedAt: new Date() },
-  });
-  // Decision state — resolved (falsified)
-  await db.decision.update({
-    where: { id: IDS.decision },
-    data: { state: 'resolved', outcome: 'falsified', updatedAt: new Date() },
-  });
+  // Gate state is evaluated, never written. Each gate carries a predicate and
+  // the engine runs it as a query over the ledger — so the seeded gates block
+  // for a reason the UI can name, rather than because the seed said so
+  // (ADR-0007 §C).
+  const gates = await db.gate.findMany({ where: { orgId: IDS.org }, select: { id: true } });
+  for (const g of gates) {
+    await evaluateGate(g.id);
+  }
 }

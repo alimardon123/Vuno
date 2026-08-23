@@ -169,7 +169,7 @@ export async function POST(req: Request) {
     }
     if (!ALLOWED_TYPES.has(body.type)) {
       return NextResponse.json(
-        { ok: false, error: `Type ${body.type} not allowed via this endpoint. Use /api/debate for orchestrated flows.` },
+        { ok: false, error: `Type ${body.type} not allowed via this endpoint. Use /api/claims for ledger writes, or file an objective and let the orchestrator run it.` },
         { status: 400 },
       );
     }

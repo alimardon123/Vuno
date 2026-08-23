@@ -264,6 +264,11 @@ model Claim {
   org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   provenanceMember Member?     @relation("ClaimProvenance", fields: [provenanceMemberId], references: [id], onDelete: SetNull)
 
+  // One claim per statement per scope. The debate route used to insert a fresh
+  // row on every run, which is how the shipped database ended up holding nine
+  // identical falsified claims. Status moves; claims are not re-created
+  // (ADR-0005).
+  @@unique([orgId, scopeType, scopeId, statement])
   @@index([tenantId, orgId, status])
   @@index([scopeType, scopeId])
   @@index([provenanceMemberId])
@@ -359,7 +364,12 @@ model Gate {
   projectId   String
   decisionId  String?
   name        String   // 'security' | 'qa' | 'performance' | 'release'
-  policy      String   // declarative policy text, e.g. "no open RiskFlag of severity >= high"
+  // A structured predicate over the ledger, evaluated as a query — not prose.
+  // See src/lib/gates. The human-readable form is derived from it, not stored.
+  policy      String   @default("{}")
+  // Which claims or risks satisfied the predicate at the last evaluation, so a
+  // blocked gate can name what blocked it.
+  evidence    String   @default("[]")
   state       String   @default("pending") // 'pending' | 'passed' | 'blocked'
   reason      String?
   evaluatedAt DateTime?

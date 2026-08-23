@@ -142,28 +142,41 @@ export function TypedComposer({ channelId }: { channelId: string }) {
     }
   }
 
-  async function postDebate(title: string) {
+  /**
+   * Filing a proposal asserts a claim. It does not run a scripted arc — the
+   * claim starts `asserted` and only moves when evidence arrives, which is the
+   * whole point of the ledger (ADR-0005).
+   */
+  async function postProposal(statement: string) {
     setSubmitting(true);
     try {
-      const res = await fetch('/api/debate', {
+      const projectRes = await fetch('/api/objectives');
+      const projects = (await projectRes.json()) as { objectives: { id: string }[] };
+      const scopeId = projects.objectives[0]?.id;
+      if (!scopeId) {
+        throw new Error('File an objective first — a proposal is a claim about some piece of work.');
+      }
+
+      const res = await fetch('/api/claims', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title || undefined, useRealLLM: useRealLLM }),
+        body: JSON.stringify({ action: 'assert', statement, scopeType: 'objective', scopeId }),
       });
-      const data = (await res.json()) as { ok: boolean; decisionId?: string; eventsAppended?: number; message?: string; error?: string };
-      if (!data.ok) throw new Error(data.error ?? 'Debate failed');
-      // Close any dialog/composer state first, then defer the chat refresh
-      // to avoid the React 19 Dialog close race.
+      const data = (await res.json()) as { ok: boolean; id?: string; created?: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? 'Could not file the proposal');
+
       setTimeout(() => {
         bumpChatNonce();
         toast({
-          title: 'Debate completed',
-          description: data.message,
+          title: data.created ? 'Claim asserted' : 'Claim already on the ledger',
+          description: data.created
+            ? 'It stays asserted until evidence moves it.'
+            : 'The organisation already holds this claim — status moves rather than duplicating.',
         });
       }, 0);
     } catch (e) {
       toast({
-        title: 'Debate failed',
+        title: 'Could not file the proposal',
         description: e instanceof Error ? e.message : String(e),
         variant: 'destructive',
       });
@@ -179,15 +192,10 @@ export function TypedComposer({ channelId }: { channelId: string }) {
       void postMessage(body.trim());
       return;
     }
-    // Proposal — triggers the full agent debate chain via /api/debate.
-    // Per the user's direction: no separate "Run debate" button.
-    // Filing a proposal IS how you start a debate — agents respond naturally.
+    // Filing a proposal asserts a claim on the ledger.
     if (type === 'Proposal') {
       if (!proposalTitle.trim() || !proposalBody.trim()) return;
-      // v1: the debate endpoint uses its own proposal title; the body field is
-      // ignored by the simulated architect (it picks from a rotation). In v2
-      // with real LLMs, the body will be passed through.
-      void postDebate(`${proposalTitle.trim()} — ${proposalBody.trim().slice(0, 80)}`);
+      void postProposal(`${proposalTitle.trim()} — ${proposalBody.trim().slice(0, 200)}`);
       setProposalTitle('');
       setProposalBody('');
       return;
