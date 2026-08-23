@@ -98,6 +98,36 @@ export function ChatView() {
 
   const messages = eventsRes.data?.chatMessages ?? [];
 
+  // Determine the view mode: channels use threaded layout (conversations with
+  // nested replies), chats (DMs + group chats) use flat layout with basic
+  // inline replies. Per the user's direction: "inside the channels, messages
+  // are like threads like style. In group chats it is just group chats with
+  // basic replys."
+  const isThreadedView = channel?.teamId != null && !channel?.isDm;
+
+  // For threaded channels: group messages into conversations (parent + replies)
+  const conversations = useMemo(() => {
+    if (!isThreadedView) return null;
+    const replyMap = new Map<string, typeof messages>();
+    for (const m of messages) {
+      if (m.type === 'ThreadReplyPosted') {
+        const parentId = (m.payload as { parentId?: string }).parentId;
+        if (parentId) {
+          if (!replyMap.has(parentId)) replyMap.set(parentId, []);
+          replyMap.get(parentId)!.push(m);
+        }
+      }
+    }
+    // Build conversations: top-level messages (non-replies) with their nested replies
+    const convs: Array<{ parent: typeof messages[0]; replies: typeof messages }> = [];
+    for (const m of messages) {
+      if (m.type === 'ThreadReplyPosted') continue; // replies are nested, not top-level
+      const replies = replyMap.get(m.id) ?? [];
+      convs.push({ parent: m, replies });
+    }
+    return convs;
+  }, [messages, isThreadedView]);
+
   // autoscroll to bottom
   const bottomRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -173,17 +203,60 @@ export function ChatView() {
         ) : null}
       </header>
 
-      {/* Messages */}
+      {/* Messages — threaded for channels, flat for chats (DMs + group chats) */}
       <ScrollArea className="min-h-0 flex-1 scrollbar-sleek">
         <div className="flex flex-col py-1">
           {eventsRes.loading ? (
             <ChatSkeleton />
           ) : messages.length === 0 ? (
             <EmptyMessages />
+          ) : isThreadedView && conversations ? (
+            // ─── Threaded view (channels) — conversation blocks with nested replies ───
+            conversations.map((conv, i) => {
+              const showDivider = i === 0 || (() => {
+                const prev = new Date(conversations[i - 1]!.parent.createdAt);
+                const curr = new Date(conv.parent.createdAt);
+                if (!isSameDay(prev, curr)) return true;
+                if (differenceInMinutes(curr, prev) >= 5) return true;
+                return false;
+              })();
+
+              return (
+                <div key={conv.parent.id}>
+                  {showDivider ? (
+                    <div className="flex items-center gap-3 px-4 py-2" role="separator" aria-label={formatDividerLabel(new Date(conv.parent.createdAt))}>
+                      <div className="h-px flex-1 bg-border/40" />
+                      <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
+                        {formatDividerLabel(new Date(conv.parent.createdAt))}
+                      </span>
+                      <div className="h-px flex-1 bg-border/40" />
+                    </div>
+                  ) : null}
+                  {/* Conversation block: parent message + nested replies */}
+                  <div className="border-b border-border/20">
+                    <MessageBubble
+                      message={conv.parent}
+                      onOpenDecision={(id) => setActiveDecision(id)}
+                    />
+                    {/* Nested replies — indented with a left border */}
+                    {conv.replies.length > 0 ? (
+                      <div className="ml-12 border-l-2 border-border/30 pl-2">
+                        {conv.replies.map((reply) => (
+                          <MessageBubble
+                            key={reply.id}
+                            message={reply}
+                            onOpenDecision={(id) => setActiveDecision(id)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
           ) : (
+            // ─── Flat view (chats: DMs + group chats) — linear list with basic replies ───
             messages.map((m, i) => {
-              // Slack-style timestamp grouping: insert a date divider when
-              // there's a gap >5min OR a day boundary between messages.
               const showDivider = i === 0 || (() => {
                 const prev = new Date(messages[i - 1]!.createdAt);
                 const curr = new Date(m.createdAt);
