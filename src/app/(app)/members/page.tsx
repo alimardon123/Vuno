@@ -3,8 +3,10 @@
 // name — it is a team of agents inside the org, not a tab.
 
 import { db } from '@/lib/db';
-import { listMembers, memberLabel, roleLabel } from '@/lib/members';
-import { Avatar, Empty, PresenceDot, SectionLabel } from '@/components/vuno/primitives';
+import { listMembers, roleLabel } from '@/lib/members';
+import { configuredHarnesses } from '@/lib/agents/registry';
+import { Empty } from '@/components/vuno/primitives';
+import { Roster, type RosterMember } from '@/components/vuno/roster';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,68 +16,65 @@ export default async function MembersPage() {
     return <main className="flex flex-1 items-center justify-center"><Empty title="No organisation yet" hint="Run bun run setup." /></main>;
   }
 
-  const [members, teams, memberships] = await Promise.all([
-    listMembers(org.id),
-    db.team.findMany({ where: { orgId: org.id }, select: { id: true, name: true } }),
+  const [members, teams, memberships, agents] = await Promise.all([
+    // Retired members stay on the roster in their own section: they authored
+    // events and carry claims, and a roster that erases them makes the org's
+    // own history unreadable.
+    listMembers(org.id, { includeRetired: true }),
+    db.team.findMany({ where: { orgId: org.id }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     db.membership.findMany({ where: { orgId: org.id }, select: { memberId: true, teamId: true, role: true } }),
+    db.agentProfile.findMany({ select: { memberId: true, modelName: true, harnessName: true } }),
   ]);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const roleOf = new Map(memberships.map((m) => [m.memberId, { team: teamName.get(m.teamId) ?? null, role: m.role }]));
+  const assignment = new Map(memberships.map((m) => [m.memberId, m]));
+  const harness = new Map(agents.map((a) => [a.memberId, a]));
+
+  const roster: RosterMember[] = members.map((m) => {
+    const seat = assignment.get(m.id);
+    const run = harness.get(m.id);
+    return {
+      id: m.id,
+      kind: m.kind,
+      displayName: m.displayName,
+      handle: m.handle,
+      role: m.role,
+      roleLabel: m.role ? roleLabel(m.role) : null,
+      status: m.status,
+      presenceState: m.presenceState,
+      presenceNote: m.presenceNote,
+      teamId: seat?.teamId ?? m.teamId,
+      teamName: seat ? (teamName.get(seat.teamId) ?? null) : m.teamId ? (teamName.get(m.teamId) ?? null) : null,
+      teamRole: seat?.role ?? null,
+      ownerMemberId: m.ownerMemberId,
+      ownerName: m.ownerName,
+      isOrgOwner: m.isOrgOwner,
+      harnessName: run?.harnessName ?? null,
+      modelName: run?.modelName ?? null,
+    };
+  });
+
+  const people = roster.filter((m) => m.kind === 'human' && m.status === 'active').length;
+  const bots = roster.filter((m) => m.kind === 'agent' && m.status === 'active').length;
 
   return (
     <main className="scroll-y min-w-0 flex-1">
       <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)] px-6 py-3">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.015em]">Members</h1>
-          <span className="tnum text-[11.5px] text-[var(--fg-4)]">
-            {members.filter((m) => m.kind === 'human').length} people · {members.filter((m) => m.kind === 'agent').length} agents
-          </span>
+        <div className="mx-auto w-full max-w-[70rem]">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-[15px] font-semibold tracking-[-0.015em]">Members</h1>
+            <span className="tnum text-[11.5px] text-[var(--fg-4)]">
+              {people} {people === 1 ? 'person' : 'people'} · {bots} {bots === 1 ? 'agent' : 'agents'}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11.5px] text-[var(--fg-3)]">
+            One roster. A person and an agent are the same kind of member — same teams, same workflow, same rows.
+          </p>
         </div>
-        <p className="mt-0.5 text-[11.5px] text-[var(--fg-3)]">
-          One roster. A person and an agent are the same kind of member — same teams, same workflow, same rows.
-        </p>
       </header>
 
-      <div className="px-6 pb-8">
-        <SectionLabel count={members.length}>Everyone</SectionLabel>
-        <ul className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
-          {members.map((m) => {
-            const label = memberLabel(m);
-            const assignment = roleOf.get(m.id);
-            return (
-              <li
-                key={m.id}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--line)] px-4 py-2 last:border-b-0 transition-colors hover:bg-[var(--hover)]"
-              >
-                <Avatar name={m.displayName} kind={m.kind} size="md" presence={m.presenceState} />
-                <div className="min-w-0">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="truncate text-[13px] font-semibold tracking-[-0.008em]">{m.displayName}</span>
-                    {label.chip ? (
-                      <span className="shrink-0 rounded-[4px] border border-[var(--line)] bg-[var(--sunken)] px-1 py-px text-[10px] text-[var(--fg-3)]">
-                        {label.chip}
-                      </span>
-                    ) : null}
-                  </div>
-                  {/* Handle first, so every row starts with the same thing, then
-                      what they are doing if they are doing something. */}
-                  <p className="truncate text-[11px] text-[var(--fg-3)]">
-                    @{m.handle}
-                    {assignment ? ` · ${roleLabel(assignment.role.toLowerCase())}` : ''}
-                    {m.presenceNote ? ` · ${m.presenceNote}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <PresenceDot state={m.presenceState} ring="var(--surface)" />
-                  <span className="w-[92px] truncate text-right text-[11px] text-[var(--fg-4)]">
-                    {assignment?.team ?? '—'}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+      <div className="mx-auto w-full max-w-[70rem] px-6 pb-8 pt-3">
+        <Roster members={roster} teams={teams} runnable={configuredHarnesses()} />
       </div>
     </main>
   );

@@ -629,28 +629,32 @@ function buildEventArc(): NewEventInput[] {
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'proposer', agentId: IDS.agentAris, agentName: 'Aris' },
+    payload: { decisionId: IDS.decision, role: 'proposer', memberId: IDS.agentAris, memberName: 'Aris',
+      reason: 'Assigned by the debate engine' },
   });
   inputs.push({
     type: 'RoleAssigned',
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'reviewer', agentId: IDS.agentSid, agentName: 'Sid' },
+    payload: { decisionId: IDS.decision, role: 'reviewer', memberId: IDS.agentSid, memberName: 'Sid',
+      reason: 'Assigned by the debate engine' },
   });
   inputs.push({
     type: 'RoleAssigned',
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'devils_advocate', agentId: IDS.agentDevi, agentName: 'Devi' },
+    payload: { decisionId: IDS.decision, role: 'devils_advocate', memberId: IDS.agentDevi, memberName: 'Devi',
+      reason: 'Assigned by the debate engine' },
   });
   inputs.push({
     type: 'RoleAssigned',
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'verifier', agentId: IDS.agentPeri, agentName: 'Peri' },
+    payload: { decisionId: IDS.decision, role: 'verifier', memberId: IDS.agentPeri, memberName: 'Peri',
+      reason: 'Assigned by the debate engine' },
   });
 
   // 6. Sid asks about bloom filters

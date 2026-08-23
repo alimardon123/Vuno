@@ -277,6 +277,60 @@ async function busyConversation(browser: Browser) {
   await ctx.close();
 }
 
+
+// ── Changing who is in the org ───────────────────────────────────────────────
+//
+// Members was read-only: the roster showed who was there and offered no way to
+// hire, promote or retire anyone. These are the actions the org's own
+// composition depends on, and each one appends to the spine.
+async function roster(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const dialog = () => page.getByRole('dialog');
+  await open(page, '/members');
+
+  // A handle nobody is using yet, so a re-run does not collide with itself.
+  const handle = `smoke${Date.now().toString(36).slice(-6)}`;
+
+  await page.getByRole('button', { name: 'Install an agent' }).click();
+  await dialog().waitFor({ timeout: 5_000 });
+  await dialog().getByLabel('Name').fill('Smoke Agent');
+  await dialog().getByLabel('Handle').fill(handle);
+  await dialog().getByRole('button', { name: 'Install' }).click();
+  await page.waitForTimeout(2_500);
+  check((await page.locator('main').innerText()).includes('Smoke Agent'), 'an agent can be installed from the roster');
+
+  // A refusal has to be readable — not a stack trace, not "invalid input".
+  await page.getByRole('button', { name: 'Install an agent' }).click();
+  await dialog().waitFor({ timeout: 5_000 });
+  await dialog().getByLabel('Name').fill('Someone Else');
+  await dialog().getByLabel('Handle').fill(handle);
+  await dialog().getByRole('button', { name: 'Install' }).click();
+  await page.waitForTimeout(1_800);
+  const refusal = await page.getByRole('alert').first().innerText().catch(() => '');
+  check(refusal.includes('already Smoke Agent'), 'a taken handle is refused by naming who has it', refusal || '(no message shown)');
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  check((await dialog().count()) === 0, 'Escape closes a dialog');
+
+  // Retire it again, so the check leaves the roster as it found it.
+  const row = page.locator('main li', { hasText: 'Smoke Agent' }).first();
+  await row.hover();
+  await page.getByRole('button', { name: /Retire Smoke Agent/ }).click();
+  await dialog().waitFor({ timeout: 5_000 });
+  await dialog().getByLabel('Reason').fill('Smoke test cleanup.');
+  await dialog().getByRole('button', { name: 'Retire' }).click();
+  await page.waitForTimeout(2_500);
+
+  // Lowercased: the section label is uppercased in CSS, which innerText reflects.
+  const after = await page.locator('main').innerText();
+  check(after.toLowerCase().includes('retired'), 'a retired member moves to its own section');
+  // Retired, not deleted: they authored events and may carry a claim.
+  check(after.includes('Smoke Agent'), 'a retired member stays on the roster');
+  await ctx.close();
+}
+
 // ── Keyboard: reach content, see focus, escape a menu ────────────────────────
 async function keyboard(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -377,6 +431,7 @@ try {
   await busyConversation(browser);
   await liveUpdates(browser);
   await phone(browser);
+  await roster(browser);
   await keyboard(browser);
   await themes(browser);
 } finally {

@@ -68,10 +68,11 @@ const routeObjective: Handler = async (item) => {
       scopeType: 'objective',
       scopeId: objective.id,
       payload: {
-        agentId: 'system',
-        agentName: 'Orchestrator',
+        memberId: 'system',
+        memberName: 'Orchestrator',
         role: 'owning_department',
         reason: `Routed to ${chosen.name}`,
+        objectiveId: objective.id,
       },
     },
   ]);
@@ -99,10 +100,11 @@ const assembleWorkingGroup: Handler = async (item) => {
       scopeType: 'objective' as const,
       scopeId: objective.id,
       payload: {
-        agentId: m.id,
-        agentName: m.name,
+        memberId: m.id,
+        memberName: m.name,
         role: m.role,
         reason: `Working group for "${objective.title}"`,
+        objectiveId: objective.id,
       },
     })),
   );

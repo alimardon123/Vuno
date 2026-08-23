@@ -33,7 +33,7 @@ export const EVENT_TYPES = [
   'AlternativeProposed', 'ExperimentRequested', 'ExperimentCompleted',
   'BenchmarkReported', 'RiskFlagged', 'DecisionRecorded', 'ClaimStatusChanged',
   'GateEvaluated', 'GateBlocked', 'GatePassed', 'RoleAssigned',
-  'EscalationOpened', 'EscalationResolved', 'AgentInstalled', 'AgentRetired',
+  'EscalationOpened', 'EscalationResolved', 'MemberJoined', 'MemberRoleChanged', 'MemberRetired',
   'WikiSectionAuthored', 'AgentThought', 'SharedItem', 'ReactionAdded',
   'PreemptIssued', 'AttentionWakeup', 'MemoryUpdated', 'PaProactiveNote',
   'AgentHandoff',

@@ -23,8 +23,9 @@ export type EventType =
   | 'RoleAssigned'
   | 'EscalationOpened'
   | 'EscalationResolved'
-  | 'AgentInstalled'
-  | 'AgentRetired'
+  | 'MemberJoined'
+  | 'MemberRoleChanged'
+  | 'MemberRetired'
   | 'WikiSectionAuthored'
   | 'AgentThought'
   | 'SharedItem'
@@ -151,11 +152,18 @@ export interface EventPayloadMap {
     gateId: string;
     name: string;
   };
+  // `memberId`, not `agentId`: a person takes a role in a debate the same way an
+  // agent does (ADR-0009). The role is open text because the orchestrator
+  // assigns things the debate engine's five never covered — an owning
+  // department, a working group — and it was writing those under this type
+  // already, against a declared payload they did not match.
   RoleAssigned: {
-    decisionId: string;
-    role: 'reviewer' | 'devils_advocate' | 'domain_expert' | 'verifier' | 'proposer';
-    agentId: string;
-    agentName: string;
+    memberId: string;
+    memberName: string;
+    role: string;
+    reason: string;
+    decisionId?: string;
+    objectiveId?: string;
   };
   EscalationOpened: {
     decisionId: string;
@@ -167,17 +175,35 @@ export interface EventPayloadMap {
     decisionId: string;
     resolution: string;
   };
-  AgentInstalled: {
-    agentId: string;
+  // Composition changes read the same for a person and for an agent, because
+  // they are the same kind of member (ADR-0009). `AgentInstalled` had no human
+  // counterpart at all: hiring a person appended nothing, so the spine recorded
+  // half the org's history — the schema-level bias the parity rule exists to
+  // stop.
+  MemberJoined: {
+    memberId: string;
     name: string;
+    kind: 'human' | 'agent';
     role: string;
-    kind: 'independent' | 'personal_assistant';
-    modelName: string;
-    harnessName: string;
     teamId?: string;
     teamName?: string;
+    /** Agents only: what will run them. */
+    modelName?: string;
+    harnessName?: string;
+    /** Set when this member is somebody's assistant. */
+    ownerMemberId?: string;
+    ownerName?: string;
   };
-  AgentRetired: { agentId: string; reason: string };
+  MemberRoleChanged: {
+    memberId: string;
+    name: string;
+    from: string;
+    to: string;
+    teamId?: string;
+    teamName?: string;
+    reason: string;
+  };
+  MemberRetired: { memberId: string; name: string; reason: string };
   WikiSectionAuthored: { sectionId: string; title: string; body: string; scope: string };
   AgentThought: {
     thoughtType: 'observation' | 'hypothesis' | 'conclusion' | 'question' | 'doubt';
