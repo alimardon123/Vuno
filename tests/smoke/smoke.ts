@@ -655,12 +655,26 @@ async function boardView(browser: Browser) {
     check(await dead.first().isDisabled(), 'a stage that is not built cannot be moved to');
   }
 
-  // Move it somewhere real and back, so the run leaves the board as it found it.
+  // Move it to the far end and back. Which end depends on where it starts:
+  // the first version of this always aimed at Killed, left it there, and then
+  // failed for ever — every later run found the card already in the column it
+  // was moving to, where the menu item is correctly disabled.
+  const cardsIn = (name: string) =>
+    page.locator('main section').filter({ hasText: name }).locator('article');
+  const startsKilled = (await cardsIn('Killed').count()) > 0;
+  const away = startsKilled ? 'Filed' : 'Killed';
+  const home = startsKilled ? 'Killed' : 'Filed';
+
   const before = await card.locator('h3').innerText();
-  await page.getByRole('menuitem', { name: /^Killed/ }).click();
-  const killed = page.locator('main section').filter({ hasText: 'Killed' }).locator('article');
-  await killed.first().waitFor({ timeout: 15_000 }).catch(() => {});
-  check((await killed.count()) > 0, 'moving a card moves the objective', `"${before}" did not arrive`);
+  await page.getByRole('menuitem', { name: new RegExp(`^${away}`) }).click();
+  await cardsIn(away).first().waitFor({ timeout: 15_000 }).catch(() => {});
+  check((await cardsIn(away).count()) > 0, 'moving a card moves the objective', `"${before}" did not reach ${away}`);
+
+  await cardsIn(away).first().getByRole('button', { name: /^Move / }).click();
+  await page.waitForTimeout(400);
+  await page.getByRole('menuitem', { name: new RegExp(`^${home}`) }).click();
+  await cardsIn(home).first().waitFor({ timeout: 15_000 }).catch(() => {});
+  check((await cardsIn(home).count()) > 0, 'and moves it back, so the next run can move it too');
 
   await ctx.close();
 }
@@ -703,6 +717,86 @@ async function orgView(browser: Browser) {
   }
 
   await ctx.close();
+}
+
+// ── A call, between two real browsers ───────────────────────────────────────
+// The media goes peer to peer and never touches the server, which means the
+// only way to know it works is to run two browsers and look at what arrived.
+// Everything short of that — a button, a room row, a signal queue — can be
+// green while nobody can hear anybody.
+async function call(browser: Browser) {
+  // A second member with a password, or there is nobody to call.
+  const second = { email: 'mira@acme.storage', password: PASSWORD };
+  const canSignIn = await fetch(`${BASE}/api/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'sign_in', ...second }),
+  })
+    .then((r) => r.ok)
+    .catch(() => false);
+
+  if (!canSignIn) {
+    checks.push('only one account has a password — a two-party call cannot be checked here');
+    return;
+  }
+
+  const media = { permissions: ['microphone', 'camera'] as string[], viewport: { width: 1280, height: 900 } };
+  const a = await browser.newContext({ ...media, storageState });
+  const pageA = await a.newPage();
+
+  const b = await browser.newContext(media);
+  const pageB = await b.newPage();
+  await pageB.goto(`${BASE}/sign-in`, { waitUntil: 'domcontentloaded' });
+  await pageB.waitForTimeout(1_200);
+  await pageB.getByLabel('Email').fill(second.email);
+  await pageB.getByLabel('Password').fill(second.password);
+  await pageB.getByRole('button', { name: /Sign in/ }).click();
+  await pageB.waitForTimeout(2_500);
+
+  const room = '/channels/ch-storage';
+  const callButton = (p: Page) => p.getByRole('button', { name: /Join · \d+|^Call$/ });
+
+  await open(pageA, room);
+  await callButton(pageA).click();
+  await pageA.getByRole('region', { name: 'Call' }).waitFor({ timeout: 20_000 });
+  check(true, 'a call starts in a conversation');
+
+  // The second person is offered the call that is already running, not a new one.
+  await open(pageB, room);
+  const label = await callButton(pageB).innerText();
+  check(/Join/.test(label), 'a call already running is offered as one to join', label);
+  await callButton(pageB).click();
+
+  // Wait for media to actually arrive, not for a fixed number of seconds.
+  const connected = async (p: Page) =>
+    p
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('section[aria-label="Call"] video')].filter(
+            (v) => (v as HTMLVideoElement).videoWidth > 0,
+          ).length >= 2,
+        null,
+        { timeout: 30_000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+
+  const [aOk, bOk] = await Promise.all([connected(pageA), connected(pageB)]);
+  check(aOk, 'the caller receives the other side\u2019s video');
+  check(bOk, 'the person who joined receives the caller\u2019s video');
+
+  // Leaving is a real hang-up: the tracks stop and the room empties.
+  await pageB.getByRole('button', { name: 'Leave' }).click();
+  await pageB.waitForTimeout(1_500);
+  check(
+    (await pageB.getByRole('region', { name: 'Call' }).count()) === 0,
+    'leaving a call closes it for whoever left',
+  );
+  await pageA.getByRole('button', { name: 'Leave' }).click();
+  await pageA.waitForTimeout(1_500);
+
+  await a.close();
+  await b.close();
 }
 
 /** Take a plugin out if it is installed, so the round trip starts from nothing. */
@@ -969,7 +1063,15 @@ async function themes(browser: Browser) {
   await ctx.close();
 }
 
-const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {}).catch((e: unknown) => {
+const browser = await chromium
+  .launch({
+    ...(EXECUTABLE ? { executablePath: EXECUTABLE } : {}),
+    // A synthetic camera and microphone, and no permission prompt. This is what
+    // makes the call check a real one: two browsers, real media tracks, an
+    // actual peer connection — rather than asserting that a button exists.
+    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+  })
+  .catch((e: unknown) => {
   console.error(
     'Could not start Chromium. Install it with `bunx playwright install chromium`, ' +
       'or point PLAYWRIGHT_CHROMIUM at one you already have.\n' +
@@ -1003,6 +1105,7 @@ try {
       ['message actions', messageActions],
       ['board', boardView],
       ['org', orgView],
+      ['call', call],
       ['extensions', extensions],
       ['keyboard', keyboard],
       ['agent edge', agentEdge],
@@ -1012,7 +1115,10 @@ try {
       try {
         await run(browser);
       } catch (e) {
-        failures.push(`${name} could not finish — ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+        // The first line names the action; the call log below it names the
+        // selector that never resolved, which is the part worth reading.
+        const detail = e instanceof Error ? e.message.split('\n').slice(0, 4).join(' · ') : String(e);
+        failures.push(`${name} could not finish — ${detail}`);
       }
     }
   }

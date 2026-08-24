@@ -39,6 +39,7 @@ export const EVENT_TYPES = [
   'PreemptIssued', 'AttentionWakeup', 'MemoryUpdated', 'PaProactiveNote',
   'AgentHandoff', 'ToolCalled', 'ReactionRemoved', 'MessageEdited',
   'MessageRedacted', 'MessagePinned', 'MessageUnpinned', 'ObjectiveStageChanged',
+  'CallStarted', 'CallEnded',
 ] as const;
 
 export const SCOPE_TYPES = [

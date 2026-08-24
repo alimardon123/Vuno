@@ -236,7 +236,15 @@ export async function claimOwnerAccount(
   return { ok: true, sessionId };
 }
 
-/** Give a member a password, so they can sign in. Used when hiring a person. */
+/**
+ * Give a member a password, so they can sign in.
+ *
+ * Nothing in the product calls this yet, which is a real hole rather than a
+ * spare part: "Add a person" on the roster creates a member who cannot sign in,
+ * and there is no screen that would give them a password afterwards. Tracked in
+ * docs/REVIEW-2026-08-23.md. The comment here used to say "used when hiring a
+ * person", which was the kind of claim that stops anyone checking.
+ */
 export async function setPassword(memberId: string, password: string): Promise<void> {
   await db.humanProfile.update({
     where: { memberId },

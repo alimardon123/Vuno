@@ -36,6 +36,8 @@ export type EventType =
   | 'MessagePinned'
   | 'MessageUnpinned'
   | 'ObjectiveStageChanged'
+  | 'CallStarted'
+  | 'CallEnded'
   | 'PreemptIssued'
   | 'AttentionWakeup'
   | 'MemoryUpdated'
@@ -272,6 +274,10 @@ export interface EventPayloadMap {
   // Without this the spine could replay every message in the org and not say
   // how a piece of work got to where it is — which is the one question the
   // stage column exists to answer.
+  // That a call happened, and who was in it. Never what was said — the media
+  // is peer to peer and never reaches this server.
+  CallStarted: { callId: string };
+  CallEnded: { callId: string; seconds: number; participantIds: string[] };
   ObjectiveStageChanged: {
     objectiveId: string;
     from: string;

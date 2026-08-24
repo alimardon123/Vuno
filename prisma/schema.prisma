@@ -66,6 +66,8 @@ model Member {
   connections     MemberConnection[]
   sessions        Session[]
   uploads         Attachment[]
+  callsStarted    Call[]            @relation("CallStarter")
+  callSeats       CallParticipant[]
 
   @@unique([orgId, handle])
   @@index([orgId, kind, status])
@@ -153,6 +155,7 @@ model Organization {
   connections Connection[]
   plugins     Plugin[]
   attachments Attachment[]
+  calls       Call[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -410,6 +413,47 @@ model Attachment {
   @@index([eventId, createdAt])
 }
 
+// A call that happened in a conversation.
+//
+// The row is the record — who was in it, when, how long. Not a byte of what was
+// said: WebRTC media goes browser to browser and never reaches this server,
+// which is a property of the design rather than a promise in a policy.
+model Call {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  channelId   String
+  startedById String?
+  startedAt   DateTime @default(now())
+  /// Null while it is running. Set when the last person leaves.
+  endedAt     DateTime?
+
+  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  startedBy   Member?           @relation("CallStarter", fields: [startedById], references: [id], onDelete: SetNull)
+  participants CallParticipant[]
+
+  /// "Is a call running in this conversation" is asked on every page load.
+  @@index([orgId, channelId, endedAt])
+}
+
+model CallParticipant {
+  id        String   @id @default(cuid())
+  tenantId  String
+  orgId     String
+  callId    String
+  memberId  String
+  joinedAt  DateTime @default(now())
+  /// Null while they are still in it. A rejoin clears it rather than adding a row.
+  leftAt    DateTime?
+
+  call      Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  member    Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, memberId])
+  @@index([memberId])
+}
+
 model Channel {
   id          String   @id @default(cuid())
   tenantId    String
@@ -432,6 +476,7 @@ model Channel {
   team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
   members     ChannelMember[]
   attachments Attachment[]
+  calls       Call[]
 
   @@unique([orgId, slug])
   @@index([orgId, teamId])

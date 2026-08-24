@@ -10,6 +10,9 @@ import { useConversationStream } from '@/hooks/use-conversation-stream';
 import { MessageList } from '@/components/vuno/message-list';
 import { Composer, type Mentionable } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
+import { CallSurface, type CallMember, type LiveCall } from '@/components/vuno/call';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import type { Conversation, ConversationMessage, MessageWindow } from '@/lib/conversations';
 
 /**
@@ -42,6 +45,53 @@ export function ConversationView({
   viewerId: string;
 }) {
   const [replyingTo, setReplyingTo] = useState<ConversationMessage | null>(null);
+  const [call, setCall] = useState<{ call: LiveCall; ice: { iceServers: RTCIceServer[]; limitation: string | null } } | null>(null);
+  const [starting, setStarting] = useState(false);
+  const { toast } = useToast();
+
+  // Is a call already running here? Asked once on open, so joining one that
+  // started before you arrived is a button rather than a coincidence.
+  const [running, setRunning] = useState<LiveCall | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`/api/calls?channelId=${encodeURIComponent(conversation.id)}`)
+      .then((r) => r.json() as Promise<{ ok?: boolean; call?: LiveCall | null }>)
+      .then((d) => {
+        if (!cancelled && d.ok) setRunning(d.call ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.id, call]);
+
+  async function joinCall() {
+    setStarting(true);
+    try {
+      const res = await fetch('/api/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: conversation.id }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        call?: LiveCall;
+        ice?: { iceServers: RTCIceServer[]; limitation: string | null };
+      };
+      if (!res.ok || !data.ok || !data.call || !data.ice) throw new Error(data.error ?? 'Could not start a call');
+      setCall({ call: data.call, ice: data.ice });
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : 'Could not start a call', variant: 'destructive' });
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  const callMembers: CallMember[] = [
+    ...conversation.participants.map((m) => ({ id: m.id, displayName: m.displayName, kind: m.kind })),
+    ...mentionable.map((m) => ({ id: m.id, displayName: m.displayName, kind: m.kind })),
+  ];
   const { messages, earlier, isHistory } = view;
 
   // An agent answering an @mention runs in the orchestrator and lands seconds
@@ -150,6 +200,26 @@ export function ConversationView({
           ) : null}
         </div>
         <div className="ml-auto flex items-center gap-2 text-[11px] text-[var(--fg-4)]">
+          {!call ? (
+            <button
+              type="button"
+              onClick={() => void joinCall()}
+              disabled={starting}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors',
+                'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]',
+                running
+                  ? 'border-[var(--tested)] bg-[var(--tested-bg)] text-[var(--tested)]'
+                  : 'border-[var(--line)] text-[var(--fg-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]',
+              )}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="2.5" y="6" width="13" height="12" rx="2" />
+                <path d="m15.5 12 6-3.5v11l-6-3.5z" />
+              </svg>
+              {starting ? 'Starting…' : running ? `Join · ${running.participants.length}` : 'Call'}
+            </button>
+          ) : null}
           <span>{KIND_LABEL[conversation.kind]}</span>
           {conversation.teamName ? (
             <span className="rounded-[4px] border border-[var(--line)] bg-[var(--sunken)] px-1.5 py-px text-[10px] text-[var(--fg-3)]">
@@ -158,6 +228,16 @@ export function ConversationView({
           ) : null}
         </div>
       </header>
+
+      {call ? (
+        <CallSurface
+          call={call.call}
+          ice={call.ice}
+          viewerId={viewerId}
+          members={callMembers}
+          onLeave={() => setCall(null)}
+        />
+      ) : null}
 
       <div ref={stream} id={streamId} className="scroll-y min-h-0 flex-1">
         {/* The window is bounded, so history is reached by asking for it — and
