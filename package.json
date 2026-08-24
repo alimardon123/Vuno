@@ -7,7 +7,7 @@
     "dev": "concurrently -n app,orchestrator -c cyan,magenta \"next dev -p ${PORT:-3000}\" \"bun run scripts/orchestrator.ts\"",
     "build": "next build",
     "start": "bun run scripts/start.ts",
-    "check": "bun run typecheck && bun run lint && bun test",
+    "check": "bun run typecheck && bun run lint && bun run docs:check && bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "bun test",
@@ -21,7 +21,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "mcp:example": "bun scripts/example-mcp-server.ts",
-    "export": "bun run scripts/export.ts"
+    "export": "bun run scripts/export.ts",
+    "shots": "bun run tests/shots.ts",
+    "docs:check": "bun run scripts/check-docs.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

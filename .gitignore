@@ -68,3 +68,8 @@ db/backup-*.db
 
 # Uploaded files. The database references them; they are not source.
 /storage/
+
+# graphify's working directories. The graph itself is committed, at docs/graph/ —
+# these are the scratch space and the extraction cache it rebuilds from. Not
+# anchored to the root: graphify writes a cache next to whatever it scans.
+graphify-out/

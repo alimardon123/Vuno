@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Vuno
 
 A communication app on the surface. A working organisation underneath.
@@ -8,6 +12,99 @@ discuss it, challenge each other with evidence, run experiments, build, test, an
 going until the success criteria are met — escalating to a human only where judgment
 genuinely matters. Every claim the organisation holds carries a status and a provenance,
 and debate is what changes that status.
+
+**The owner's standing bar:** *at minimum it is the best-looking, most performant,
+simple and easy-to-use communication app, with AI agents built in where useful.
+Everybody should feel at home and shouldn't lack any feature the other apps have.*
+Communication parity comes first; the organisation underneath is what makes it more
+than another chat app, not an excuse for it to be a worse one.
+
+## Commands
+
+```bash
+bun run setup       # install, generate, migrate, seed — one command, fresh clone
+bun run dev         # app (:3000) + orchestrator, together
+bun run check       # typecheck + lint + docs link check + tests — fast, no browser
+bun run smoke       # 141 browser checks; needs `bun run dev` in another terminal
+bun run shots       # regenerate the 29 screenshots in docs/images/
+```
+
+Running one test, or one case:
+
+```bash
+bun test src/lib/search                      # a directory
+bun test src/lib/events/__tests__/spine.concurrency.test.ts
+bun test -t "rings the other person"         # by name, across the suite
+```
+
+Both browser suites need a Chromium and are deliberately **not** part of
+`bun run check`. If Playwright's default is missing:
+`PLAYWRIGHT_CHROMIUM=/path/to/chrome bun run smoke`.
+
+Other useful ones: `bun run db:migrate` (create a migration — use
+`--create-only` when hand-writing SQL), `bun run db:deploy`, `bun run export`
+(the whole org as JSON), `bun run export --backup`, `bun run mcp:example` (an
+MCP server to point a connector at), `bun run seed` (clears first — that is its job).
+
+## Orientation
+
+Read [`docs/ONBOARDING.md`](docs/ONBOARDING.md) first — it is ten minutes and it is
+written for exactly this situation. Then:
+
+| | |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The five structural decisions everything rests on. |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | Every feature, with a screenshot from the running app. |
+| [`docs/STACK.md`](docs/STACK.md) | Every tool and why; what was removed; the two traps. |
+| [`docs/IA-NAVIGATION.md`](docs/IA-NAVIGATION.md) | Where every surface belongs. Read before adding one. |
+| [`docs/graph/`](docs/graph/README.md) | The codebase as a knowledge graph — open `index.html`. |
+| [`docs/REVIEW-2026-08-23.md`](docs/REVIEW-2026-08-23.md) | The standing account of what is broken. |
+
+## Architecture — the parts that need several files to understand
+
+**One member identity.** There is no `User` table and no `Agent` table — one `Member`
+with a `kind` discriminator and `HumanProfile` / `AgentProfile` hanging off it. This is
+what makes a feature *physically unable* to work for one kind of member and not the
+other. Delegation is separate: an event carries `actorMemberId` (who acted, always) and
+`onBehalfOfMemberId` (whose authority, rarely). An assistant and its owner share a
+*reach* and can read each other's private events. (ADR-0009)
+
+**The event spine.** `src/lib/events/spine.ts` is the **only** writer. `seq` is the
+primary key so SQLite allocates it — that is what removes the read-`MAX`-then-insert
+race. Every payload crosses a zod boundary in `schema.ts` first. Edits and deletes are
+*new events* (`MessageEdited` supersedes; `MessageRedacted` stops the body being served)
+so the log stays gapless and replayable. (ADR-0004, ADR-0008)
+
+**Two access questions, not one.** `canRead()` in `src/lib/conversations.ts` decides
+whether you can reach a room. `visibleTo()` in `src/lib/events/visibility.ts` decides
+what is inside it. `visibleTo()` returns a Prisma `where` fragment and **every read path
+takes it** — the window, the sidebar preview, thread replies, search. It is a fragment
+rather than a filter over the result because the window asks for `limit + 1` rows to
+learn whether history precedes it.
+
+**The adapter seam.** A member that is an agent names a harness and a model; the
+registry maps the name to an adapter (`anthropic`, `ollama`). Everything a model returns
+crosses `parseAgentOutput` before it can reach the spine. With no model configured a turn
+**fails naming the environment variable** rather than falling back to something that
+sounds like an answer. (ADR-0006)
+
+**The orchestrator** polls a *leased* queue, so a crashed worker's item returns on its
+own. **Five of fifteen stages are built** (`filed`, `routing`, `problem_definition`,
+`shipped`, `killed`); the other ten are declared `implemented: false` in
+`src/lib/orchestrator/stages.ts` and the product refuses to move an objective into one.
+This is the largest piece of unfinished work in the repo. (ADR-0007)
+
+**The `shape.ts` pattern.** When a client component needs a constant or a pure function
+from a module that imports Prisma, the pure half goes in `shape.ts` and the client
+imports *that*. Importing anything from the server module ships the query engine to the
+browser. This has bitten twice — `src/lib/calls/shape.ts`, `src/lib/search/shape.ts`.
+
+**Two traps that cost an hour each.** (1) Tailwind v4 puts utilities in
+`@layer utilities`, and an **unlayered** rule beats every layered one whatever its
+specificity — a bare `*` selector in `globals.css` silently kills every border-colour
+utility in the app. Reset rules go in `@layer base`. (2) `schema.prisma` cannot express
+the FTS5 virtual table, so it lives in raw SQL in a migration; `migrate deploy` is fine,
+but if `migrate dev` offers to drop it, use `--create-only`.
 
 ## How I work on this
 
@@ -81,6 +178,11 @@ because the owner asked for it, so those changes do trace to the request. Inside
 any one slice the rule still holds — no drive-by improvements, no opportunistic
 refactors riding along in the diff.
 
+*The standing example:* `src/components/ui/` is 48 files of shadcn scaffold from
+the original template, of which only `toaster.tsx` is reachable. It holds 40+
+unused dependencies. It is **mentioned, not deleted** — see
+[`docs/STACK.md`](docs/STACK.md#the-dead-scaffold).
+
 ### 4. Goal-driven execution
 **Define success criteria. Loop until verified.**
 Turn tasks into verifiable goals:
@@ -122,6 +224,8 @@ A slice is not done until all of these hold:
   `delete` an `Event` from application code. (ADR-0004, ADR-0008)
 - **Claims transition; they are never re-created.** Status moves only via
   `ClaimStatusChanged`. (ADR-0005)
+- **Every read path takes `visibleTo()`.** Never write the visibility rule a second
+  time — not in raw SQL, not as a filter over a result.
 - **Nothing is committed to `main`.** Work lands on the feature branch only.
 - **No secrets in the repo.** `.env` is ignored; `.env.example` is committed.
 
@@ -141,13 +245,13 @@ Read before changing the shape of anything. `docs/adr/`:
 | 0008 | One writer owns the event spine |
 | 0009 | One member identity, and delegated action |
 
-`docs/IA-NAVIGATION.md` is the agreed navigation and where every surface belongs.
-`docs/REVIEW-2026-08-23.md` is the standing review of what is broken and why.
+## Keeping the documentation true
 
-## Commands
+`bun run docs:check` (part of `bun run check`) resolves every relative link and image
+in every markdown file, including heading anchors. `bun run shots` regenerates every
+screenshot in `docs/FEATURES.md` by driving the real app — which is what makes that
+document checkable rather than aspirational. If you change a feature, re-run it.
 
-```bash
-bun run setup       # install, generate, migrate, seed — one command, fresh clone
-bun run dev         # app + orchestrator
-bun run check       # typecheck + lint + test
-```
+Note that `bun run smoke` posts into the seeded channels and leaves the messages behind
+(the spine is append-only). `tests/shots.ts` works around this by opening conversations
+at `?before=<seq>` just past the test residue, computed at runtime.

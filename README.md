@@ -181,13 +181,24 @@ left and why.
 | Bun | runtime, test runner, package manager |
 | Tailwind v4 | seven looks: two defaults, three colourways, two directions |
 
-Architecture decisions are in `docs/adr/`. Read 0004 (the event spine), 0005
-(the ledger), 0008 (one writer) and 0009 (one member identity) before changing
-the shape of anything. `docs/IA-NAVIGATION.md` says where every surface belongs
-and why there are seven tabs and not nine — and why Settings is not one of
-them. `docs/REVIEW-2026-08-23.md` is the standing
-account of what is broken, what was removed and why.
+## The documentation
 
-`CLAUDE.md` is how work is done here: research before writing, evidence before
-claiming something works, and no scripted theatre standing in for a working
-mechanism.
+| | |
+|---|---|
+| [`docs/ONBOARDING.md`](docs/ONBOARDING.md) | **Start here** if you are picking this up. Ten minutes to being useful. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The five structural decisions everything rests on, and what breaks if you undo one. |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | Every feature, with a screenshot taken from the running app. |
+| [`docs/STACK.md`](docs/STACK.md) | Every tool and why it is there — including what was removed, and the two traps. |
+| [`docs/IA-NAVIGATION.md`](docs/IA-NAVIGATION.md) | Where every surface belongs, and why there are seven tabs and not nine. |
+| [`docs/adr/`](docs/adr/) | The decisions themselves. Read 0004, 0005, 0008 and 0009 before changing the shape of anything. |
+| [`docs/REVIEW-2026-08-23.md`](docs/REVIEW-2026-08-23.md) | The standing account of what is broken, what was removed and why. |
+| [`docs/graph/`](docs/graph/README.md) | The codebase as a knowledge graph — open `index.html`. |
+
+Every screenshot in `FEATURES.md` is produced by `bun run shots` driving the real
+app, which is what makes that document checkable rather than aspirational. Every
+link in every document is resolved by `bun run docs:check`, which is part of
+`bun run check`.
+
+[`CLAUDE.md`](CLAUDE.md) is how work is done here: research before writing,
+evidence before claiming something works, and no scripted theatre standing in for
+a working mechanism.
