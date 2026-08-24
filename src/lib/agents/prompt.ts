@@ -3,7 +3,7 @@
 // One prompt builder shared by every harness, so moving an agent between
 // Anthropic and a local model changes what runs it and not who it is.
 
-import type { AgentContext, AgentManifest } from '@/lib/agents/types';
+import type { AgentContext, AgentManifest, AvailableTool } from '@/lib/agents/types';
 import { ROLE_LABELS } from '@/lib/agents/types';
 
 /** The event types an agent may produce. Anything else is rejected at the boundary. */
@@ -42,7 +42,42 @@ export interface HeldSkill {
   content: string;
 }
 
-export function systemPrompt(manifest: AgentManifest, skills: HeldSkill[] = []): string {
+/**
+ * The tools section.
+ *
+ * A connection an agent holds and is never told about is a row in a table —
+ * the same failure a skill has, and the reason both live in one Library. The
+ * schema goes in verbatim because a model that has to guess argument names
+ * spends a round trip finding out it guessed wrong.
+ */
+function toolSection(tools: AvailableTool[]): string {
+  if (tools.length === 0) return '';
+
+  const listed = tools
+    .map(
+      (t) =>
+        `  ${t.connection}/${t.name} — ${t.description || 'no description given'}\n` +
+        `    arguments: ${JSON.stringify(t.inputSchema)}`,
+    )
+    .join('\n');
+
+  return `
+
+You can reach these tools. Use one when it would settle something rather than
+guessing at it — a measurement you fetched beats a number you remembered:
+
+${listed}
+
+To call them, reply with "toolCalls" and nothing else:
+
+{ "toolCalls": [ { "connection": "...", "tool": "...", "arguments": { ... } } ] }
+
+You will be given the results and asked again. Then reply with events and
+claims as described above. Do not put a tool's answer in a claim without saying
+which tool it came from — provenance is what makes a claim worth holding.`;
+}
+
+export function systemPrompt(manifest: AgentManifest, skills: HeldSkill[] = [], tools: AvailableTool[] = []): string {
   const label = ROLE_LABELS[manifest.role] ?? manifest.role;
   const duty = RESPONSIBILITIES[manifest.role] ?? 'Contribute what your role can see.';
 
@@ -89,7 +124,7 @@ and "uncertain" when the evidence does not yet decide. Never claim "tested" or
 "falsified" — only a measurement moves a claim there, and you are not the one
 recording it.
 
-Both arrays may be empty. Nothing worth saying is a valid turn.${held}`;
+Both arrays may be empty. Nothing worth saying is a valid turn.${held}${toolSection(tools)}`;
 }
 
 /** What just happened, and what is being asked of the agent. */
@@ -116,6 +151,20 @@ export function userPrompt(ctx: AgentContext): string {
       return `  ${who} · ${e.type}: ${body.slice(0, 400)}`;
     });
     parts.push(`Recent activity here:\n${recent.join('\n')}`);
+  }
+
+  if (ctx.toolResults?.length) {
+    parts.push(
+      'You asked for these, and here is what came back:\n' +
+        ctx.toolResults
+          .map(
+            (r) =>
+              `  ${r.connection}/${r.tool}(${JSON.stringify(r.arguments)})\n` +
+              `    ${r.failed ? 'FAILED: ' : ''}${r.text.slice(0, 2_000)}`,
+          )
+          .join('\n') +
+        '\n\nAnswer now with events and claims. Do not ask for the same call again.',
+    );
   }
 
   const trigger = ctx.trigger.payload as { reason?: string; mentionedBy?: string } | undefined;

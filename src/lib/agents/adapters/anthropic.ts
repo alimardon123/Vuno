@@ -70,7 +70,7 @@ export class AnthropicAdapter implements AgentAdapter {
       body: JSON.stringify({
         model: this.manifest.modelName,
         max_tokens: 1024,
-        system: systemPrompt(this.manifest, this.skills),
+        system: systemPrompt(this.manifest, this.skills, ctx.tools ?? []),
         messages: [{ role: 'user', content: userPrompt(ctx) }],
       }),
     });
@@ -111,7 +111,7 @@ export class AnthropicAdapter implements AgentAdapter {
     });
 
     return {
-      response: { events: parsed.events, claims: parsed.claims },
+      response: { events: parsed.events, claims: parsed.claims, toolCalls: parsed.toolCalls },
       rejections: parsed.rejections,
       usage,
       rawText: text,

@@ -20,6 +20,7 @@
     "smoke": "bun run tests/smoke/smoke.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "mcp:example": "bun scripts/example-mcp-server.ts",
     "export": "bun run scripts/export.ts"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.1.1",
     "@mdxeditor/editor": "^3.39.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",

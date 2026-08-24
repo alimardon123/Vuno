@@ -63,6 +63,7 @@ model Member {
   memberships     Membership[]
   conversations   ChannelMember[]
   skills          MemberSkill[]
+  connections     MemberConnection[]
   sessions        Session[]
 
   @@unique([orgId, handle])
@@ -148,6 +149,7 @@ model Organization {
   experiments Experiment[]
   gates       Gate[]
   skills      Skill[]
+  connections Connection[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -205,6 +207,66 @@ model Membership {
   @@unique([teamId, memberId])
   @@index([teamId, role])
   @@index([memberId])
+}
+
+// An MCP connection: a server outside this org that an agent can call tools on.
+//
+// It sits in the Library beside Skill because both answer "what is this member
+// made of" — a skill is what they know, a connection is what they can reach.
+// Holding one is the permission to call it, which is why there is no separate
+// permission list: one concept, one place.
+//
+// The secret is NOT stored here. `authEnvVar` names an environment variable the
+// server process reads at call time. A token in this table would be a token in
+// the backup, in the JSON export, and in anything that can read the org — and
+// the whole org is one file somebody can copy.
+model Connection {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Stable id an agent package refers to. Lowercase, dashed.
+  key         String
+  name        String
+  /// One line, for the Library row.
+  summary     String
+  /// 'http' — the Streamable HTTP transport. stdio would mean this server
+  /// spawns processes, which is a different security question.
+  transport   String   @default("http")
+  url         String
+  /// The name of an environment variable holding the bearer token, or null for
+  /// a server that needs none. Never the token itself.
+  authEnvVar  String?
+  /// What was discovered the last time anything connected, as JSON, so the
+  /// Library can render tools without a round trip on every page load.
+  toolsCache  String?
+  checkedAt   DateTime?
+  /// The reason the last attempt failed, or null when the last one worked.
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  holders     MemberConnection[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
+}
+
+// Who may call a connection. A person holds one the same way an agent does —
+// parity is a schema property (ADR-0009).
+model MemberConnection {
+  id           String   @id @default(cuid())
+  tenantId     String
+  orgId        String
+  memberId     String
+  connectionId String
+  createdAt    DateTime @default(now())
+
+  member       Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, connectionId])
+  @@index([connectionId])
 }
 
 // ─── Channels (chat surface) ───────────────────────────────────────────────────

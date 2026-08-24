@@ -34,7 +34,8 @@ export type EventType =
   | 'AttentionWakeup'
   | 'MemoryUpdated'
   | 'PaProactiveNote'
-  | 'AgentHandoff';
+  | 'AgentHandoff'
+  | 'ToolCalled';
 
 // An event is authored by a member — human or agent, the spine does not care —
 // or by the runtime itself. Which kind of member it was lives on the Member
@@ -205,6 +206,18 @@ export interface EventPayloadMap {
   };
   MemberRetired: { memberId: string; name: string; reason: string };
   WikiSectionAuthored: { sectionId: string; title: string; body: string; scope: string };
+  // An agent reached outside this org. Recorded because it is the one kind of
+  // action that changes something the ledger cannot see.
+  ToolCalled: {
+    connectionKey: string;
+    connectionName: string;
+    tool: string;
+    arguments: Record<string, unknown>;
+    /** What came back, truncated for the log. The full result went to the model. */
+    result: string;
+    failed: boolean;
+    durationMs: number;
+  };
   AgentThought: {
     thoughtType: 'observation' | 'hypothesis' | 'conclusion' | 'question' | 'doubt';
     content: string;                    // the thought text

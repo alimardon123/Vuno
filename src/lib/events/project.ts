@@ -37,6 +37,7 @@ export const TYPED_MESSAGE_EVENTS: EventType[] = [
   'MemoryUpdated',
   'PaProactiveNote',
   'AgentHandoff',
+  'ToolCalled',
 ];
 
 export interface ChatMessageProjection {
@@ -86,6 +87,7 @@ const TYPE_LABELS: Partial<Record<EventType, string>> = {
   MemoryUpdated: 'LEARNED',
   PaProactiveNote: 'PROACTIVE',
   AgentHandoff: 'HANDOFF',
+  ToolCalled: 'TOOL',
 };
 
 const STATUS_HINTS: Partial<Record<EventType, ClaimStatus | 'blocked' | 'passed'>> = {

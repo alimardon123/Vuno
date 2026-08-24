@@ -311,3 +311,198 @@ describe('a message cannot summon the whole org', () => {
     expect(items.length).toBeLessThanOrEqual(3);
   });
 });
+
+describe('an agent calling a tool it holds', () => {
+  // Two real servers and no mocks: a stub model over HTTP (the same path a key
+  // takes) and the reference MCP server over HTTP. What is being tested is the
+  // join between them — that a call the model asks for is actually made, that
+  // the answer comes back to the model, and that the org can see afterwards
+  // what its agent did outside it.
+  let model: ReturnType<typeof Bun.serve> | null = null;
+  let mcp: Awaited<ReturnType<typeof import('@/lib/connections/__tests__/server')['startMcpServer']>>;
+  let replies: string[] = [];
+  const prompts: Array<{ system: string; user: string }> = [];
+
+  const saved = { key: process.env.ANTHROPIC_API_KEY, base: process.env.ANTHROPIC_BASE_URL };
+
+  beforeAll(async () => {
+    const { startMcpServer } = await import('@/lib/connections/__tests__/server');
+    mcp = await startMcpServer();
+
+    model = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const body = (await req.json()) as { system: string; messages: Array<{ content: string }> };
+        prompts.push({ system: body.system, user: String(body.messages[0].content) });
+        return Response.json({
+          content: [{ type: 'text', text: replies.shift() ?? JSON.stringify({ events: [], claims: [] }) }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          model: 'claude-sonnet-4-20250514',
+        });
+      },
+    });
+    process.env.ANTHROPIC_API_KEY = 'sk-test';
+    process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${model.port}`;
+
+    const { createConnection, checkConnection, setConnectionHolder } = await import('@/lib/connections');
+    const { id } = await createConnection({
+      tenantId: TENANT, orgId: ORG, key: 'obs', name: 'Observability',
+      summary: 'Metrics for the services this org runs.', url: mcp.url,
+    });
+    // Discovery is a real round trip to a real server.
+    const checked = await checkConnection(ORG, id);
+    expect(checked.lastError).toBeNull();
+    expect(checked.tools.map((t) => t.name).sort()).toEqual(['deploy', 'p99_latency']);
+
+    await setConnectionHolder({ orgId: ORG, connectionId: id, memberId: BOB, held: true });
+  });
+
+  afterAll(async () => {
+    model?.stop(true);
+    await mcp.stop();
+    await db.memberConnection.deleteMany({ where: { orgId: ORG } });
+    await db.connection.deleteMany({ where: { orgId: ORG } });
+    if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = saved.key;
+    if (saved.base === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = saved.base;
+  });
+
+  async function runOneTurn(body: string) {
+    prompts.length = 0;
+    await post({ channelId: CHANNEL, body });
+    const { tick } = await import('@/lib/orchestrator/runner');
+    return tick({ orgId: ORG, workerId: 'w-tools' });
+  }
+
+  test('the agent is told what it can reach, with the argument schema', async () => {
+    replies = [JSON.stringify({ events: [], claims: [] })];
+    await runOneTurn('@bob anything?');
+
+    const system = prompts[0].system;
+    expect(system).toContain('obs/p99_latency');
+    expect(system).toContain('p99 read latency');
+    // Without the schema the model has to guess argument names, and finds out
+    // it guessed wrong by spending a round trip.
+    expect(system).toContain('"service"');
+  });
+
+  test('an agent that holds nothing is told about nothing', async () => {
+    replies = [JSON.stringify({ events: [], claims: [] })];
+    await runOneTurn('@sid thoughts?');
+    expect(prompts[0].system).not.toContain('obs/p99_latency');
+  });
+
+  test('a call the agent asks for is actually made, and the answer reaches it', async () => {
+    replies = [
+      JSON.stringify({ toolCalls: [{ connection: 'obs', tool: 'p99_latency', arguments: { service: 'storage-engine', windowHours: 12 } }] }),
+      JSON.stringify({
+        events: [{ type: 'MessagePosted', payload: { body: 'p99 is 142ms over the last 12h, measured just now via obs/p99_latency.' } }],
+        claims: [],
+      }),
+    ];
+
+    const before = mcp.calls.length;
+    const result = await runOneTurn('@bob what is the p99 right now?');
+    expect(result.error).toBeUndefined();
+
+    // The server really ran it, with the arguments the model asked for.
+    expect(mcp.calls.slice(before)).toEqual([
+      { tool: 'p99_latency', args: { service: 'storage-engine', windowHours: 12 } },
+    ]);
+
+    // And the result came back into the second prompt, which is the whole
+    // point: a tool whose answer the model never sees is a tool nobody called.
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1].user).toContain('p99 142ms over 12h');
+
+    const posted = await db.event.findFirst({ where: { orgId: ORG, actorMemberId: BOB, type: 'MessagePosted' } });
+    expect(JSON.parse(posted!.payload as string).body).toContain('142ms');
+  });
+
+  test('the call is on the spine, so the org can see what its agent did outside it', async () => {
+    replies = [
+      JSON.stringify({ toolCalls: [{ connection: 'obs', tool: 'p99_latency', arguments: { service: 'api' } }] }),
+      JSON.stringify({ events: [{ type: 'MessagePosted', payload: { body: 'api is fine.' } }], claims: [] }),
+    ];
+    await runOneTurn('@bob check api');
+
+    const called = await db.event.findFirst({ where: { orgId: ORG, type: 'ToolCalled' } });
+    expect(called).not.toBeNull();
+    const payload = JSON.parse(called!.payload as string) as Record<string, unknown>;
+    expect(payload.connectionKey).toBe('obs');
+    expect(payload.tool).toBe('p99_latency');
+    expect(payload.arguments).toEqual({ service: 'api' });
+    expect(payload.result).toContain('142ms');
+    expect(payload.failed).toBe(false);
+    // Attributed to the agent that made it, on its owner's authority.
+    expect(called!.actorMemberId).toBe(BOB);
+    expect(called!.onBehalfOfMemberId).toBe(KAI);
+    // And it sits before what the agent said about it.
+    const said = await db.event.findFirst({ where: { orgId: ORG, actorMemberId: BOB, type: 'MessagePosted' } });
+    expect(called!.seq).toBeLessThan(said!.seq);
+  });
+
+  test('a connection the agent does not hold is refused by naming what it does hold', async () => {
+    replies = [
+      JSON.stringify({ toolCalls: [{ connection: 'production-db', tool: 'drop_table', arguments: {} }] }),
+      JSON.stringify({ events: [{ type: 'MessagePosted', payload: { body: 'I cannot reach that.' } }], claims: [] }),
+    ];
+    const before = mcp.calls.length;
+    await runOneTurn('@bob drop the table');
+
+    // Nothing was dialled.
+    expect(mcp.calls.length).toBe(before);
+    // And the agent was told why, in terms it can act on — a call that just
+    // vanishes is a call the agent asks for again.
+    expect(prompts[1].user).toContain('do not hold a connection called "production-db"');
+    expect(prompts[1].user).toContain('You hold: obs');
+    // A refused call is not a call, so nothing claims one happened.
+    expect(await db.event.count({ where: { orgId: ORG, type: 'ToolCalled' } })).toBe(0);
+  });
+
+  test('a tool that fails comes back as something the agent can correct', async () => {
+    replies = [
+      JSON.stringify({ toolCalls: [{ connection: 'obs', tool: 'deploy', arguments: { service: 'storage-engine' } }] }),
+      JSON.stringify({ events: [{ type: 'MessagePosted', payload: { body: 'Deploy is blocked behind the release gate.' } }], claims: [] }),
+    ];
+    await runOneTurn('@bob ship it');
+
+    expect(prompts[1].user).toContain('FAILED');
+    expect(prompts[1].user).toContain('blocked release gate');
+
+    const called = await db.event.findFirst({ where: { orgId: ORG, type: 'ToolCalled' } });
+    expect(JSON.parse(called!.payload as string).failed).toBe(true);
+  });
+
+  test('a model that only ever asks for tools is stopped', async () => {
+    // Every pass is another call somebody pays for. Without a bound, a model
+    // that keeps asking spends the budget rather than answering.
+    replies = Array.from({ length: 8 }, () =>
+      JSON.stringify({ toolCalls: [{ connection: 'obs', tool: 'p99_latency', arguments: { service: 'x' } }] }),
+    );
+    const before = mcp.calls.length;
+    await runOneTurn('@bob loop please');
+
+    // Exactly: one opening call to the model, then two passes, each of which
+    // runs the one call it asked for and goes back once more.
+    expect(prompts).toHaveLength(3);
+    expect(mcp.calls.length - before).toBe(2);
+  });
+
+  test('what the turn cost is what the turn spent, not what its last pass spent', async () => {
+    replies = [
+      JSON.stringify({ toolCalls: [{ connection: 'obs', tool: 'p99_latency', arguments: { service: 'a' } }] }),
+      JSON.stringify({ events: [{ type: 'MessagePosted', payload: { body: 'done' } }], claims: [] }),
+    ];
+    await runOneTurn('@bob one call please');
+
+    const ws = await db.workSession.findFirst({
+      where: { orgId: ORG, outcome: 'succeeded' },
+      orderBy: { startedAt: 'desc' },
+    });
+    // Two passes at 100 in / 50 out each.
+    expect(ws!.tokensIn).toBe(200);
+    expect(ws!.tokensOut).toBe(100);
+  });
+});

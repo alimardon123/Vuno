@@ -23,6 +23,7 @@
 //     recoverable in a way that a bogus ClaimStatusChanged is not.
 
 import { z } from 'zod';
+import type { ProposedToolCall } from '@/lib/agents/types';
 import type { NewEventInput } from './types';
 
 // ─── Envelope ────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ export const EVENT_TYPES = [
   'EscalationOpened', 'EscalationResolved', 'MemberJoined', 'MemberRoleChanged', 'MemberRetired',
   'WikiSectionAuthored', 'AgentThought', 'SharedItem', 'ReactionAdded',
   'PreemptIssued', 'AttentionWakeup', 'MemoryUpdated', 'PaProactiveNote',
-  'AgentHandoff',
+  'AgentHandoff', 'ToolCalled',
 ] as const;
 
 export const SCOPE_TYPES = [
@@ -108,9 +109,20 @@ const proposedClaimSchema = z.object({
   scopeId: z.string().min(1).optional(),
 });
 
+// A tool call is model output like everything else, so it goes through the same
+// boundary. `connection` and `tool` are names to be looked up, not paths to be
+// followed: nothing here decides what gets dialled, it only says what was asked
+// for. The turn checks the agent actually holds that connection.
+const proposedToolCallSchema = z.object({
+  connection: z.string().min(1).max(64),
+  tool: z.string().min(1).max(128),
+  arguments: z.record(z.string(), z.unknown()).default({}),
+});
+
 export const agentOutputSchema = z.object({
   events: z.array(proposedEventSchema).default([]),
   claims: z.array(proposedClaimSchema).default([]),
+  toolCalls: z.array(proposedToolCallSchema).default([]),
 });
 
 export type ProposedClaim = z.infer<typeof proposedClaimSchema>;
@@ -138,6 +150,8 @@ export interface Rejection {
 export interface ParsedAgentOutput {
   events: NewEventInput[];
   claims: ResolvedClaim[];
+  /** Calls the agent asked for. The turn decides whether it may make them. */
+  toolCalls: ProposedToolCall[];
   rejections: Rejection[];
 }
 
@@ -179,6 +193,7 @@ export function parseAgentOutput(
     return {
       events: [],
       claims: [],
+      toolCalls: [],
       rejections: [
         {
           at: 'response',
@@ -189,9 +204,10 @@ export function parseAgentOutput(
     };
   }
 
-  const source = (raw ?? {}) as { events?: unknown[]; claims?: unknown[] };
+  const source = (raw ?? {}) as { events?: unknown[]; claims?: unknown[]; toolCalls?: unknown[] };
   const events: NewEventInput[] = [];
   const claims: ResolvedClaim[] = [];
+  const toolCalls: ProposedToolCall[] = [];
   const rejections: Rejection[] = [];
 
   for (const [i, candidate] of (source.events ?? []).entries()) {
@@ -246,14 +262,27 @@ export function parseAgentOutput(
     });
   }
 
-  return { events, claims, rejections };
+  for (const [i, candidate] of (source.toolCalls ?? []).entries()) {
+    const parsed = proposedToolCallSchema.safeParse(candidate);
+    if (!parsed.success) {
+      rejections.push({
+        at: `toolCalls[${i}]`,
+        received: truncate(candidate),
+        reason: describe(parsed.error),
+      });
+      continue;
+    }
+    toolCalls.push(parsed.data);
+  }
+
+  return { events, claims, toolCalls, rejections };
 }
 
-/** An object carrying at least one of the two arrays is worth walking item by item. */
+/** An object carrying at least one of the arrays is worth walking item by item. */
 function isPartiallySalvageable(raw: unknown): boolean {
   if (typeof raw !== 'object' || raw === null) return false;
   const o = raw as Record<string, unknown>;
-  return Array.isArray(o.events) || Array.isArray(o.claims);
+  return Array.isArray(o.events) || Array.isArray(o.claims) || Array.isArray(o.toolCalls);
 }
 
 function describe(error: z.ZodError): string {

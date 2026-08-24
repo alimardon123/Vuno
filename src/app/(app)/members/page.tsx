@@ -9,6 +9,7 @@ import { reviewOrg } from '@/lib/review/metrics';
 import { Review } from '@/components/vuno/review';
 import { Library } from '@/components/vuno/library';
 import { listSkills } from '@/lib/skills';
+import { listConnections } from '@/lib/connections';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Empty } from '@/components/vuno/primitives';
@@ -111,6 +112,7 @@ export default async function MembersPage({
         ) : view === 'library' ? (
           <Library
             skills={await listSkills(org.id)}
+            connections={await listConnections(org.id)}
             members={roster
               .filter((m) => m.status === 'active')
               .map((m) => ({ id: m.id, displayName: m.displayName, kind: m.kind }))}

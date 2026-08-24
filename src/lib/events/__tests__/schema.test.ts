@@ -63,7 +63,7 @@ describe('parseAgentOutput — accepts what is valid', () => {
 
   test('a missing events key is not an error — the agent simply said nothing', () => {
     const out = parseAgentOutput({ claims: [] }, ctx);
-    expect(out).toEqual({ events: [], claims: [], rejections: [] });
+    expect(out).toEqual({ events: [], claims: [], toolCalls: [], rejections: [] });
   });
 });
 

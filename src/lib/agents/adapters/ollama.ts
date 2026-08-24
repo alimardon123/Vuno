@@ -77,7 +77,7 @@ export class OllamaAdapter implements AgentAdapter {
         // replies arriving as prose about JSON.
         format: 'json',
         messages: [
-          { role: 'system', content: systemPrompt(this.manifest, this.skills) },
+          { role: 'system', content: systemPrompt(this.manifest, this.skills, ctx.tools ?? []) },
           { role: 'user', content: userPrompt(ctx) },
         ],
       }),
@@ -115,7 +115,7 @@ export class OllamaAdapter implements AgentAdapter {
     });
 
     return {
-      response: { events: parsed.events, claims: parsed.claims },
+      response: { events: parsed.events, claims: parsed.claims, toolCalls: parsed.toolCalls },
       rejections: parsed.rejections,
       usage,
       rawText: text,

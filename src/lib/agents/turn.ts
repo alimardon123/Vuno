@@ -20,8 +20,19 @@ import { assertClaim } from '@/lib/ledger/claims';
 import { getAgentRow } from '@/lib/members';
 import { resolveAdapter } from '@/lib/agents/registry';
 import { BudgetExhausted, spendToday } from '@/lib/agents/budget';
-import type { AgentContext, AgentManifest, ScopeType } from '@/lib/agents/types';
+import { availableTools, heldConnections, MAX_CALLS_PER_TURN, runToolCalls } from '@/lib/agents/tools';
+import type { AgentContext, AgentManifest, AvailableTool, ScopeType, ToolOutcome } from '@/lib/agents/types';
 import type { AgentRun } from '@/lib/agents/adapters/run';
+import type { NewEventInput } from '@/lib/events/types';
+
+/**
+ * How many times a turn may go back to the model after running tools.
+ *
+ * Two is enough for "ask, read, answer" and for one correction after a call
+ * that failed. Past that a model that keeps asking is not converging, and each
+ * pass is another call somebody pays for.
+ */
+const MAX_TOOL_PASSES = 2;
 
 export interface TurnRequest {
   tenantId: string;
@@ -120,6 +131,12 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
     }),
   ]);
 
+  // What this agent can reach outside the org. A connection it holds and is
+  // never told about is a row in a table — the same failure a skill has, and
+  // the reason both live in one Library.
+  const connections = await heldConnections(req.memberId);
+  const tools: AvailableTool[] = availableTools(connections);
+
   const ctx: AgentContext = {
     scope: { scopeType: req.scopeType, scopeId: req.scopeId, projectId: req.projectId },
     events: events.reverse().map((e) => ({
@@ -132,6 +149,7 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
       type: req.triggerType ?? 'mentioned',
       payload: { reason: req.reason },
     },
+    ...(tools.length > 0 ? { tools } : {}),
   };
 
   const adapter = resolved.adapter as {
@@ -142,12 +160,58 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
   if (typeof adapter.run !== 'function') {
     throw new Error(`The ${manifest.harnessName} harness does not report what a run cost`);
   }
-  const run = await adapter.run(ctx);
+  let run = await adapter.run(ctx);
+
+  // The tool loop. An agent that asked for a call gets it made, sees the
+  // result, and answers — bounded, because every pass is another model call
+  // somebody pays for and a model that keeps asking would otherwise not stop.
+  const toolEvents: NewEventInput[] = [];
+  const outcomes: ToolOutcome[] = [];
+  let calls = 0;
+
+  for (let pass = 0; pass < MAX_TOOL_PASSES; pass++) {
+    const asked = run.response.toolCalls ?? [];
+    if (asked.length === 0) break;
+
+    const remaining = MAX_CALLS_PER_TURN - calls;
+    if (remaining <= 0) break;
+
+    const ran = await runToolCalls(asked.slice(0, remaining), connections, {
+      scopeType: req.scopeType,
+      scopeId: req.scopeId,
+    });
+    calls += ran.outcomes.length;
+    toolEvents.push(...ran.events);
+    outcomes.push(...ran.outcomes);
+
+    // The budget is checked again: the first check was before one model call,
+    // and this is another one.
+    const now = await spendToday(req.orgId);
+    if (now.exhausted) throw new BudgetExhausted(now);
+
+    const next = await adapter.run({ ...ctx, toolResults: outcomes });
+    run = {
+      ...next,
+      // Cost accumulates across passes, so what the turn records is what the
+      // turn spent rather than what its last pass spent.
+      usage: {
+        ...next.usage,
+        tokensIn: run.usage.tokensIn + next.usage.tokensIn,
+        tokensOut: run.usage.tokensOut + next.usage.tokensOut,
+        costCents: run.usage.costCents + next.usage.costCents,
+        durationMs: run.usage.durationMs + next.usage.durationMs,
+      },
+      rejections: [...run.rejections, ...next.rejections],
+    };
+  }
 
   // Everything the agent says, appended as itself, in one transaction.
   const spine = new EventSpine(req.tenantId, req.orgId);
   const appended = await spine.append(
-    run.response.events.map((e) => ({
+    // The calls first, then what the agent said about them — the log reads in
+    // the order things happened, and a claim citing a measurement sits after
+    // the record of the measurement being taken.
+    [...toolEvents, ...run.response.events].map((e) => ({
       ...e,
       actorType: 'member' as const,
       actorMemberId: agent.id,

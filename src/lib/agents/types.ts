@@ -31,11 +31,45 @@ export interface AgentScope {
   projectId?: string;
 }
 
+/** A tool this agent may call, from a connection it holds. */
+export interface AvailableTool {
+  /** The connection's key, so two servers may both offer a tool called `search`. */
+  connection: string;
+  name: string;
+  description: string;
+  /** JSON Schema for the arguments, as the server published it. */
+  inputSchema: Record<string, unknown>;
+}
+
+/** One tool call an agent asked for. */
+export interface ProposedToolCall {
+  connection: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+}
+
+/** What came back, fed to the agent on its next pass. */
+export interface ToolOutcome extends ProposedToolCall {
+  /** The tool ran and reported a failure, or the call could not be made at all. */
+  failed: boolean;
+  text: string;
+}
+
 export interface AgentContext {
   scope: AgentScope;           // where this invocation is acting
   events: EventRecord[];       // recent relevant event spine slice
   claims: AgentClaimRecord[];  // relevant ledger claims (filtered by scope)
   trigger: { type: string; payload: unknown };
+  /**
+   * What this agent can reach outside the org, from the connections it holds.
+   * Empty for an agent holding none, which is most of them.
+   */
+  tools?: AvailableTool[];
+  /**
+   * Results of calls made earlier in this same turn. Present only on a second
+   * or later pass — the turn runs what was asked for and comes back round.
+   */
+  toolResults?: ToolOutcome[];
 }
 
 export interface AgentClaimRecord {
@@ -61,6 +95,12 @@ export interface NewClaimInput {
 export interface AgentResponse {
   events: NewEventInput[];      // typed events to append — never mutates
   claims: NewClaimInput[];     // proposed claims with status + provenance
+  /**
+   * Tools the agent wants called before it answers. The turn runs them and
+   * invokes the adapter again with the results; nothing here reaches the spine
+   * until the agent has seen what came back.
+   */
+  toolCalls?: ProposedToolCall[];
 }
 
 export interface AgentAdapter {
