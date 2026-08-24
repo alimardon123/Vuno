@@ -11,6 +11,8 @@ import { MessageList } from '@/components/vuno/message-list';
 import { Composer, type Mentionable } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
 import { CallSurface, type CallMember, type LiveCall } from '@/components/vuno/call';
+import { MeetingStrip, ScheduleButton } from '@/components/vuno/meetings';
+import type { MeetingRow } from '@/lib/meetings';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import type { Conversation, ConversationMessage, MessageWindow } from '@/lib/conversations';
@@ -36,6 +38,7 @@ export function ConversationView({
   window: view,
   mentionable = [],
   viewerId,
+  meetings = [],
 }: {
   conversation: Conversation;
   window: MessageWindow;
@@ -43,6 +46,8 @@ export function ConversationView({
   mentionable?: Mentionable[];
   /** Whose messages carry an edit and a delete. */
   viewerId: string;
+  /** What is booked here. A meeting is this conversation, with a time on it. */
+  meetings?: MeetingRow[];
 }) {
   const [replyingTo, setReplyingTo] = useState<ConversationMessage | null>(null);
   const [call, setCall] = useState<{ call: LiveCall; ice: { iceServers: RTCIceServer[]; limitation: string | null } } | null>(null);
@@ -200,6 +205,7 @@ export function ConversationView({
           ) : null}
         </div>
         <div className="ml-auto flex items-center gap-2 text-[11px] text-[var(--fg-4)]">
+          {!call ? <ScheduleButton channelId={conversation.id} conversationName={conversation.name} /> : null}
           {!call ? (
             <button
               type="button"
@@ -228,6 +234,10 @@ export function ConversationView({
           ) : null}
         </div>
       </header>
+
+      {!call && meetings.length > 0 ? (
+        <MeetingStrip meetings={meetings} onJoin={() => void joinCall()} />
+      ) : null}
 
       {call ? (
         <CallSurface

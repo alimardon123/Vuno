@@ -757,6 +757,32 @@ async function call(browser: Browser) {
   const callButton = (p: Page) => p.getByRole('button', { name: /Join · \d+|^Call$/ });
 
   await open(pageA, room);
+
+  // A meeting is this conversation with a time on it, so it is scheduled from
+  // here and joining it is the call here — there is no separate room.
+  await pageA.getByRole('button', { name: /^Schedule a meeting/ }).click();
+  await pageA.waitForTimeout(500);
+  const subject = `Smoke review ${Date.now()}`;
+  await pageA.getByLabel('What it is about').fill(subject);
+  await pageA.getByRole('button', { name: /^Schedule$/ }).click();
+  await pageA.waitForTimeout(2_500);
+
+  check(
+    (await pageA.getByText(subject).first().count()) > 0,
+    'a scheduled meeting appears in the conversation it is in',
+  );
+  check(
+    (await pageA.getByRole('button', { name: /Join now|Start early/ }).count()) > 0,
+    'a meeting offers a way into the call',
+  );
+  // And it was announced, rather than being a calendar entry nobody saw.
+  check(
+    (await pageA.locator('article').filter({ hasText: subject }).count()) > 0,
+    'scheduling one tells the conversation',
+  );
+  await pageA.getByRole('button', { name: 'Call off' }).first().click();
+  await pageA.waitForTimeout(2_000);
+
   await callButton(pageA).click();
   await pageA.getByRole('region', { name: 'Call' }).waitFor({ timeout: 20_000 });
   check(true, 'a call starts in a conversation');

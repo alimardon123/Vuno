@@ -4,6 +4,7 @@ import { getConversation, listMessages } from '@/lib/conversations';
 import { currentViewer } from '@/lib/auth';
 import { ConversationView } from '@/components/vuno/conversation-view';
 import { mentionableIn } from '@/lib/members/mentionable';
+import { meetingsIn } from '@/lib/meetings';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,7 @@ export default async function ChatPage({
       window={window}
       mentionable={await mentionableIn(org.id, conversation)}
       viewerId={viewer.id}
+      meetings={await meetingsIn(org.id, id)}
     />
   );
 }

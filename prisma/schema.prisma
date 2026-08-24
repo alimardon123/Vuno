@@ -67,6 +67,7 @@ model Member {
   sessions        Session[]
   uploads         Attachment[]
   callsStarted    Call[]            @relation("CallStarter")
+  meetingsHosted  Meeting[]         @relation("MeetingHost")
   callSeats       CallParticipant[]
 
   @@unique([orgId, handle])
@@ -156,6 +157,7 @@ model Organization {
   plugins     Plugin[]
   attachments Attachment[]
   calls       Call[]
+  meetings    Meeting[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -418,6 +420,39 @@ model Attachment {
 // The row is the record — who was in it, when, how long. Not a byte of what was
 // said: WebRTC media goes browser to browser and never reaches this server,
 // which is a property of the design rather than a promise in a policy.
+// A meeting: a call with a time on it.
+//
+// Not a separate mechanism. A meeting names when people will be in a
+// conversation, and joining one starts or joins the call there — so everything
+// calls already does (the mesh, the record, who was in it) applies unchanged.
+// The alternative is a second real-time stack that has to be kept in step with
+// the first.
+model Meeting {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Where it happens. A meeting is a conversation with a time on it.
+  channelId   String
+  title       String
+  /// What it is for. Empty is allowed; a meeting with no agenda is still a meeting.
+  agenda      String?
+  startsAt    DateTime
+  minutes     Int      @default(30)
+  createdById String?
+  /// Set when somebody cancels it, so the record says it was called off rather
+  /// than that it silently stopped existing.
+  cancelledAt DateTime?
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  createdBy   Member?      @relation("MeetingHost", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// "What is coming up" is the only question asked of this table.
+  @@index([orgId, startsAt])
+  @@index([channelId, startsAt])
+}
+
 model Call {
   id          String   @id @default(cuid())
   tenantId    String
@@ -477,6 +512,7 @@ model Channel {
   members     ChannelMember[]
   attachments Attachment[]
   calls       Call[]
+  meetings    Meeting[]
 
   @@unique([orgId, slug])
   @@index([orgId, teamId])
