@@ -1,8 +1,8 @@
 // Vuno — POST /api/group-chats
 // Create an ad-hoc multi-person GROUP CHAT (not a team channel, not a DM).
 // Per the user's direction: group chats are CHATS, not channels.
-// The storage uses the Channel table (isDm=false, teamId=null) but the API + UI
-// always refer to these as "group chats" — never "channels".
+// The storage uses the Channel table (kind='group') but the API + UI always
+// refer to these as "group chats" — never "channels".
 //
 // Flow:
 //   1. Receive { name, memberIds } — the chat name + member agent/user IDs
@@ -44,6 +44,21 @@ export async function POST(req: Request) {
   const slug = parsed.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group';
   const chatId = `chat-group-${slug}-${Date.now().toString(36).slice(-6)}`;
 
+  // Only members of this org can be added — an unchecked id would otherwise
+  // create a participant row pointing outside the org.
+  const members = await db.member.findMany({
+    where: { orgId: org.id, id: { in: parsed.memberIds } },
+    select: { id: true },
+  });
+  if (members.length !== parsed.memberIds.length) {
+    const known = new Set(members.map((m) => m.id));
+    const unknown = parsed.memberIds.filter((id) => !known.has(id));
+    return NextResponse.json(
+      { ok: false, error: `Not members of this org: ${unknown.join(', ')}` },
+      { status: 400 },
+    );
+  }
+
   // Create the group chat (not a DM, not tied to a team)
   const chat = await db.channel.create({
     data: {
@@ -51,10 +66,17 @@ export async function POST(req: Request) {
       tenantId: org.tenantId,
       orgId: org.id,
       teamId: null,
+      kind: 'group',
       name: parsed.name,
       slug: `group-${slug}`,
       topic: `Group chat: ${parsed.name}`,
-      isDm: false,
+      members: {
+        create: members.map((m) => ({
+          tenantId: org.tenantId,
+          orgId: org.id,
+          memberId: m.id,
+        })),
+      },
     },
   });
 
@@ -62,7 +84,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, chat: { ...chat, isChat: true, isGroupChat: true } });
 }
 
-// GET — list all group chats (isDm=false, teamId=null)
+// GET — list all group chats
 export async function GET() {
   const org = await db.organization.findFirst({
     orderBy: { createdAt: 'asc' },
@@ -71,7 +93,7 @@ export async function GET() {
   if (!org) return NextResponse.json({ chats: [] });
 
   const groupChats = await db.channel.findMany({
-    where: { orgId: org.id, isDm: false, teamId: null },
+    where: { orgId: org.id, kind: 'group' },
     orderBy: { name: 'asc' },
   });
 

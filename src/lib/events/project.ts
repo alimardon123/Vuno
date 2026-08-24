@@ -26,8 +26,9 @@ export const TYPED_MESSAGE_EVENTS: EventType[] = [
   'GateBlocked',
   'GatePassed',
   'RoleAssigned',
-  'AgentInstalled',
-  'AgentRetired',
+  'MemberJoined',
+  'MemberRoleChanged',
+  'MemberRetired',
   'AgentThought',
   'SharedItem',
   'ReactionAdded',
@@ -36,6 +37,7 @@ export const TYPED_MESSAGE_EVENTS: EventType[] = [
   'MemoryUpdated',
   'PaProactiveNote',
   'AgentHandoff',
+  'ToolCalled',
 ];
 
 export interface ChatMessageProjection {
@@ -43,9 +45,13 @@ export interface ChatMessageProjection {
   seq: number;
   type: EventType;
   payload: EventRecord['payload'];
-  actorType: 'agent' | 'human' | 'system';
-  actorAgentId?: string;
-  actorUserId?: string;
+  actorType: 'member' | 'human' | 'system';
+  actorMemberId?: string;
+  /** Set only when the action carried another member's authority. */
+  onBehalfOfMemberId?: string;
+  // Carried through so a message can be traced back to what it was about.
+  scopeType: EventRecord['scopeType'];
+  scopeId: string;
   createdAt: string;
   // type-label text for rendering, e.g. "PROPOSAL" or "BENCHMARK REPORT"
   typeLabel?: string;
@@ -70,8 +76,9 @@ const TYPE_LABELS: Partial<Record<EventType, string>> = {
   GateBlocked: 'GATE BLOCKED',
   GatePassed: 'GATE PASSED',
   RoleAssigned: 'ROLE ASSIGNED',
-  AgentInstalled: 'AGENT INSTALLED',
-  AgentRetired: 'AGENT RETIRED',
+  MemberJoined: 'JOINED',
+  MemberRoleChanged: 'ROLE CHANGED',
+  MemberRetired: 'RETIRED',
   AgentThought: 'THOUGHT',
   SharedItem: 'SHARED',
   ReactionAdded: 'REACTION',
@@ -80,6 +87,7 @@ const TYPE_LABELS: Partial<Record<EventType, string>> = {
   MemoryUpdated: 'LEARNED',
   PaProactiveNote: 'PROACTIVE',
   AgentHandoff: 'HANDOFF',
+  ToolCalled: 'TOOL',
 };
 
 const STATUS_HINTS: Partial<Record<EventType, ClaimStatus | 'blocked' | 'passed'>> = {
@@ -102,8 +110,10 @@ export function projectChatMessages(events: EventRecord[]): ChatMessageProjectio
       type: e.type,
       payload: e.payload,
       actorType: e.actorType,
-      actorAgentId: e.actorAgentId ?? undefined,
-      actorUserId: e.actorUserId ?? undefined,
+      scopeType: e.scopeType,
+      scopeId: e.scopeId,
+      actorMemberId: e.actorMemberId ?? undefined,
+      onBehalfOfMemberId: e.onBehalfOfMemberId ?? undefined,
       createdAt: e.createdAt,
       typeLabel: TYPE_LABELS[e.type],
       statusHint: STATUS_HINTS[e.type],
@@ -123,7 +133,7 @@ export interface LedgerEntry {
   scopeId: string;
   provenanceEventId: string;
   provenanceActorType: string;
-  provenanceAgentId?: string;
+  provenanceMemberId?: string;
   evidenceCount: number;
   contradictsCount: number;
   lastTransitionSeq: number;

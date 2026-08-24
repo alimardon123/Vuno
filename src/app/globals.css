@@ -1,237 +1,731 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is([data-theme="ink"] *));
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Vuno — one token layer, three palettes.
+
+   The rule the whole system rests on: **chrome is quiet, data is loud.** In a
+   product whose claim is evidence, saturated colour belongs to a claim's status
+   or a gate's verdict, never to decoration. That is what keeps the ledger
+   readable and what stops the interface competing with its own content.
+
+   Themes swap the neutrals and the single accent. The epistemic colours barely
+   move, because they carry meaning rather than mood — a falsified claim has to
+   read as falsified in every theme.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-rail: var(--rail);
+  --color-rail-fg: var(--rail-fg);
 
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
 
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
   --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-select: var(--select);
+  --color-hover: var(--hover);
 
-  /* status tokens (load-bearing color system) */
-  --color-status-asserted: var(--status-asserted);
-  --color-status-believed: var(--status-believed);
-  --color-status-tested: var(--status-tested);
-  --color-status-falsified: var(--status-falsified);
-  --color-status-uncertain: var(--status-uncertain);
+  --color-asserted: var(--asserted);
+  --color-believed: var(--believed);
+  --color-tested: var(--tested);
+  --color-falsified: var(--falsified);
+  --color-uncertain: var(--uncertain);
+  --color-asserted-bg: var(--asserted-bg);
+  --color-believed-bg: var(--believed-bg);
+  --color-tested-bg: var(--tested-bg);
+  --color-falsified-bg: var(--falsified-bg);
+  --color-uncertain-bg: var(--uncertain-bg);
+  --color-agent-edge: var(--agent-edge);
+  --color-mark: var(--mark);
+  --color-mark-fg: var(--mark-fg);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 }
 
-/* ─── Buzz-inspired WARM palette (light mode primary) ─────────────────────
-   Block's Buzz uses warm cream + mustard/gold accents, not cold blue.
-   Per VLM analysis of the Buzz screenshot:
-   - Sidebar: warm off-white/cream (#FBF9F1)
-   - Content: pure white
-   - Active: muted mustard tint (#EFEBD6)
-   - Text: dark charcoal
-   - Accent: muted gold/mustard
-   This replaces the previous cold charcoal + emerald palette. */
-:root {
-  --radius: 0.5rem;
+/* ─── Ink — the default. Deep neutral with a faint cool cast, never blue-black.
+   Dark is where density reads best, which is why engineering tools default to
+   it, and it sidesteps the cream-and-gold look entirely. ─────────────────── */
+:root,
+[data-theme="ink"] {
+  --bg:      #0F1215;
+  --surface: #14181C;
+  --raised:  #1A1F24;
+  --sunken:  #0A0C0E;
+  --rail:    #0A0C0E;
+  --rail-fg: #7C8792;
 
-  /* Warm cream backgrounds */
-  --background: oklch(0.98 0.006 85);
-  --foreground: oklch(0.18 0.006 60);
-  --card: oklch(1 0.003 85);
-  --card-foreground: oklch(0.18 0.006 60);
-  --popover: oklch(1 0.003 85);
-  --popover-foreground: oklch(0.18 0.006 60);
+  --fg:   #E8EBEE;
+  --fg-2: #AEB7C0;
+  --fg-3: #7C8792;
+  --fg-4: #575F68;
 
-  /* Mustard/gold accent (replaces emerald) — darkened slightly for WCAG AA */
-  --primary: oklch(0.52 0.13 70);
-  --primary-foreground: oklch(0.99 0.003 85);
+  --line:   #232A31;
+  --line-2: #313A43;
 
-  --secondary: oklch(0.94 0.012 85);
-  --secondary-foreground: oklch(0.18 0.006 60);
-  --muted: oklch(0.94 0.012 85);
-  --muted-foreground: oklch(0.48 0.01 60);
-  --accent: oklch(0.92 0.025 85);
-  --accent-foreground: oklch(0.18 0.006 60);
-  --destructive: oklch(0.55 0.20 25);
-  --border: oklch(0.88 0.008 60 / 50%);
-  --input: oklch(0.92 0.012 85);
-  --ring: oklch(0.58 0.14 75 / 40%);
+  /* One accent, used only for selection, focus and the primary action. */
+  --accent:      #C9D1D9;
+  --accent-fg:   #0F1215;
+  --accent-soft: #1D242B;
+  --select: #1E252C;
+  --hover:  #191F25;
 
-  --chart-1: oklch(0.58 0.14 75);
-  --chart-2: oklch(0.60 0.13 60);
-  --chart-3: oklch(0.55 0.20 25);
-  --chart-4: oklch(0.55 0.13 230);
-  --chart-5: oklch(0.50 0.01 60);
+  --asserted:  #D6A54A;
+  --believed:  #6BA6DE;
+  --tested:    #58BC8C;
+  --falsified: #E4795E;
+  --uncertain: #8A939C;
+  --asserted-bg:  #2C2617;
+  --believed-bg:  #16283A;
+  --tested-bg:    #132C22;
+  --falsified-bg: #33190F;
+  --uncertain-bg: #21262B;
 
-  --sidebar: oklch(0.96 0.01 85);
-  --sidebar-foreground: oklch(0.18 0.006 60);
-  --sidebar-primary: oklch(0.58 0.14 75);
-  --sidebar-primary-foreground: oklch(0.99 0.003 85);
-  --sidebar-accent: oklch(0.90 0.03 85);
-  --sidebar-accent-foreground: oklch(0.18 0.006 60);
-  --sidebar-border: oklch(0.88 0.008 60 / 40%);
-  --sidebar-ring: oklch(0.58 0.14 75 / 40%);
 
-  /* claim status colors — load-bearing, recalibrated for warm light bg */
-  --status-asserted: oklch(0.55 0.13 60);     /* amber */
-  --status-believed: oklch(0.50 0.13 230);    /* sky (cool contrast) */
-  --status-tested: oklch(0.50 0.12 145);      /* warm green */
-  --status-falsified: oklch(0.50 0.20 25);    /* warm red-orange */
-  --status-uncertain: oklch(0.45 0.01 60);    /* warm grey */
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #3FB8A6;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #4C3EC0;
+  --mark-fg: #F0EDFF;
+  color-scheme: dark;
 }
 
-/* Warm dark mode — not cold blue-black, but warm charcoal */
-.dark {
-  --background: oklch(0.15 0.008 60);
-  --foreground: oklch(0.94 0.008 80);
-  --card: oklch(0.18 0.008 60);
-  --card-foreground: oklch(0.94 0.008 80);
-  --popover: oklch(0.20 0.008 60);
-  --popover-foreground: oklch(0.94 0.008 80);
-  --primary: oklch(0.70 0.14 75);
-  --primary-foreground: oklch(0.15 0.008 60);
-  --secondary: oklch(0.22 0.008 60);
-  --secondary-foreground: oklch(0.94 0.008 80);
-  --muted: oklch(0.22 0.008 60);
-  --muted-foreground: oklch(0.68 0.01 60);
-  --accent: oklch(0.25 0.012 75);
-  --accent-foreground: oklch(0.94 0.008 80);
-  --destructive: oklch(0.62 0.20 25);
-  --border: oklch(0.25 0.008 60 / 50%);
-  --input: oklch(0.22 0.008 60);
-  --ring: oklch(0.70 0.14 75 / 40%);
+/* ─── Paper — a true light neutral. Not cream: a warm-leaning grey, so it reads
+   as paper rather than as parchment. ──────────────────────────────────────── */
+[data-theme="paper"] {
+  --bg:      #F6F7F8;
+  --surface: #FFFFFF;
+  --raised:  #FFFFFF;
+  --sunken:  #ECEEF0;
+  --rail:    #16191D;
+  --rail-fg: #99A2AC;
 
-  --chart-1: oklch(0.70 0.14 75);
-  --chart-2: oklch(0.70 0.13 60);
-  --chart-3: oklch(0.65 0.20 25);
-  --chart-4: oklch(0.70 0.13 230);
-  --chart-5: oklch(0.66 0.01 60);
+  --fg:   #14181C;
+  --fg-2: #454E57;
+  --fg-3: #6B747E;
+  --fg-4: #99A2AC;
 
-  --sidebar: oklch(0.16 0.008 60);
-  --sidebar-foreground: oklch(0.94 0.008 80);
-  --sidebar-primary: oklch(0.70 0.14 75);
-  --sidebar-primary-foreground: oklch(0.15 0.008 60);
-  --sidebar-accent: oklch(0.24 0.012 75);
-  --sidebar-accent-foreground: oklch(0.94 0.008 80);
-  --sidebar-border: oklch(0.25 0.008 60 / 40%);
-  --sidebar-ring: oklch(0.70 0.14 75 / 40%);
+  --line:   #E2E6EA;
+  --line-2: #CDD4DA;
 
-  --status-asserted: oklch(0.70 0.13 60);
-  --status-believed: oklch(0.70 0.13 230);
-  --status-tested: oklch(0.70 0.14 145);
-  --status-falsified: oklch(0.65 0.20 25);
-  --status-uncertain: oklch(0.66 0.01 60);
+  --accent:      #14181C;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #EDF0F2;
+  --select: #EBEEF1;
+  --hover:  #F1F3F5;
+
+  --asserted:  #9A6B10;
+  --believed:  #24629E;
+  --tested:    #1F6F4B;
+  --falsified: #B03B21;
+  --uncertain: #6B747E;
+  --asserted-bg:  #F7EBD3;
+  --believed-bg:  #DCE9F6;
+  --tested-bg:    #D7EBE0;
+  --falsified-bg: #F8E0D8;
+  --uncertain-bg: #E9ECEF;
+
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #0E7C6B;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #DCD5FA;
+  --mark-fg: #241C6B;
+  color-scheme: light;
 }
 
+/* ─── Warm — the original cream and gold, kept because you asked for it. Same
+   tokens, so nothing else in the app knows which palette is on. ──────────── */
+[data-theme="warm"] {
+  --bg:      #FBF9F3;
+  --surface: #FFFFFF;
+  --raised:  #FFFFFF;
+  --sunken:  #F1EDE1;
+  --rail:    #2A2518;
+  --rail-fg: #A99C7E;
+
+  --fg:   #1E1B14;
+  --fg-2: #4E4739;
+  --fg-3: #7A7160;
+  --fg-4: #A99C7E;
+
+  --line:   #E8E1D0;
+  --line-2: #D6CCB4;
+
+  --accent:      #8A6A18;
+  --accent-fg:   #FFFDF7;
+  --accent-soft: #F3ECD9;
+  --select: #F0E9D6;
+  --hover:  #F5F1E5;
+
+  --asserted:  #96690F;
+  --believed:  #26619C;
+  --tested:    #1F6F4B;
+  --falsified: #B03B21;
+  --uncertain: #7A7160;
+  --asserted-bg:  #F7EBD3;
+  --believed-bg:  #DEE9F5;
+  --tested-bg:    #D9EBE1;
+  --falsified-bg: #F8E1D9;
+  --uncertain-bg: #EFEADC;
+
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #0F7566;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #E1D8F6;
+  --mark-fg: #2B2170;
+  color-scheme: light;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Studio and Daylight — the same design language, two grounds.
+
+   These are the default, and they exist because the first five were dense but
+   rough: everything between 11 and 13px with almost no size contrast, and a
+   hairline box around every list, so the screen read as boxes inside boxes
+   rather than as a hierarchy.
+
+   One structural change does most of the work: **a surface separates by
+   elevation, not by an outline.** The 1px ring around every panel goes; a
+   shadow and a lighter ground take its place. Dividers *inside* a panel stay,
+   because a line between two rows is information — a line around the panel was
+   only ever saying "this is a panel", which its position already said.
+
+   The rest is rhythm. A base of 14px instead of 13, a real step between a name
+   and the metadata under it, and padding that lets a dense list breathe without
+   fitting fewer rows on screen.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Studio — the dark ground ────────────────────────────────────────────── */
+[data-theme="studio"] {
+  /* Not black. A near-black with a trace of blue in it, so the elevated
+     surfaces above it read as lifted rather than as a lighter grey. */
+  --bg:      #0C0D11;
+  --surface: #14161C;
+  --raised:  #1B1E26;
+  --sunken:  #0A0B0E;
+  --rail:    #08090C;
+  --rail-fg: #7A8093;
+
+  --fg:   #EDEEF2;
+  --fg-2: #B4B8C6;
+  --fg-3: #82889A;
+  --fg-4: #5C6273;
+
+  --line:   #23262F;
+  --line-2: #31353F;
+
+  /* One accent with enough presence to be the only saturated thing that is not
+     a claim status. Indigo, because every status hue is taken. */
+  --accent:      #7C6BF5;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #1D1B33;
+  --select: #1E2029;
+  --hover:  #191C23;
+
+  --asserted:  #E0A83F;
+  --believed:  #6BA6DE;
+  --tested:    #4FC08D;
+  --falsified: #EC7B5E;
+  --uncertain: #8B90A0;
+  --asserted-bg:  #2A2314;
+  --believed-bg:  #16273A;
+  --tested-bg:    #122B21;
+  --falsified-bg: #331A12;
+  --uncertain-bg: #1F222A;
+
+  --agent-edge: #3FB8A6;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #4A38CE;
+  --mark-fg: #F1EEFF;
+  color-scheme: dark;
+}
+
+/* ─── Daylight — the light ground ──────────────────────────────────────────
+   Not Studio inverted. A shadow on white reads as dirt, so here the separation
+   is tint: a panel is white on a faintly grey page, and the hairline stays but
+   drops almost to invisible. ─────────────────────────────────────────────── */
+[data-theme="daylight"] {
+  --bg:      #F7F7F9;
+  --surface: #FFFFFF;
+  --raised:  #FFFFFF;
+  --sunken:  #F1F1F4;
+  --rail:    #14161C;
+  --rail-fg: #8B90A0;
+
+  --fg:   #15161C;
+  --fg-2: #45485A;
+  --fg-3: #6E7285;
+  --fg-4: #9BA0B0;
+
+  --line:   #EAEAEF;
+  --line-2: #DCDCE4;
+
+  --accent:      #5B4BE0;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #EEECFD;
+  --select: #F0EEFE;
+  --hover:  #F4F4F7;
+
+  --asserted:  #99700F;
+  --believed:  #2C5FA0;
+  --tested:    #1F7A55;
+  --falsified: #C04322;
+  --uncertain: #6E7285;
+  --asserted-bg:  #FBF2DC;
+  --believed-bg:  #E8EFF9;
+  --tested-bg:    #E1F2EA;
+  --falsified-bg: #FCE8E2;
+  --uncertain-bg: #F0F0F3;
+
+  --agent-edge: #0E9384;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #DCD7FD;
+  --mark-fg: #281C8C;
+  color-scheme: light;
+}
+
+/* ─── What the two share ─────────────────────────────────────────────────── */
+
+[data-theme="studio"] body,
+[data-theme="daylight"] body {
+  font-family: var(--font-studio-sans), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: -0.006em;
+}
+
+/* A panel is lifted, not outlined. Targeted at the container radii the app
+   actually uses for panels — a chip at `rounded-[4px]` keeps its edge, because
+   a chip *is* its outline. */
+[data-theme="studio"] :is(.rounded-xl, .rounded-lg).border {
+  border-color: transparent;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.04),
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 12px 32px -16px rgb(0 0 0 / 0.55);
+}
+
+/* On white a shadow reads as dirt, so the light ground separates by tint and
+   keeps a hairline that is nearly gone. */
+[data-theme="daylight"] :is(.rounded-xl, .rounded-lg).border {
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgb(16 18 32 / 0.04), 0 8px 24px -18px rgb(16 18 32 / 0.14);
+}
+
+/* Softer corners than the base 8/12, which is most of what "sleek" means when
+   everything else is already dense. */
+[data-theme="studio"] .rounded-xl,
+[data-theme="daylight"] .rounded-xl { border-radius: 14px; }
+[data-theme="studio"] .rounded-lg,
+[data-theme="daylight"] .rounded-lg { border-radius: 10px; }
+[data-theme="studio"] .rounded-md,
+[data-theme="daylight"] .rounded-md { border-radius: 8px; }
+
+/* The step the old scale did not have: a name should not be the same size as
+   the timestamp beside it. */
+[data-theme="studio"] :is(h1, h2),
+[data-theme="daylight"] :is(h1, h2) {
+  letter-spacing: -0.022em;
+  font-weight: 650;
+}
+
+/* Numbers stay in mono so columns line up — the sans has tabular figures but
+   not the width consistency a spend column wants. */
+[data-theme="studio"] :is(.tnum, .font-mono),
+[data-theme="daylight"] :is(.tnum, .font-mono) {
+  font-family: var(--font-mono-stack), ui-monospace, monospace;
+  letter-spacing: -0.02em;
+}
+
+/* The rail is the one place that stays flat: it is a frame around the app, not
+   a surface in it, and lifting it would put a shadow on the edge of the window. */
+[data-theme="studio"] nav[aria-label="Sections"],
+[data-theme="daylight"] nav[aria-label="Sections"] { box-shadow: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Two directions, not two palettes.
+
+   Ink, Paper and Warm are the same design language in three colourways: same
+   type, same density, same shapes. These two are different arguments about
+   what the product is, and they change the type, the shape language and the
+   density to make it — which is what makes them worth choosing between.
+
+   Both are written as a skin over the existing app rather than as a second set
+   of components. Tailwind v4 inlines `border-radius: 6px` into `.rounded-md`
+   rather than referencing a variable, so a direction that changes shape has to
+   say so about the utilities. It is contained here, in one file, and nothing
+   in a component knows which direction is on.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Ledger — a book of record ─────────────────────────────────────────────
+   The org keeps a ledger, so this is what a ledger looks like: ruled paper,
+   set in a reading serif, generous enough to actually read. No rounded corners,
+   because ruled paper has none. A falsified claim is struck through the way a
+   corrected entry is in a real one — the one place a direction earns its keep
+   is where it makes the subject legible rather than just different.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-theme="ledger"] {
+  --bg:      #FBF9F4;
+  --surface: #FFFEFB;
+  --raised:  #FFFEFB;
+  --sunken:  #F2EEE4;
+  --rail:    #24211B;
+  --rail-fg: #9C9484;
+
+  --fg:   #1C1A17;
+  --fg-2: #423E36;
+  --fg-3: #6E685C;
+  --fg-4: #9C9484;
+
+  --line:   #E0DACB;
+  --line-2: #C8C0AC;
+
+  --accent:      #1C1A17;
+  --accent-fg:   #FBF9F4;
+  --accent-soft: #EFEADC;
+  --select: #EFE9DA;
+  --hover:  #F5F1E7;
+
+  /* Muted, because in a document the words carry the meaning and the colour
+     only marks it. A ledger's one loud colour is the correction. */
+  --asserted:  #7A5B12;
+  --believed:  #2A5A85;
+  --tested:    #245F45;
+  --falsified: #A32B14;
+  --uncertain: #6E685C;
+  --asserted-bg:  #F3EAD4;
+  --believed-bg:  #E1E9F0;
+  --tested-bg:    #DDE9E1;
+  --falsified-bg: #F4DED8;
+  --uncertain-bg: #EDE9DE;
+
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #1F6B5E;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #E2DCF2;
+  --mark-fg: #241C63;
+  color-scheme: light;
+}
+
+[data-theme="ledger"] body {
+  font-family: var(--font-ledger-serif), Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+
+/* Ruled, not boxed: a ledger's structure is lines across a page. */
+[data-theme="ledger"] :is(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-\[3px\], .rounded-\[4px\], .rounded-\[2px\]) {
+  border-radius: 0;
+}
+[data-theme="ledger"] .rounded-full { border-radius: 9999px; }
+
+/* Numbers and identifiers stay in mono — a serif's figures are for prose. */
+[data-theme="ledger"] :is(.tnum, .font-mono) {
+  font-family: var(--font-mono-stack), ui-monospace, monospace;
+  letter-spacing: -0.01em;
+}
+
+/* Status reads as a marginal note rather than a filled chip. */
+[data-theme="ledger"] [data-status-pill] {
+  background: transparent !important;
+  border-bottom: 2px solid currentColor;
+  border-radius: 0;
+  padding-inline: 0;
+  letter-spacing: 0.08em;
+}
+
+/* The correction. A claim the org stopped believing is struck through, which
+   is what a ledger does and what a chip colour only implies. */
+[data-theme="ledger"] [data-claim-status="falsified"] [data-claim-statement] {
+  text-decoration: line-through;
+  text-decoration-color: var(--falsified);
+  text-decoration-thickness: 1px;
+  color: var(--fg-3);
+}
+
+/* ─── Console — an instrument ───────────────────────────────────────────────
+   The other reading of the same product: not a document you read, a panel you
+   watch. Everything is monospaced, including prose — unusual, and the single
+   choice that makes it feel like an instrument rather than a dark palette.
+   Tight, hard-edged, one amber for the thing that wants you.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-theme="console"] {
+  --bg:      #0B0E11;
+  --surface: #11161B;
+  --raised:  #161C22;
+  --sunken:  #080A0D;
+  --rail:    #080A0D;
+  --rail-fg: #6B7A85;
+
+  --fg:   #DCE4EA;
+  --fg-2: #A3AFB9;
+  --fg-3: #6B7A85;
+  --fg-4: #4A565F;
+
+  --line:   #1E262D;
+  --line-2: #2C3740;
+
+  /* Amber, and only for what wants you: the selected row, the focused control,
+     the primary action. Nothing decorative is this colour. */
+  --accent:      #E8A33D;
+  --accent-fg:   #0B0E11;
+  --accent-soft: #241C0F;
+  --select: #1A2128;
+  --hover:  #151B21;
+
+  /* Saturated, because on an instrument the state *is* the information. */
+  --asserted:  #E8A33D;
+  --believed:  #5AA9E6;
+  --tested:    #4ECB8B;
+  --falsified: #FF6B4A;
+  --uncertain: #6B7A85;
+  --asserted-bg:  #2A1F0C;
+  --believed-bg:  #0E2436;
+  --tested-bg:    #0C2A1D;
+  --falsified-bg: #2E120A;
+  --uncertain-bg: #171E24;
+
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #35C2AE;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #5340D8;
+  --mark-fg: #F3F0FF;
+  color-scheme: dark;
+}
+
+[data-theme="console"] body {
+  font-family: var(--font-console-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  font-variant-ligatures: none;
+}
+
+/* Hard edges. An instrument is not upholstered. */
+[data-theme="console"] :is(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-\[3px\], .rounded-\[4px\], .rounded-\[2px\]) {
+  border-radius: 2px;
+}
+/* Avatars stay round: a square one reads as a file icon, not a person. */
+[data-theme="console"] .rounded-full { border-radius: 9999px; }
+
+/* Micro-labels are set as labels — this is where uppercase belongs. */
+[data-theme="console"] [data-status-pill] {
+  letter-spacing: 0.1em;
+  border-radius: 2px;
+}
+
+/* Headings do not need to shout when everything is already mono. */
+[data-theme="console"] :is(h1, h2, h3) {
+  letter-spacing: 0.01em;
+  font-weight: 600;
+}
+
+/* ─── Message markdown ────────────────────────────────────────────────────── */
+/* Scoped to `.vuno-md` rather than set on the elements: a message is the one
+   place in the app where arbitrary markup arrives, and styling `ul` globally
+   would reach every list in every panel. Spacing is tight on purpose — a
+   message is a paragraph in a conversation, not a page. */
+
+.vuno-md > :first-child { margin-top: 0; }
+.vuno-md > :last-child { margin-bottom: 0; }
+.vuno-md p { margin: 0 0 0.35em; }
+.vuno-md p:last-child { margin-bottom: 0; }
+.vuno-md strong { color: var(--fg); font-weight: 650; }
+.vuno-md em { font-style: italic; }
+.vuno-md del { color: var(--fg-4); text-decoration: line-through; }
+
+.vuno-md :is(h1, h2, h3, h4) {
+  margin: 0.6em 0 0.3em;
+  color: var(--fg);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.008em;
+}
+.vuno-md h1 { font-size: 15px; }
+.vuno-md h2 { font-size: 14px; }
+
+.vuno-md :is(ul, ol) { margin: 0.25em 0 0.4em; padding-left: 1.35em; }
+.vuno-md ul { list-style: disc; }
+.vuno-md ol { list-style: decimal; }
+.vuno-md li { margin: 0.1em 0; }
+.vuno-md li::marker { color: var(--fg-4); }
+
+.vuno-md blockquote {
+  margin: 0.35em 0;
+  padding-left: 0.7em;
+  border-left: 2px solid var(--line-2);
+  color: var(--fg-3);
+}
+
+.vuno-md hr { margin: 0.7em 0; border: 0; border-top: 1px solid var(--line); }
+
+/* A table in a message scrolls inside itself. The conversation never does. */
+.vuno-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 12px;
+}
+.vuno-md :is(th, td) {
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.vuno-md th { background: var(--sunken); color: var(--fg); font-weight: 600; }
+
+.vuno-md :is(input[type="checkbox"]) { margin-right: 0.4em; accent-color: var(--accent); }
+
+/* ─── Base ────────────────────────────────────────────────────────────────── */
+
+/* In `base`, not unlayered. An unlayered rule beats every layered one whatever
+   its specificity, and Tailwind puts its utilities in `@layer utilities` — so
+   an unlayered `*` here silently overrode `border-falsified`, `border-line-2`
+   and every other border colour in the app. Everything drew `--line` and
+   looked deliberate. */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "ss01", "cv11";
-  }
-  .dense {
-    line-height: 1.375;
-  }
+  * { box-sizing: border-box; border-color: var(--line); }
 }
 
-/* Custom scrollbar — warm and elegant */
-.scrollbar-sleek::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.scrollbar-sleek::-webkit-scrollbar-track {
-  background: transparent;
-}
-.scrollbar-sleek::-webkit-scrollbar-thumb {
-  background: oklch(0.30 0.008 60 / 50%);
-  border-radius: 4px;
-}
-.scrollbar-sleek::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.40 0.01 60 / 70%);
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* the shell manages its own scroll regions */
 }
 
-/* Status pulse animation for blocked-gate alerts */
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+/* Focus is always visible and always the same shape — the app is meant to be
+   operable without a mouse. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
-.animate-status-pulse {
-  animation: status-pulse 2s ease-in-out infinite;
-}
+:focus:not(:focus-visible) { outline: none; }
 
-/* Framer-motion-friendly fade-in for messages */
-@keyframes msg-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-msg-in {
-  animation: msg-fade-in 0.2s ease-out;
-}
+::selection { background: var(--accent-soft); color: var(--fg); }
 
-/* Panel transition */
-@keyframes panel-slide-in {
-  from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
+/* Scrollbars: present enough to grab, quiet enough to ignore. */
+.scroll-y { overflow-y: auto; overscroll-behavior: contain; }
+.scroll-y::-webkit-scrollbar { width: 10px; }
+.scroll-y::-webkit-scrollbar-track { background: transparent; }
+.scroll-y::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
-.animate-panel-in {
-  animation: panel-slide-in 0.15s ease-out;
+.scroll-y::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--fg-4); }
+.scroll-y { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+
+/* Sideways, for the board. The same thumb, and `overscroll-behavior` so a
+   trackpad swipe at the end of the columns does not navigate the browser back. */
+.scroll-x { overflow-x: auto; overscroll-behavior-x: contain; }
+.scroll-x::-webkit-scrollbar { height: 10px; }
+.scroll-x::-webkit-scrollbar-track { background: transparent; }
+.scroll-x::-webkit-scrollbar-thumb {
+  background-color: var(--line-2);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
 }
+.scroll-x::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--fg-4); }
+.scroll-x { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-status-pulse,
-  .animate-msg-in,
-  .animate-panel-in {
-    animation: none;
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* ─── Appearance: density (data-density attribute on <html>) ────────────────
-   Compact mode reduces padding on common elements for power users who want
-   more content per screen. Comfortable is the default (Buzz-inspired). */
-[data-density="compact"] {
-  --density-gap: 0.25rem;
-}
-[data-density="comfortable"] {
-  --density-gap: 0.5rem;
-}
+/* Numbers that sit in columns line up. */
+.tnum { font-variant-numeric: tabular-nums; }
 
-/* ─── Appearance: font size (data-font-size attribute on <html>) ────────────
-   Small = 14px base, Medium = 16px base (default), Large = 18px base.
-   Applied via the root font-size which Tailwind's rem units inherit from. */
-[data-font-size="small"] { font-size: 14px; }
-[data-font-size="medium"] { font-size: 16px; }
-[data-font-size="large"] { font-size: 18px; }
+/* The theme menu marks its active option from the root attribute, so React
+   holds no state for it and there is nothing to hydrate. */
+[data-theme="studio"]   .theme-option[data-theme-option="studio"]   .theme-dot,
+[data-theme="daylight"] .theme-option[data-theme-option="daylight"] .theme-dot,
+[data-theme="ink"]     .theme-option[data-theme-option="ink"]     .theme-dot,
+[data-theme="paper"]   .theme-option[data-theme-option="paper"]   .theme-dot,
+[data-theme="warm"]    .theme-option[data-theme-option="warm"]    .theme-dot,
+[data-theme="ledger"]  .theme-option[data-theme-option="ledger"]  .theme-dot,
+[data-theme="console"] .theme-option[data-theme-option="console"] .theme-dot {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+[data-theme="studio"]   .theme-option[data-theme-option="studio"]   span,
+[data-theme="daylight"] .theme-option[data-theme-option="daylight"] span,
+[data-theme="ink"]     .theme-option[data-theme-option="ink"]     span,
+[data-theme="paper"]   .theme-option[data-theme-option="paper"]   span,
+[data-theme="warm"]    .theme-option[data-theme-option="warm"]    span,
+[data-theme="ledger"]  .theme-option[data-theme-option="ledger"]  span,
+[data-theme="console"] .theme-option[data-theme-option="console"] span {
+  color: var(--fg);
+}

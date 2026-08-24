@@ -25,24 +25,110 @@ model Tenant {
   updatedAt   DateTime @updatedAt
 
   orgs        Organization[]
-  agents      Agent[]
+  members     Member[]
   events      Event[]
   claims      Claim[]
-  users       User[]
 }
 
-model User {
-  id          String   @id @default(cuid())
-  tenantId    String
-  email       String   @unique
-  name        String?
-  isOrgOwner  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// ─── Member — one identity for humans and agents (ADR-0009) ──────────────────
+// Parity is a schema property: any column that can hold an agent must be able to
+// hold a human, and the reverse. There is no separate User or Agent table, so a
+// feature physically cannot be built that works for one and not the other.
+model Member {
+  id            String   @id @default(cuid())
+  tenantId      String
+  orgId         String
+  kind          String   // 'human' | 'agent'
+  displayName   String
+  handle        String   // @-mention handle
+  avatarGlyph   String?
+  status        String   @default("active")   // 'active' | 'suspended' | 'retired'
+  // One presence vocabulary for every member. An agent's is written by the
+  // orchestrator; a human sets theirs. Same field, same rendering.
+  presenceState String   @default("offline")  // 'available' | 'busy' | 'away' | 'offline' | 'dnd'
+  presenceNote  String?                       // the activity line, e.g. "running tests on #wal-format"
+  teamId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  human         HumanProfile?
+  agent         AgentProfile?
+  assistants    AgentProfile[] @relation("AssistantOwner")
 
-  @@index([tenantId])
+  authoredEvents  Event[]      @relation("EventActor")
+  delegatedEvents Event[]      @relation("EventOnBehalfOf")
+  claims          Claim[]      @relation("ClaimProvenance")
+  memberships     Membership[]
+  conversations   ChannelMember[]
+  skills          MemberSkill[]
+  connections     MemberConnection[]
+  sessions        Session[]
+  uploads         Attachment[]
+  callsStarted    Call[]            @relation("CallStarter")
+  meetingsHosted  Meeting[]         @relation("MeetingHost")
+  callSeats       CallParticipant[]
+
+  @@unique([orgId, handle])
+  @@index([orgId, kind, status])
+  @@index([teamId])
+}
+
+model HumanProfile {
+  memberId   String   @id
+  email      String   @unique
+  timezone   String?
+  isOrgOwner Boolean  @default(false)
+  /// Argon2id, via Bun.password. Null until this person has set one — a seeded
+  /// org has no passwords, so the first run claims the owner account.
+  passwordHash String?
+
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+// A signed-in session. A table rather than a self-contained token, because
+// signing someone out has to actually sign them out — a token you cannot revoke
+// is a password with an expiry date.
+model Session {
+  id         String   @id
+  memberId   String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  /// Enough to tell one browser from another when revoking, not a fingerprint.
+  userAgent  String?
+
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([expiresAt])
+}
+
+model AgentProfile {
+  memberId      String    @id
+  role          String    // 'architect' | 'security' | 'perf' | 'hr' | ...
+  // What actually runs this agent. The default points at a harness the registry
+  // knows, so adding a key to .env is the only step between installing an agent
+  // and it working — `deterministic` named nothing that exists, and an agent
+  // set to it failed with "unknown harness" rather than "no key".
+  modelName     String    @default("claude-opus-5")
+  harnessName   String    @default("anthropic")
+  tools         String    @default("[]")   // JSON array of tool ids
+  permissions   String    @default("[]")   // JSON array of scoped capability ids
+  // Set only for a personal assistant. An assistant is a member like any other;
+  // this is who it works for, not who it renders as.
+  ownerMemberId String?
+  packageId     String?
+  version       String?
+  installedAt   DateTime  @default(now())
+  retiredAt     DateTime?
+  metadata      String?
+
+  member        Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  owner         Member?   @relation("AssistantOwner", fields: [ownerMemberId], references: [id], onDelete: SetNull)
+
+  @@index([role])
+  @@index([ownerMemberId])
 }
 
 // ─── Organization ──────────────────────────────────────────────────────────────
@@ -58,7 +144,7 @@ model Organization {
   departments Department[]
   teams       Team[]
   channels    Channel[]
-  agents      Agent[]
+  members     Member[]
   events      Event[]
   claims      Claim[]
   objectives  Objective[]
@@ -66,6 +152,13 @@ model Organization {
   decisions   Decision[]
   experiments Experiment[]
   gates       Gate[]
+  skills      Skill[]
+  connections Connection[]
+  plugins     Plugin[]
+  apps        AppInstall[]
+  attachments Attachment[]
+  calls       Call[]
+  meetings    Meeting[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -106,58 +199,325 @@ model Team {
   @@index([orgId, departmentId])
 }
 
-// Polymorphic membership: a team can contain agents and humans.
-// We store memberType as discriminator; memberId as the FK string.
+// A team contains members. No discriminator, no polymorphic string id —
+// one foreign key, because a team member is a member (ADR-0009).
 model Membership {
   id          String   @id @default(cuid())
   tenantId    String
   orgId       String
   teamId      String
-  memberType  String   // 'agent' | 'human'
-  memberId    String   // Agent.id or User.id
+  memberId    String
   role        String   // 'ORG_OWNER' | 'DEPARTMENT_HEAD' | 'TEAM_LEAD' | 'MEMBER' | 'HR_META'
   createdAt   DateTime @default(now())
 
   team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  @@unique([teamId, memberType, memberId])
+  @@unique([teamId, memberId])
   @@index([teamId, role])
-  @@index([memberType, memberId])
+  @@index([memberId])
 }
 
-// ─── Agents ────────────────────────────────────────────────────────────────────
-// Per ADR-0006. Independent or personal-assistant. v1 = simulated harness.
-model Agent {
-  id            String   @id @default(cuid())
-  tenantId      String
-  orgId         String
-  name          String
-  kind          String   // 'independent' | 'personal_assistant'
-  role          String   // 'architect' | 'engineer' | 'security' | 'perf' | 'hr' | 'product' | 'research' | 'devils_advocate' | 'verifier' | ...
-  modelName     String   @default("simulated/echo-1")
-  harnessName   String   @default("simulated")
-  tools         String   @default("[]")    // JSON array of tool IDs
-  permissions   String   @default("[]")    // JSON array of permission IDs
-  ownerHumanId  String?  // set only for personal_assistant
-  teamId        String?
-  status        String   @default("active") // 'active' | 'retired' | 'pending'
-  installedAt   DateTime @default(now())
-  retiredAt     DateTime?
-  metadata      String?  // JSON — model-specific config (temperature, system prompt path, etc.)
-  avatarGlyph   String?  // single lucide icon name, optional override
+// An MCP connection: a server outside this org that an agent can call tools on.
+//
+// It sits in the Library beside Skill because both answer "what is this member
+// made of" — a skill is what they know, a connection is what they can reach.
+// Holding one is the permission to call it, which is why there is no separate
+// permission list: one concept, one place.
+//
+// The secret is NOT stored here. `authEnvVar` names an environment variable the
+// server process reads at call time. A token in this table would be a token in
+// the backup, in the JSON export, and in anything that can read the org — and
+// the whole org is one file somebody can copy.
+model Connection {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Stable id an agent package refers to. Lowercase, dashed.
+  key         String
+  name        String
+  /// One line, for the Library row.
+  summary     String
+  /// 'http' — the Streamable HTTP transport. stdio would mean this server
+  /// spawns processes, which is a different security question.
+  transport   String   @default("http")
+  url         String
+  /// The name of an environment variable holding the bearer token, or null for
+  /// a server that needs none. Never the token itself.
+  authEnvVar  String?
+  /// What was discovered the last time anything connected, as JSON, so the
+  /// Library can render tools without a round trip on every page load.
+  toolsCache  String?
+  checkedAt   DateTime?
+  /// The reason the last attempt failed, or null when the last one worked.
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  /// The plugin that installed this, or null for one added by hand. Uninstalling
+  /// a plugin removes what it created and nothing else.
+  pluginId    String?
 
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plugin      Plugin?            @relation(fields: [pluginId], references: [id], onDelete: SetNull)
+  holders     MemberConnection[]
 
-  events        Event[]      @relation("ActorAgent")
-  claims        Claim[]      @relation("ProvenanceAgent")
+  @@unique([orgId, key])
+  @@index([orgId])
+  @@index([pluginId])
+}
 
-  @@index([tenantId, orgId, teamId])
-  @@index([kind, status])
-  @@index([role, status])
+// Who may call a connection. A person holds one the same way an agent does —
+// parity is a schema property (ADR-0009).
+model MemberConnection {
+  id           String   @id @default(cuid())
+  tenantId     String
+  orgId        String
+  memberId     String
+  connectionId String
+  createdAt    DateTime @default(now())
+
+  member       Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, connectionId])
+  @@index([connectionId])
 }
 
 // ─── Channels (chat surface) ───────────────────────────────────────────────────
+// A skill: instructions an agent can be given, in the SKILL.md convention rather
+// than a format invented here (docs/IA-NAVIGATION.md). Assigning one is not a
+// setting — it changes what the agent is told it knows how to do, which is why
+// `content` is injected into its prompt rather than stored and admired.
+model Skill {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Stable id an agent package refers to. Lowercase, dashed.
+  key         String
+  name        String
+  /// One line, for the Library row.
+  summary     String
+  /// The SKILL.md body. This is what an agent that holds it is told.
+  content     String
+  /// Where it came from: 'local', or a package name once a registry exists.
+  source      String   @default("local")
+  version     String   @default("1.0.0")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  /// The plugin that installed this, or null for one written here. Uninstalling
+  /// a plugin removes what it created and nothing else.
+  pluginId    String?
+
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plugin      Plugin?       @relation(fields: [pluginId], references: [id], onDelete: SetNull)
+  holders     MemberSkill[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
+  @@index([pluginId])
+}
+
+// Who holds a skill. A person can hold one too — it is a shared reference, and
+// parity is a schema property (ADR-0009).
+model MemberSkill {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  memberId    String
+  skillId     String
+  createdAt   DateTime @default(now())
+
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, skillId])
+  @@index([skillId])
+}
+
+// A plugin: skills, connectors and agents that arrive together.
+//
+// The unit exists because the three of them are useless apart. "How this org
+// runs a benchmark" is a skill that reads a metric from a connector and is held
+// by an agent hired to do it; installing those one at a time and wiring them up
+// by hand is the work the package is meant to remove.
+//
+// `manifest` is stored verbatim rather than reconstructed from what was
+// created. An uninstall has to know exactly what this plugin brought — not what
+// currently happens to match its keys, which would take a skill someone wrote
+// by hand and happened to name the same thing.
+model Plugin {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Stable id. Lowercase, dashed. Unique per org — installing twice is an update.
+  key         String
+  name        String
+  summary     String
+  version     String
+  author      String?
+  /// 'catalogue' for one that shipped with this install, 'added' for one
+  /// supplied here. Nothing else claims a provenance it cannot support.
+  source      String   @default("catalogue")
+  /// The manifest exactly as supplied.
+  manifest    String
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  skills      Skill[]
+  connections Connection[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
+}
+
+// An app this org has added.
+//
+// Extensions is the app catalogue — the Teams "add an app to your team" idea,
+// or a VS Code extension: a whole feature, not a setting. Skills, plugins and
+// connectors are not apps and do not live here; they configure the members the
+// org already has, so they are in Settings, the way Claude Code has them.
+//
+// Only apps that ship with this build can be installed, and every one of them
+// controls a surface that visibly appears and disappears. An entry that
+// installed nothing would be a row claiming a capability the org does not have.
+model AppInstall {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Matches a key in `src/lib/apps/catalogue.ts`. Unknown keys are ignored on
+  /// read rather than deleted — a build that dropped an app should not silently
+  /// destroy the record that somebody had added it.
+  key         String
+  installedAt DateTime @default(now())
+  /// Who added it, for the record. Null once that member is gone.
+  installedBy String?
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, key])
+  @@index([orgId])
+}
+
+// A file posted in a conversation.
+//
+// Never under `public/`. A file served from a static directory is readable by
+// anyone who has the URL, which would make an attachment in a DM the one part
+// of that conversation with no access control at all. These live outside the
+// web root and are served by a route that asks the same question the message
+// list asks: may this viewer read this conversation.
+//
+// `channelId` rather than a link to the event, because the file exists before
+// the message does — you attach, see the preview, then send. An upload that is
+// never sent has no event and is swept.
+model Attachment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// The conversation this belongs to. Access is decided from it.
+  channelId   String
+  /// The event that carries it, once the message is sent. Null while a draft.
+  eventId     String?
+  uploaderId  String
+  /// 'image', 'audio' or 'file' — what the reader gets, not the mime type.
+  kind        String
+  /// The name as uploaded, for the download and for a screen reader.
+  name        String
+  mimeType    String
+  bytes       Int
+  /// Where it is under the storage root. Relative, so the root can move.
+  path        String
+  /// Set for images, so the layout reserves the right space before it loads.
+  width       Int?
+  height      Int?
+  /// Set for audio, so a voice note shows its length before you play it.
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  uploader    Member       @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, channelId])
+  @@index([eventId])
+  /// Sweeping unsent uploads asks for exactly this.
+  @@index([eventId, createdAt])
+}
+
+// A call that happened in a conversation.
+//
+// The row is the record — who was in it, when, how long. Not a byte of what was
+// said: WebRTC media goes browser to browser and never reaches this server,
+// which is a property of the design rather than a promise in a policy.
+// A meeting: a call with a time on it.
+//
+// Not a separate mechanism. A meeting names when people will be in a
+// conversation, and joining one starts or joins the call there — so everything
+// calls already does (the mesh, the record, who was in it) applies unchanged.
+// The alternative is a second real-time stack that has to be kept in step with
+// the first.
+model Meeting {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Where it happens. A meeting is a conversation with a time on it.
+  channelId   String
+  title       String
+  /// What it is for. Empty is allowed; a meeting with no agenda is still a meeting.
+  agenda      String?
+  startsAt    DateTime
+  minutes     Int      @default(30)
+  createdById String?
+  /// Set when somebody cancels it, so the record says it was called off rather
+  /// than that it silently stopped existing.
+  cancelledAt DateTime?
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  createdBy   Member?      @relation("MeetingHost", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// "What is coming up" is the only question asked of this table.
+  @@index([orgId, startsAt])
+  @@index([channelId, startsAt])
+}
+
+model Call {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  channelId   String
+  startedById String?
+  startedAt   DateTime @default(now())
+  /// Null while it is running. Set when the last person leaves.
+  endedAt     DateTime?
+
+  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  startedBy   Member?           @relation("CallStarter", fields: [startedById], references: [id], onDelete: SetNull)
+  participants CallParticipant[]
+
+  /// "Is a call running in this conversation" is asked on every page load.
+  @@index([orgId, channelId, endedAt])
+}
+
+model CallParticipant {
+  id        String   @id @default(cuid())
+  tenantId  String
+  orgId     String
+  callId    String
+  memberId  String
+  joinedAt  DateTime @default(now())
+  /// Null while they are still in it. A rejoin clears it rather than adding a row.
+  leftAt    DateTime?
+
+  call      Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  member    Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, memberId])
+  @@index([memberId])
+}
+
 model Channel {
   id          String   @id @default(cuid())
   tenantId    String
@@ -166,43 +526,96 @@ model Channel {
   name        String   // e.g. "storage-engine"
   slug        String
   topic       String?
-  isDm        Boolean  @default(false)
+  // What kind of conversation this is, stated once. It used to be re-derived
+  // from `isDm` plus a nullable teamId plus a slug prefix, in four places with
+  // four answers (docs/IA-NAVIGATION.md).
+  //   'channel'   — open, org-wide, listed under Channels
+  //   'team_room'  — a team's default channel, listed under Channels
+  //   'group'      — a named group chat, listed under Chats
+  //   'dm'         — two participants, listed under Chats
+  kind        String   @default("channel")
   createdAt   DateTime @default(now())
 
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  members     ChannelMember[]
+  attachments Attachment[]
+  calls       Call[]
+  meetings    Meeting[]
 
   @@unique([orgId, slug])
   @@index([orgId, teamId])
+  @@index([orgId, kind])
+}
+
+// Who is in a conversation. A DM names itself from these rows relative to the
+// viewer, which is why a DM has no fixed name of its own. Humans and agents
+// join through the same column (ADR-0009).
+model ChannelMember {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  channelId   String
+  memberId    String
+  createdAt   DateTime @default(now())
+
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, memberId])
+  @@index([memberId])
 }
 
 // ─── Event Spine (append-only) ────────────────────────────────────────────────
 // Per ADR-0004. NEVER update or delete rows. The chat surface is a projection.
 model Event {
-  id            String   @id @default(cuid())
-  seq           Int      @unique           // monotonic, for replay ordering
+  // seq is the primary key so SQLite allocates it: AUTOINCREMENT is only
+  // available on an INTEGER PRIMARY KEY, and having the database own the
+  // sequence is what removes the read-MAX-then-insert race (ADR-0008).
+  // Nothing holds a foreign key to Event.id, so moving the PK is safe.
+  seq           Int      @id @default(autoincrement())
+  id            String   @unique @default(cuid())
   type          String                     // discriminated union key
   payload       String                     // JSON-encoded, typed via TS
   tenantId      String
   orgId         String
-  actorType     String                     // 'agent' | 'human' | 'system'
-  actorAgentId  String?
-  actorUserId   String?
+  // 'member' for anything a person or an agent did; 'system' for events the
+  // runtime emits on nobody's behalf. There is no per-kind actor column.
+  actorType     String
+  actorMemberId String?
+  // Set only when the action carried another member's authority — an assistant
+  // acting under a delegation. The assistant still renders as itself; this is
+  // the authority, not the identity (ADR-0009 §1).
+  onBehalfOfMemberId String?
   scopeType     String                     // 'channel' | 'decision' | 'project' | 'team' | 'org' | 'tenant'
   scopeId       String
   visibility    String   @default("org")   // 'tenant' | 'org' | 'team' | 'private'
+  // The event this one acts on, for the events that act on another: a reaction,
+  // an edit, a redaction, a pin. Denormalised out of the payload because
+  // rendering a window has to ask "what happened to these forty messages" and
+  // SQLite cannot index into a JSON string. The payload still carries it — this
+  // is a projection of the payload, not a second source of truth.
+  targetEventId String?
   createdAt     DateTime @default(now())
 
   tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  actorAgent    Agent?       @relation("ActorAgent", fields: [actorAgentId], references: [id], onDelete: SetNull)
+  actor         Member?      @relation("EventActor", fields: [actorMemberId], references: [id], onDelete: SetNull)
+  onBehalfOf    Member?      @relation("EventOnBehalfOf", fields: [onBehalfOfMemberId], references: [id], onDelete: SetNull)
   // NOTE: scopeId is intentionally NOT a foreign key. Events are polymorphic —
   // scopeId may reference a Channel, Decision, Project, Objective, Team, Org,
   // or Tenant. Queries filter by (scopeType, scopeId).
 
   @@index([tenantId, orgId, scopeType, scopeId, seq])
+  // The read path queries by org, not by tenant — an org belongs to exactly one
+  // tenant, so nothing that reads a conversation carries a tenantId. Without
+  // this, opening a channel was a full scan of the spine (EXPLAIN said so).
+  @@index([orgId, scopeType, scopeId, seq])
   @@index([type, createdAt])
-  @@index([actorAgentId])
+  // "Everything that acts on these messages", which is one query per window.
+  @@index([orgId, targetEventId])
+  @@index([actorMemberId])
+  @@index([onBehalfOfMemberId])
 }
 
 // ─── Epistemic Ledger ──────────────────────────────────────────────────────────
@@ -217,7 +630,9 @@ model Claim {
   scopeId         String
   provenanceEventId String // the Event that originated this claim
   provenanceActorType String
-  provenanceAgentId  String?
+  // Whoever made the claim, human or agent. There is no agent-only column:
+  // HR cannot score a person whose claims have no author (ADR-0009).
+  provenanceMemberId String?
   supersedesId    String?  // optional: if this claim supersedes an earlier one
   evidenceIds     String   @default("[]")    // JSON array of evidence Event IDs
   contradictsIds  String   @default("[]")    // JSON array of claim IDs this contradicts
@@ -227,11 +642,16 @@ model Claim {
 
   tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  provenanceAgent Agent?       @relation("ProvenanceAgent", fields: [provenanceAgentId], references: [id], onDelete: SetNull)
+  provenanceMember Member?     @relation("ClaimProvenance", fields: [provenanceMemberId], references: [id], onDelete: SetNull)
 
+  // One claim per statement per scope. The debate route used to insert a fresh
+  // row on every run, which is how the shipped database ended up holding nine
+  // identical falsified claims. Status moves; claims are not re-created
+  // (ADR-0005).
+  @@unique([orgId, scopeType, scopeId, statement])
   @@index([tenantId, orgId, status])
   @@index([scopeType, scopeId])
-  @@index([provenanceAgentId])
+  @@index([provenanceMemberId])
 }
 
 // ─── Work Graph ────────────────────────────────────────────────────────────────
@@ -244,7 +664,11 @@ model Objective {
   constraints      String?
   budget           String?
   autonomyLevel    String   @default("L2")  // L1-L4
-  status          String   @default("filed") // 'filed' | 'routing' | 'in_progress' | 'shipped' | 'killed'
+  status          String   @default("filed") // 'filed' | 'active' | 'shipped' | 'killed'
+  // Where this objective sits in the twelve-stage lifecycle. The orchestrator
+  // advances it; nothing else writes it (ADR-0007).
+  stage           String   @default("filed")
+  stageEnteredAt  DateTime @default(now())
   owningDepartment String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -320,7 +744,12 @@ model Gate {
   projectId   String
   decisionId  String?
   name        String   // 'security' | 'qa' | 'performance' | 'release'
-  policy      String   // declarative policy text, e.g. "no open RiskFlag of severity >= high"
+  // A structured predicate over the ledger, evaluated as a query — not prose.
+  // See src/lib/gates. The human-readable form is derived from it, not stored.
+  policy      String   @default("{}")
+  // Which claims or risks satisfied the predicate at the last evaluation, so a
+  // blocked gate can name what blocked it.
+  evidence    String   @default("[]")
   state       String   @default("pending") // 'pending' | 'passed' | 'blocked'
   reason      String?
   evaluatedAt DateTime?
@@ -343,8 +772,8 @@ model PersonalMemory {
   id            String   @id @default(cuid())
   tenantId      String
   orgId         String
-  agentId       String   // the personal assistant agent
-  ownerHumanId  String   // the owner (human)
+  agentId       String   // the assistant's member id
+  ownerHumanId  String   // the owner's member id
   key           String   // e.g. "preferred_language", "coding_style", "meeting_preferences"
   value         String   // the stored value (JSON or plain text)
   category      String   @default("preference") // "preference" | "fact" | "history" | "context"
@@ -385,3 +814,83 @@ model AgentMemory {
   @@index([orgId, agentId])
 }
 
+
+
+// ─── Orchestrator (ADR-0007) ─────────────────────────────────────────────────
+
+/// A unit of work the orchestrator owns. Leases are what make it crash-safe: a
+/// worker that dies mid-run lets its lease expire and the item is picked up
+/// again rather than lost.
+model WorkItem {
+  id            String    @id @default(cuid())
+  tenantId      String
+  orgId         String
+  kind          String    // 'route_objective' | 'define_problem' | 'propose' | ...
+  subjectType   String    // 'objective' | 'decision' | 'claim' | 'channel'
+  subjectId     String
+  objectiveId   String?   // set when the item belongs to an objective's lifecycle
+  /// Which member should do this. Null means "any member matching the kind's
+  /// role" — resolved at dispatch. A human and an agent are equally assignable.
+  assigneeId    String?
+
+  state         String    @default("pending") // 'pending'|'leased'|'done'|'failed'|'cancelled'
+  priority      Int       @default(0)         // higher runs first
+  runAfter      DateTime  @default(now())     // not eligible before this
+
+  leasedBy      String?                       // worker id holding the lease
+  leaseExpiresAt DateTime?
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(3)
+  lastError     String?
+
+  /// Stops the same work being enqueued twice. Unique among items that have not
+  /// finished, so a completed item does not block re-running the same step later.
+  dedupeKey     String?
+
+  input         String    @default("{}")      // JSON
+  result        String?                       // JSON, set on completion
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  sessions      WorkSession[]
+
+  @@index([orgId, state, runAfter, priority])
+  @@index([objectiveId, state])
+  @@index([leaseExpiresAt])
+  @@unique([orgId, dedupeKey])
+}
+
+/// One attempt at a work item by one member. Universal on purpose: a human
+/// working an item has a start, an end and a cost in time; an agent has the same
+/// plus model and token detail. HR reads this for both (ADR-0009 Part 3).
+model WorkSession {
+  id            String    @id @default(cuid())
+  tenantId      String
+  orgId         String
+  workItemId    String
+  memberId      String
+
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  durationMs    Int?
+  outcome       String    @default("running") // 'running'|'succeeded'|'failed'|'abandoned'
+  error         String?
+
+  /// Cost in whole cents. Agent runs convert tokens; human work can carry time
+  /// at a rate, or nothing. Either way "cost per resolved decision" is a query.
+  costCents     Int       @default(0)
+
+  // Agent execution detail. Null for a human's session.
+  modelName     String?
+  harnessName   String?
+  tokensIn      Int?
+  tokensOut     Int?
+
+  workItem      WorkItem  @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, memberId, startedAt])
+  @@index([workItemId])
+}

@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — real secrets never, the template always
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -57,4 +58,18 @@ mini-services/*/target/
 
 # SQLite database (environment-specific)
 db/*.db
+# WAL mode (src/lib/db.ts) writes these alongside the database, and they hold
+# its contents — they were tracked before the journal mode changed.
 db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+# `bun run export --backup` writes these next to the database.
+db/backup-*.db
+
+# Uploaded files. The database references them; they are not source.
+/storage/
+
+# graphify's working directories. The graph itself is committed, at docs/graph/ —
+# these are the scratch space and the extraction cache it rebuilds from. Not
+# anchored to the root: graphify writes a cache next to whatever it scans.
+graphify-out/

@@ -1,0 +1,41 @@
+{
+  "key": "storage-benchmarking",
+  "name": "Storage Benchmarking",
+  "summary": "How this org runs a storage benchmark, reads the result, and reports it as evidence.",
+  "version": "1.1.0",
+  "author": "Vuno",
+  "skills": [
+    {
+      "key": "benchmark-methodology",
+      "name": "Benchmark methodology",
+      "summary": "What counts as a benchmark here, and what a result has to carry to be evidence.",
+      "content": "# Benchmark methodology\n\nA benchmark result is evidence in this org only if it carries all five of these. A run missing any one of them is a number, not a result, and a claim resting on it stays `asserted`.\n\n1. **The workload, in a sentence a stranger could reproduce.** \"10k concurrent readers, 80/20 read/write, 4KB values, zipfian keys\" — not \"under load\".\n2. **The hardware and what else was on it.** A p99 from a shared box is a p99 of the box.\n3. **The percentile, named.** A mean hides the thing being measured. Report p50, p99 and p99.9 together; a p99 quoted alone invites the question you did not answer.\n4. **The duration and the warm-up you discarded.** A cold cache is a different system.\n5. **The target it is being compared against**, and where that target came from.\n\n## Reading a result\n\nCompare against the target, not against the last run. \"Faster than yesterday\" is progress; \"under 50ms at p99\" is the claim.\n\nWhen a result falsifies a claim, say what the measurement was and what the target was, in that order. `ClaimStatusChanged` takes the reason — a status moved without one is a status nobody can argue with.\n\n## What not to do\n\nDo not run a benchmark to confirm something. Run it to find out. If you already know what it will say, the useful experiment is the one you expect to pass and would be surprised to see fail.\n\nDo not average across runs to smooth a tail. The tail is the finding.\n"
+    },
+    {
+      "key": "evidence-standards",
+      "name": "Evidence standards",
+      "summary": "When a claim may move from asserted to tested, and what has to be attached.",
+      "content": "# Evidence standards\n\nA claim moves status only on evidence, and the evidence is attached to the transition, not described in a message.\n\n| From | To | What it takes |\n|---|---|---|\n| asserted | believed | Someone with relevant experience agrees, and no one with relevant experience objects. This is the weakest transition and it is reversible without ceremony. |\n| believed | tested | A measurement, an experiment or a proof, meeting the methodology for its kind. |\n| any | falsified | One result that contradicts it. A single good measurement outranks any amount of agreement. |\n| any | uncertain | The evidence is mixed and further work is what resolves it. Say what would resolve it. |\n\n## Objections\n\nAn objection is worth raising when it names something checkable. \"This might not scale\" is a feeling; \"the bloom filter adds ~1.5x memory at 10M keys, which pushes the working set past RAM\" is an objection, because someone can go and find out.\n\nAn objection that turns out to be right is the most valuable thing in the ledger. An objection that turns out to be wrong is the second most valuable. Precision is tracked in Review; raising fewer, better objections is the goal, not raising none.\n"
+    }
+  ],
+  "connectors": [
+    {
+      "key": "observability",
+      "name": "Acme Observability",
+      "summary": "Latency and error rates per service, over a window.",
+      "url": "http://127.0.0.1:4501/mcp",
+      "authEnvVar": null
+    }
+  ],
+  "agents": [
+    {
+      "handle": "bench",
+      "displayName": "Bench",
+      "roleLabel": "Performance",
+      "harnessName": "anthropic",
+      "modelName": "claude-opus-5",
+      "skills": ["benchmark-methodology", "evidence-standards"],
+      "connectors": ["observability"]
+    }
+  ]
+}

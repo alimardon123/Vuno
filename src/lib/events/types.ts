@@ -23,19 +23,32 @@ export type EventType =
   | 'RoleAssigned'
   | 'EscalationOpened'
   | 'EscalationResolved'
-  | 'AgentInstalled'
-  | 'AgentRetired'
+  | 'MemberJoined'
+  | 'MemberRoleChanged'
+  | 'MemberRetired'
   | 'WikiSectionAuthored'
   | 'AgentThought'
   | 'SharedItem'
   | 'ReactionAdded'
+  | 'ReactionRemoved'
+  | 'MessageEdited'
+  | 'MessageRedacted'
+  | 'MessagePinned'
+  | 'MessageUnpinned'
+  | 'ObjectiveStageChanged'
+  | 'CallStarted'
+  | 'CallEnded'
   | 'PreemptIssued'
   | 'AttentionWakeup'
   | 'MemoryUpdated'
   | 'PaProactiveNote'
-  | 'AgentHandoff';
+  | 'AgentHandoff'
+  | 'ToolCalled';
 
-export type ActorType = 'agent' | 'human' | 'system';
+// An event is authored by a member — human or agent, the spine does not care —
+// or by the runtime itself. Which kind of member it was lives on the Member
+// record, not duplicated onto every row (ADR-0009).
+export type ActorType = 'member' | 'system';
 
 export type ScopeType =
   | 'channel'
@@ -148,11 +161,18 @@ export interface EventPayloadMap {
     gateId: string;
     name: string;
   };
+  // `memberId`, not `agentId`: a person takes a role in a debate the same way an
+  // agent does (ADR-0009). The role is open text because the orchestrator
+  // assigns things the debate engine's five never covered — an owning
+  // department, a working group — and it was writing those under this type
+  // already, against a declared payload they did not match.
   RoleAssigned: {
-    decisionId: string;
-    role: 'reviewer' | 'devils_advocate' | 'domain_expert' | 'verifier' | 'proposer';
-    agentId: string;
-    agentName: string;
+    memberId: string;
+    memberName: string;
+    role: string;
+    reason: string;
+    decisionId?: string;
+    objectiveId?: string;
   };
   EscalationOpened: {
     decisionId: string;
@@ -164,18 +184,48 @@ export interface EventPayloadMap {
     decisionId: string;
     resolution: string;
   };
-  AgentInstalled: {
-    agentId: string;
+  // Composition changes read the same for a person and for an agent, because
+  // they are the same kind of member (ADR-0009). `AgentInstalled` had no human
+  // counterpart at all: hiring a person appended nothing, so the spine recorded
+  // half the org's history — the schema-level bias the parity rule exists to
+  // stop.
+  MemberJoined: {
+    memberId: string;
     name: string;
+    kind: 'human' | 'agent';
     role: string;
-    kind: 'independent' | 'personal_assistant';
-    modelName: string;
-    harnessName: string;
     teamId?: string;
     teamName?: string;
+    /** Agents only: what will run them. */
+    modelName?: string;
+    harnessName?: string;
+    /** Set when this member is somebody's assistant. */
+    ownerMemberId?: string;
+    ownerName?: string;
   };
-  AgentRetired: { agentId: string; reason: string };
+  MemberRoleChanged: {
+    memberId: string;
+    name: string;
+    from: string;
+    to: string;
+    teamId?: string;
+    teamName?: string;
+    reason: string;
+  };
+  MemberRetired: { memberId: string; name: string; reason: string };
   WikiSectionAuthored: { sectionId: string; title: string; body: string; scope: string };
+  // An agent reached outside this org. Recorded because it is the one kind of
+  // action that changes something the ledger cannot see.
+  ToolCalled: {
+    connectionKey: string;
+    connectionName: string;
+    tool: string;
+    arguments: Record<string, unknown>;
+    /** What came back, truncated for the log. The full result went to the model. */
+    result: string;
+    failed: boolean;
+    durationMs: number;
+  };
   AgentThought: {
     thoughtType: 'observation' | 'hypothesis' | 'conclusion' | 'question' | 'doubt';
     content: string;                    // the thought text
@@ -197,6 +247,45 @@ export interface EventPayloadMap {
   ReactionAdded: {
     emoji: string;           // e.g. "👍", "❤️", "🚀"
     targetEventId: string;   // which message this reaction is on
+  };
+  ReactionRemoved: {
+    emoji: string;
+    targetEventId: string;
+  };
+  // An edit does not change the message. The spine is append-only, so the
+  // original stays exactly as it was posted and this supersedes it — which is
+  // also what makes "edited" honest rather than a claim nobody can check.
+  MessageEdited: {
+    targetEventId: string;
+    body: string;
+  };
+  // Deleting is redacting. The event stays, so the sequence stays gapless and
+  // a reply to it still has something to point at; the body stops being served.
+  MessageRedacted: {
+    targetEventId: string;
+  };
+  MessagePinned: {
+    targetEventId: string;
+  };
+  MessageUnpinned: {
+    targetEventId: string;
+  };
+  // Every move an objective makes through the lifecycle, whoever made it.
+  // Without this the spine could replay every message in the org and not say
+  // how a piece of work got to where it is — which is the one question the
+  // stage column exists to answer.
+  // That a call happened, and who was in it. Never what was said — the media
+  // is peer to peer and never reaches this server.
+  CallStarted: { callId: string };
+  CallEnded: { callId: string; seconds: number; participantIds: string[] };
+  ObjectiveStageChanged: {
+    objectiveId: string;
+    from: string;
+    to: string;
+    /** Why. The orchestrator's reason is that the stage's work finished. */
+    reason: string;
+    /** True when a person moved it rather than the runtime advancing it. */
+    byHand: boolean;
   };
   PreemptIssued: {
     interruptingAgentId: string;
@@ -261,8 +350,9 @@ export interface EventRecord<T extends EventType = EventType> {
   tenantId: string;
   orgId: string;
   actorType: ActorType;
-  actorAgentId?: string | null;
-  actorUserId?: string | null;
+  actorMemberId?: string | null;
+  /** The member whose authority the action carried, when it carried one. */
+  onBehalfOfMemberId?: string | null;
   scopeType: ScopeType;
   scopeId: string;
   visibility: Visibility;
@@ -274,11 +364,17 @@ export type NewEventInput<T extends EventType = EventType> = {
   type: T;
   payload: EventPayloadMap[T];
   actorType: ActorType;
-  actorAgentId?: string;
-  actorUserId?: string;
+  actorMemberId?: string;
+  onBehalfOfMemberId?: string;
   scopeType: ScopeType;
   scopeId: string;
   visibility?: Visibility;
+  /**
+   * When the thing happened, when that differs from when it was recorded —
+   * seeding and importing history. Ordering still comes from `seq`, which the
+   * database assigns; this only sets the timestamp the UI renders.
+   */
+  occurredAt?: Date;
 };
 
 export const CLAIM_STATUSES = [

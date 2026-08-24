@@ -5,13 +5,16 @@
 
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
+import { assertClaim, transitionClaim } from '@/lib/ledger/claims';
+import { evaluateGate } from '@/lib/gates';
 import type { NewEventInput } from '@/lib/events/types';
 
 // Stable IDs so events can reference each other
 const IDS = {
   tenant: 'tenant-acme',
   org: 'org-storage-co',
-  userCeo: 'user-kai',
+  memberKai: 'mbr-kai',        // org owner (human)
+  memberMira: 'mbr-mira',      // staff engineer (human) — parity is only real if a human works here too
   deptProduct: 'dept-product',
   deptEng: 'dept-eng',
   deptSecurity: 'dept-security',
@@ -25,15 +28,15 @@ const IDS = {
   teamHR: 'team-hr',
   teamQA: 'team-qa',
   // agents
-  agentMaya: 'agent-maya',     // product lead
-  agentAris: 'agent-aris',     // architect
-  agentPeri: 'agent-peri',     // performance
-  agentSid: 'agent-sid',       // security
-  agentDevi: 'agent-devi',     // devil's advocate
-  agentSam: 'agent-sam',       // verifier (QA)
-  agentHana: 'agent-hana',     // HR / meta
-  agentRavi: 'agent-ravi',     // research
-  agentBob: 'agent-bob',       // Bob — Kai's personal assistant
+  agentMaya: 'mbr-maya',       // product lead
+  agentAris: 'mbr-aris',     // architect
+  agentPeri: 'mbr-peri',     // performance
+  agentSid: 'mbr-sid',       // security
+  agentDevi: 'mbr-devi',     // devil's advocate
+  agentSam: 'mbr-sam',       // verifier (QA)
+  agentHana: 'mbr-hana',     // HR / meta
+  agentRavi: 'mbr-ravi',     // research
+  agentBob: 'mbr-bob',       // Bob — Kai's personal assistant
   // work objects
   objective: 'obj-17',
   project: 'proj-storage-engine',
@@ -43,10 +46,21 @@ const IDS = {
   gateQA: 'gate-qa',
   gatePerf: 'gate-perf',
   gateRelease: 'gate-release',
+  // conversations
   channel: 'ch-storage',
+  channelGeneral: 'ch-general',
+  dmKaiBob: 'ch-dm-kai-bob',
+  dmKaiMira: 'ch-dm-kai-mira',
+  groupLaunch: 'ch-grp-launch',
   // claim
   claimP99: 'claim-p99-50ms',
 };
+
+// Everyone in the org, in roster order — the membership list for #general.
+const ROSTER_IDS = [
+  IDS.memberKai, IDS.memberMira, IDS.agentMaya, IDS.agentAris, IDS.agentPeri,
+  IDS.agentSid, IDS.agentDevi, IDS.agentSam, IDS.agentHana, IDS.agentRavi, IDS.agentBob,
+];
 
 const TENANT_NAME = 'Acme';
 const ORG_NAME = 'Storage Engine Co.';
@@ -58,18 +72,22 @@ export async function seedDatabase(): Promise<{ ok: boolean; message: string }> 
   // 2. Create tenant, org, departments, teams, agents
   await createTenantOrgAndAgents();
 
-  // 3. Create work graph (objective, project, decision, experiment, gates)
+  // 3. Create the conversations — channels, team rooms, DMs, the group chat
+  await createConversations();
+  await createSkillLibrary();
+
+  // 4. Create work graph (objective, project, decision, experiment, gates)
   await createWorkGraph();
 
-  // 4. Append the killer-demo event arc to the spine
+  // 5. Append the killer-demo event arc to the spine
   const spine = new EventSpine(IDS.tenant, IDS.org);
-  const eventInputs = buildEventArc();
+  const eventInputs = withTimeline(buildEventArc());
   const createdEvents = await spine.append(eventInputs);
 
-  // 5. Create the ledger claim (p99 < 50ms) and the falsifying transition
+  // 6. Create the ledger claim (p99 < 50ms) and the falsifying transition
   await createClaims(createdEvents);
 
-  // 6. Update gate states to reflect the blocked release
+  // 7. Update gate states to reflect the blocked release
   await updateGateStates();
 
   return { ok: true, message: 'Seeded successfully' };
@@ -85,12 +103,14 @@ async function clearAll() {
   await db.claim.deleteMany({});
   await db.event.deleteMany({});
   await db.membership.deleteMany({});
+  await db.memberSkill.deleteMany({});
+  await db.skill.deleteMany({});
+  await db.channelMember.deleteMany({});
   await db.channel.deleteMany({});
-  await db.agent.deleteMany({});
+  await db.member.deleteMany({});   // cascades to HumanProfile / AgentProfile
   await db.team.deleteMany({});
   await db.department.deleteMany({});
   await db.organization.deleteMany({});
-  await db.user.deleteMany({});
   await db.tenant.deleteMany({});
 }
 
@@ -104,17 +124,7 @@ async function createTenantOrgAndAgents() {
     },
   });
 
-  // CEO user
-  await db.user.create({
-    data: {
-      id: IDS.userCeo,
-      tenantId: IDS.tenant,
-      email: 'kai@acme.storage',
-      name: 'Kai',
-      isOrgOwner: true,
-    },
-  });
-
+  // Humans are created after the org (they carry orgId), below.
   // org
   await db.organization.create({
     data: {
@@ -144,95 +154,114 @@ async function createTenantOrgAndAgents() {
     });
   }
 
-  // channel #storage-engine (under Engineering team)
-  await db.channel.create({
-    data: {
-      id: IDS.channel,
-      tenantId: IDS.tenant,
-      orgId: IDS.org,
-      teamId: IDS.teamEng,
-      name: 'storage-engine',
-      slug: 'storage-engine',
-      topic: 'Building a storage engine with sub-50ms p99 reads',
-    },
-  });
+  // ── The roster ─────────────────────────────────────────────────────────────
+  // Humans and agents are the same table. The only difference is which profile
+  // hangs off the member (ADR-0009). Read this list top to bottom: nothing about
+  // it says "and then, separately, the humans".
+  const roster: Array<{
+    id: string;
+    kind: 'human' | 'agent';
+    displayName: string;
+    handle: string;
+    teamId: string | null;
+    presenceState: string;
+    presenceNote?: string;
+    human?: { email: string; isOrgOwner?: boolean };
+    agent?: { role: string; tools: string[]; permissions: string[]; ownerMemberId?: string };
+  }> = [
+    { id: IDS.memberKai, kind: 'human', displayName: 'Kai Alvarez', handle: 'kai', teamId: null,
+      presenceState: 'available',
+      human: { email: 'kai@acme.storage', isOrgOwner: true } },
 
-  // agents
-  const agents = [
-    {
-      id: IDS.agentMaya, name: 'Maya', role: 'product', kind: 'independent',
-      teamId: IDS.teamProduct, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentAris, name: 'Aris', role: 'architect', kind: 'independent',
-      teamId: IDS.teamEng, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search', 'github.read'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentPeri, name: 'Peri', role: 'perf', kind: 'independent',
-      teamId: IDS.teamPerf, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['benchmark.run', 'load.test'], permissions: ['repo.read', 'sandbox.run'],
-    },
-    {
-      id: IDS.agentSid, name: 'Sid', role: 'security', kind: 'independent',
-      teamId: IDS.teamSecurity, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['scan.security', 'github.read'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentDevi, name: 'Devi', role: 'devils_advocate', kind: 'independent',
-      teamId: IDS.teamQA, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: [], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentSam, name: 'Sam', role: 'verifier', kind: 'independent',
-      teamId: IDS.teamQA, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['test.run', 'github.read'], permissions: ['repo.read'],
-    },
-    {
-      id: IDS.agentHana, name: 'Hana', role: 'hr', kind: 'independent',
-      teamId: IDS.teamHR, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: [], permissions: ['org.read'],
-    },
-    {
-      id: IDS.agentRavi, name: 'Ravi', role: 'research', kind: 'independent',
-      teamId: IDS.teamProduct, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search', 'papers.read'], permissions: ['repo.read'],
-    },
-    // Bob — Kai's personal assistant. Personal assistants are owned by a human,
-    // live in their private chat, and enter channels via @-mention. Pinned at
-    // the top of Kai's chat list.
-    {
-      id: IDS.agentBob, name: 'Bob', role: 'product', kind: 'personal_assistant',
-      teamId: null, harnessName: 'simulated', modelName: 'simulated/echo-1',
-      tools: ['web.search', 'github.read'], permissions: ['repo.read'],
-      ownerHumanId: IDS.userCeo,
-    },
+    { id: IDS.memberMira, kind: 'human', displayName: 'Mira Okonkwo', handle: 'mira', teamId: IDS.teamEng,
+      presenceState: 'busy', presenceNote: 'reviewing the WAL format proposal',
+      human: { email: 'mira@acme.storage' } },
+
+    { id: IDS.agentMaya, kind: 'agent', displayName: 'Maya', handle: 'maya', teamId: IDS.teamProduct,
+      presenceState: 'available',
+      agent: { role: 'product', tools: ['web.search'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentAris, kind: 'agent', displayName: 'Aris', handle: 'aris', teamId: IDS.teamEng,
+      presenceState: 'busy', presenceNote: 'drafting the LSM proposal',
+      agent: { role: 'architect', tools: ['web.search', 'github.read'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentPeri, kind: 'agent', displayName: 'Peri', handle: 'peri', teamId: IDS.teamPerf,
+      presenceState: 'busy', presenceNote: 'running the 10k-reader benchmark',
+      agent: { role: 'perf', tools: ['benchmark.run', 'load.test'], permissions: ['repo.read', 'sandbox.run'] } },
+
+    { id: IDS.agentSid, kind: 'agent', displayName: 'Sid', handle: 'sid', teamId: IDS.teamSecurity,
+      presenceState: 'available',
+      agent: { role: 'security', tools: ['scan.security', 'github.read'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentDevi, kind: 'agent', displayName: 'Devi', handle: 'devi', teamId: IDS.teamQA,
+      presenceState: 'available',
+      agent: { role: 'devils_advocate', tools: [], permissions: ['repo.read'] } },
+
+    { id: IDS.agentSam, kind: 'agent', displayName: 'Sam', handle: 'sam', teamId: IDS.teamQA,
+      presenceState: 'away',
+      agent: { role: 'verifier', tools: ['test.run', 'github.read'], permissions: ['repo.read'] } },
+
+    { id: IDS.agentHana, kind: 'agent', displayName: 'Hana', handle: 'hana', teamId: IDS.teamHR,
+      presenceState: 'available',
+      agent: { role: 'hr', tools: [], permissions: ['org.read'] } },
+
+    { id: IDS.agentRavi, kind: 'agent', displayName: 'Ravi', handle: 'ravi', teamId: IDS.teamProduct,
+      presenceState: 'available',
+      agent: { role: 'research', tools: ['web.search', 'papers.read'], permissions: ['repo.read'] } },
+
+    // Bob works for Kai. He posts as Bob, everywhere, with the chip that says
+    // whose assistant he is — never as Kai (ADR-0009 §1).
+    { id: IDS.agentBob, kind: 'agent', displayName: 'Bob', handle: 'bob', teamId: null,
+      presenceState: 'available',
+      agent: { role: 'assistant', tools: ['web.search', 'github.read'], permissions: ['repo.read'],
+               ownerMemberId: IDS.memberKai } },
   ];
 
-  for (const a of agents) {
-    await db.agent.create({
+  for (const m of roster) {
+    await db.member.create({
       data: {
-        ...a,
+        id: m.id,
         tenantId: IDS.tenant,
         orgId: IDS.org,
-        tools: JSON.stringify(a.tools),
-        permissions: JSON.stringify(a.permissions),
+        kind: m.kind,
+        displayName: m.displayName,
+        handle: m.handle,
+        teamId: m.teamId,
+        presenceState: m.presenceState,
+        presenceNote: m.presenceNote ?? null,
         status: 'active',
+        ...(m.human
+          ? { human: { create: { email: m.human.email, isOrgOwner: m.human.isOrgOwner ?? false } } }
+          : {}),
+        ...(m.agent
+          ? {
+              agent: {
+                create: {
+                  role: m.agent.role,
+                  tools: JSON.stringify(m.agent.tools),
+                  permissions: JSON.stringify(m.agent.permissions),
+                  ownerMemberId: m.agent.ownerMemberId ?? null,
+                },
+              },
+            }
+          : {}),
       },
     });
   }
 
-  // memberships (assign agents to teams with MEMBER role; Maya = TEAM_LEAD of product)
+  // ── Team membership ────────────────────────────────────────────────────────
+  // One list. A human lead and an agent lead are the same row shape.
   const memberships = [
-    { agentId: IDS.agentMaya, teamId: IDS.teamProduct, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentRavi, teamId: IDS.teamProduct, role: 'MEMBER' },
-    { agentId: IDS.agentAris, teamId: IDS.teamEng, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentPeri, teamId: IDS.teamPerf, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentSid, teamId: IDS.teamSecurity, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentDevi, teamId: IDS.teamQA, role: 'MEMBER' },
-    { agentId: IDS.agentSam, teamId: IDS.teamQA, role: 'TEAM_LEAD' },
-    { agentId: IDS.agentHana, teamId: IDS.teamHR, role: 'TEAM_LEAD' },
+    { memberId: IDS.memberKai, teamId: IDS.teamProduct, role: 'ORG_OWNER' },
+    { memberId: IDS.memberMira, teamId: IDS.teamEng, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentMaya, teamId: IDS.teamProduct, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentRavi, teamId: IDS.teamProduct, role: 'MEMBER' },
+    { memberId: IDS.agentAris, teamId: IDS.teamEng, role: 'MEMBER' },
+    { memberId: IDS.agentPeri, teamId: IDS.teamPerf, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentSid, teamId: IDS.teamSecurity, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentDevi, teamId: IDS.teamQA, role: 'MEMBER' },
+    { memberId: IDS.agentSam, teamId: IDS.teamQA, role: 'TEAM_LEAD' },
+    { memberId: IDS.agentHana, teamId: IDS.teamHR, role: 'HR_META' },
   ];
   for (const m of memberships) {
     await db.membership.create({
@@ -240,11 +269,217 @@ async function createTenantOrgAndAgents() {
         tenantId: IDS.tenant,
         orgId: IDS.org,
         teamId: m.teamId,
-        memberType: 'agent',
-        memberId: m.agentId,
+        memberId: m.memberId,
         role: m.role,
       },
     });
+  }
+}
+
+// The Library: instructions an agent holds, which change what it is told on
+// every turn (src/lib/agents/turn.ts). These are written as SKILL.md bodies
+// rather than in a format invented here (docs/IA-NAVIGATION.md).
+async function createSkillLibrary() {
+  const skills: Array<{ key: string; name: string; summary: string; content: string; holders: string[] }> = [
+    {
+      key: 'benchmark-methodology',
+      name: 'Benchmark methodology',
+      summary: 'How to run a measurement this org will accept as evidence.',
+      holders: [IDS.agentPeri, IDS.agentSam],
+      content: `A benchmark that cannot be reproduced is an anecdote.
+
+- State the target before you measure. A number with no threshold cannot settle anything.
+- Report the percentile the target names, not the mean. p99 and the average tell
+  different stories and only one of them is the requirement.
+- Run it at least three times on a clean machine and report the spread. If the
+  spread is wider than the margin you are claiming, you have measured noise.
+- Say what the working set was. Most latency surprises are a memory boundary
+  that nobody wrote down.
+- Attach the result to the claim it settles, and say plainly whether it supports
+  or refutes it. A benchmark filed with no claim attached changes nothing.`,
+    },
+    {
+      key: 'threat-modelling',
+      name: 'Threat modelling',
+      summary: 'Turning "is this safe" into something that can be tested.',
+      holders: [IDS.agentSid],
+      content: `Start from what an attacker can reach, not from what the code does.
+
+- Name the attacker: an anonymous caller, an authenticated tenant, an insider.
+  "Someone malicious" produces findings nobody can act on.
+- Follow the data across every boundary it crosses. Most real findings are a
+  value that was safe on one side and identifying on the other.
+- For each finding, write the test that would prove it. A concern with no test
+  behind it expires as an opinion.
+- Rank by what an attacker gains, not by how clever the attack is.`,
+    },
+    {
+      key: 'prior-art-review',
+      name: 'Prior art review',
+      summary: 'Finding what has been tried, and what it actually measured.',
+      holders: [IDS.agentRavi],
+      content: `Report what was measured, not what was claimed.
+
+- Find the systems that already solved this and say what numbers they published,
+  on what hardware, at what scale.
+- Distinguish a benchmark from a blog post. A vendor number without a workload
+  description is marketing.
+- Say where the prior art does not apply to us, specifically. "They had more
+  memory" is the useful half of the finding.
+- If nobody has done it, say that plainly — it is a finding, and an expensive
+  one to discover late.`,
+    },
+    {
+      key: 'answering-for-someone',
+      name: 'Answering for someone',
+      summary: 'How an assistant speaks when it carries its owner\'s authority.',
+      holders: [IDS.agentBob],
+      content: `You answer under your own name, on your owner's authority. Both are visible.
+
+- Say what you can actually see. If you do not know their position, say you do
+  not know it rather than inventing one they will have to walk back.
+- Distinguish what they decided from what you inferred. "Kai's position is X" and
+  "I would guess X" are different sentences and only one of them is safe.
+- Be as honest with the other person as you would be with your owner. An
+  assistant that manages people on their owner's behalf costs them the trust
+  they were borrowing.
+- Never commit them to a date, a price or a promise they have not made.`,
+    },
+  ];
+
+  for (const skill of skills) {
+    const row = await db.skill.create({
+      data: {
+        tenantId: IDS.tenant,
+        orgId: IDS.org,
+        key: skill.key,
+        name: skill.name,
+        summary: skill.summary,
+        content: skill.content,
+      },
+    });
+    for (const memberId of skill.holders) {
+      await db.memberSkill.create({
+        data: { tenantId: IDS.tenant, orgId: IDS.org, memberId, skillId: row.id },
+      });
+    }
+  }
+}
+
+// Every team, and the org itself, gets a default place to talk — plus the DMs
+// and the group chat that make the Chats tab real. Participants are rows, not a
+// naming convention: a DM titles itself from whoever is in it.
+async function createConversations() {
+  const teamRooms = [
+    [IDS.teamProduct, 'product', 'Product'],
+    [IDS.teamEng, 'engineering', 'Engineering'],
+    [IDS.teamSecurity, 'security', 'Security'],
+    [IDS.teamPerf, 'performance', 'Performance'],
+    [IDS.teamQA, 'qa', 'QA'],
+    [IDS.teamHR, 'hr-meta', 'HR / Meta'],
+  ] as const;
+
+  const conversations: Array<{
+    id: string;
+    kind: 'channel' | 'team_room' | 'group' | 'dm';
+    name: string;
+    slug: string;
+    teamId: string | null;
+    topic: string | null;
+    members: string[];
+  }> = [
+    {
+      id: IDS.channelGeneral,
+      kind: 'channel',
+      name: 'general',
+      slug: 'general',
+      teamId: null,
+      topic: 'Everyone in the org, humans and agents alike',
+      members: ROSTER_IDS,
+    },
+    {
+      id: IDS.channel,
+      kind: 'channel',
+      name: 'storage-engine',
+      slug: 'storage-engine',
+      teamId: IDS.teamEng,
+      topic: 'Building a storage engine with sub-50ms p99 reads',
+      members: [
+        IDS.memberKai, IDS.memberMira, IDS.agentMaya, IDS.agentAris,
+        IDS.agentPeri, IDS.agentSid, IDS.agentDevi, IDS.agentSam, IDS.agentRavi,
+      ],
+    },
+    {
+      id: IDS.dmKaiBob,
+      kind: 'dm',
+      name: 'Bob',
+      slug: `dm-${[IDS.memberKai, IDS.agentBob].sort().join('-')}`,
+      teamId: null,
+      topic: null,
+      members: [IDS.memberKai, IDS.agentBob],
+    },
+    {
+      id: IDS.dmKaiMira,
+      kind: 'dm',
+      name: 'Mira Okonkwo',
+      slug: `dm-${[IDS.memberKai, IDS.memberMira].sort().join('-')}`,
+      teamId: null,
+      topic: null,
+      members: [IDS.memberKai, IDS.memberMira],
+    },
+    {
+      id: IDS.groupLaunch,
+      kind: 'group',
+      name: 'Storage launch',
+      slug: 'group-storage-launch',
+      teamId: null,
+      topic: 'Getting the engine in front of a customer',
+      members: [IDS.memberKai, IDS.memberMira, IDS.agentMaya, IDS.agentAris, IDS.agentPeri],
+    },
+  ];
+
+  for (const [teamId, slug, name] of teamRooms) {
+    conversations.push({
+      id: `ch-team-${slug}`,
+      kind: 'team_room',
+      name,
+      slug: `team-${slug}`,
+      teamId,
+      topic: null,
+      // A team room holds exactly the team, resolved from the memberships above.
+      members: [],
+    });
+  }
+
+  for (const c of conversations) {
+    await db.channel.create({
+      data: {
+        id: c.id,
+        tenantId: IDS.tenant,
+        orgId: IDS.org,
+        teamId: c.teamId,
+        kind: c.kind,
+        name: c.name,
+        slug: c.slug,
+        topic: c.topic,
+      },
+    });
+
+    const memberIds =
+      c.kind === 'team_room'
+        ? (
+            await db.membership.findMany({
+              where: { teamId: c.teamId as string },
+              select: { memberId: true },
+            })
+          ).map((m) => m.memberId)
+        : c.members;
+
+    for (const memberId of memberIds) {
+      await db.channelMember.create({
+        data: { tenantId: IDS.tenant, orgId: IDS.org, channelId: c.id, memberId },
+      });
+    }
   }
 }
 
@@ -252,6 +487,9 @@ async function createWorkGraph() {
   // objective
   await db.objective.create({
     data: {
+      // The seeded arc runs through proposal, objection, benchmark and decision,
+      // so the objective's stage says that rather than sitting at 'filed'.
+      stage: 'decision',
       id: IDS.objective,
       tenantId: IDS.tenant,
       orgId: IDS.org,
@@ -317,10 +555,31 @@ async function createWorkGraph() {
 
   // gates
   const gates = [
-    { id: IDS.gateSecurity, name: 'security', policy: 'no open RiskFlag of severity >= high on this project' },
-    { id: IDS.gateQA, name: 'qa', policy: 'all unit + integration tests pass' },
-    { id: IDS.gatePerf, name: 'performance', policy: 'p99 < 50ms at 10k concurrent readers' },
-    { id: IDS.gateRelease, name: 'release', policy: 'all upstream gates passed AND no open RiskFlag severity >= high' },
+    {
+      id: IDS.gateSecurity,
+      name: 'security',
+      policy: JSON.stringify({ none: { subject: 'risk', severityAtLeast: 'high' } }),
+    },
+    {
+      id: IDS.gateQA,
+      name: 'qa',
+      policy: JSON.stringify({ none: { subject: 'claim', status: ['falsified'], statementContains: 'test' } }),
+    },
+    {
+      id: IDS.gatePerf,
+      name: 'performance',
+      policy: JSON.stringify({ none: { subject: 'claim', status: ['falsified'] } }),
+    },
+    {
+      id: IDS.gateRelease,
+      name: 'release',
+      policy: JSON.stringify({
+        all: [
+          { none: { subject: 'claim', status: ['falsified'] } },
+          { none: { subject: 'risk', severityAtLeast: 'high' } },
+        ],
+      }),
+    },
   ];
   for (const g of gates) {
     await db.gate.create({
@@ -336,14 +595,71 @@ async function createWorkGraph() {
   }
 }
 
+/**
+ * Spread an ordered arc across real time.
+ *
+ * Every seeded event otherwise lands within the same second, so the whole
+ * organisation reads "5m" and the day dividers never appear — a fortnight of
+ * debate looks like it happened during lunch.
+ *
+ * Two shapes matter, and one schedule cannot produce both:
+ *   - a technical debate is slow. Hours or days pass between the prior-art scan
+ *     and the benchmark that refutes it.
+ *   - a conversation is bursty. Nobody waits six hours to answer "what did I
+ *     miss", then answers within the same thread.
+ *
+ * So time is allotted per *run* of consecutive events in one conversation:
+ * older runs get wider windows (the easing exponent — today is dense, last week
+ * is sparse), and a short run is capped to a burst regardless of how much room
+ * its window offers.
+ *
+ * Deterministic: one clock read, no randomness, so a reseed is a reseed.
+ */
+function withTimeline(inputs: NewEventInput[], spanDays = 11): NewEventInput[] {
+  const END = Date.now() - 8 * 60_000;
+  const SPAN = spanDays * 24 * 3_600_000;
+  const BURST_MS = 4 * 60_000;   // spacing inside a short exchange
+  const BURST_MAX = 6;           // runs no longer than this read as one sitting
+
+  // Consecutive events in the same conversation belong to the same run.
+  const runs: number[][] = [];
+  inputs.forEach((input, i) => {
+    const prev = runs[runs.length - 1];
+    if (prev && inputs[prev[prev.length - 1]].scopeId === input.scopeId) prev.push(i);
+    else runs.push([i]);
+  });
+
+  // Boundaries b[0] .. b[runs.length], oldest to newest. Run r fills [b[r], b[r+1]],
+  // so no two runs can land on the same instant and the newest ends at END.
+  const n = runs.length;
+  const b = Array.from({ length: n + 1 }, (_, r) => END - SPAN * Math.pow((n - r) / n, 1.6));
+
+  const at = new Array<Date>(inputs.length);
+  runs.forEach((run, r) => {
+    const endsAt = b[r + 1];
+    const window = endsAt - b[r];
+    const gap =
+      run.length <= BURST_MAX
+        ? Math.min(BURST_MS, window / run.length)
+        : window / run.length;
+
+    // Anchored to the end of the window, so a burst sits at its close.
+    run.forEach((i, k) => {
+      at[i] = new Date(endsAt - (run.length - 1 - k) * gap);
+    });
+  });
+
+  return inputs.map((input, i) => ({ ...input, occurredAt: at[i] }));
+}
+
 function buildEventArc(): NewEventInput[] {
   const inputs: NewEventInput[] = [];
 
   // 1. Maya files the objective in #storage-engine
   inputs.push({
     type: 'ObjectiveFiled',
-    actorType: 'agent',
-    actorAgentId: IDS.agentMaya,
+    actorType: 'member',
+    actorMemberId: IDS.agentMaya,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -360,8 +676,8 @@ function buildEventArc(): NewEventInput[] {
   // 2. Maya introduces the work in chat
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentMaya,
+    actorType: 'member',
+    actorMemberId: IDS.agentMaya,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -372,8 +688,8 @@ function buildEventArc(): NewEventInput[] {
   // 3. Ravi (Research) raises prior-art note
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentRavi,
+    actorType: 'member',
+    actorMemberId: IDS.agentRavi,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -384,8 +700,8 @@ function buildEventArc(): NewEventInput[] {
   // 4. Aris opens the proposal — Mmap-LSM with bloom filters
   inputs.push({
     type: 'ProposalOpened',
-    actorType: 'agent',
-    actorAgentId: IDS.agentAris,
+    actorType: 'member',
+    actorMemberId: IDS.agentAris,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -406,35 +722,39 @@ function buildEventArc(): NewEventInput[] {
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'proposer', agentId: IDS.agentAris, agentName: 'Aris' },
+    payload: { decisionId: IDS.decision, role: 'proposer', memberId: IDS.agentAris, memberName: 'Aris',
+      reason: 'Assigned by the debate engine' },
   });
   inputs.push({
     type: 'RoleAssigned',
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'reviewer', agentId: IDS.agentSid, agentName: 'Sid' },
+    payload: { decisionId: IDS.decision, role: 'reviewer', memberId: IDS.agentSid, memberName: 'Sid',
+      reason: 'Assigned by the debate engine' },
   });
   inputs.push({
     type: 'RoleAssigned',
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'devils_advocate', agentId: IDS.agentDevi, agentName: 'Devi' },
+    payload: { decisionId: IDS.decision, role: 'devils_advocate', memberId: IDS.agentDevi, memberName: 'Devi',
+      reason: 'Assigned by the debate engine' },
   });
   inputs.push({
     type: 'RoleAssigned',
     actorType: 'system',
     scopeType: 'decision',
     scopeId: IDS.decision,
-    payload: { decisionId: IDS.decision, role: 'verifier', agentId: IDS.agentPeri, agentName: 'Peri' },
+    payload: { decisionId: IDS.decision, role: 'verifier', memberId: IDS.agentPeri, memberName: 'Peri',
+      reason: 'Assigned by the debate engine' },
   });
 
   // 6. Sid asks about bloom filters
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentSid,
+    actorType: 'member',
+    actorMemberId: IDS.agentSid,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -445,8 +765,8 @@ function buildEventArc(): NewEventInput[] {
   // 7. Devi (devil's advocate) raises a formal objection with evidence
   inputs.push({
     type: 'ObjectionRaised',
-    actorType: 'agent',
-    actorAgentId: IDS.agentDevi,
+    actorType: 'member',
+    actorMemberId: IDS.agentDevi,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -460,8 +780,8 @@ function buildEventArc(): NewEventInput[] {
   // 8. Peri requests an experiment
   inputs.push({
     type: 'ExperimentRequested',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -475,8 +795,8 @@ function buildEventArc(): NewEventInput[] {
   // 9. Peri runs and completes the benchmark
   inputs.push({
     type: 'ExperimentCompleted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -490,8 +810,8 @@ function buildEventArc(): NewEventInput[] {
   // 10. Peri reports the benchmark result — the falsifying evidence
   inputs.push({
     type: 'BenchmarkReported',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -508,8 +828,8 @@ function buildEventArc(): NewEventInput[] {
   // 11. The benchmark report is echoed into the channel as a message
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -517,25 +837,17 @@ function buildEventArc(): NewEventInput[] {
     },
   });
 
-  // 12. ClaimStatusChanged: believed → falsified (the killer demo transition)
-  inputs.push({
-    type: 'ClaimStatusChanged',
-    actorType: 'system',
-    scopeType: 'channel',
-    scopeId: IDS.channel,
-    payload: {
-      claimId: IDS.claimP99,
-      from: 'believed',
-      to: 'falsified',
-      reason: 'Benchmark refutes: p99=142ms vs target=50ms at 10k concurrent readers. Bloom filter memory overhead pushed working set beyond RAM.',
-    },
-  });
+  // The falsification itself is not scripted here. transitionClaim appends the
+  // ClaimStatusChanged when the claim actually moves, so the log holds one
+  // transition per real move rather than a narrated one alongside it. Writing it
+  // here as well produced an event naming a claim id that did not exist, which
+  // replay would have reported as a phantom claim.
 
   // 13. Peri flags the risk
   inputs.push({
     type: 'RiskFlagged',
-    actorType: 'agent',
-    actorAgentId: IDS.agentPeri,
+    actorType: 'member',
+    actorMemberId: IDS.agentPeri,
     scopeType: 'project',
     scopeId: IDS.project,
     payload: {
@@ -579,8 +891,8 @@ function buildEventArc(): NewEventInput[] {
   // 16. Aris records the decision — outcome=falsified, with full anatomy
   inputs.push({
     type: 'DecisionRecorded',
-    actorType: 'agent',
-    actorAgentId: IDS.agentAris,
+    actorType: 'member',
+    actorMemberId: IDS.agentAris,
     scopeType: 'decision',
     scopeId: IDS.decision,
     payload: {
@@ -600,8 +912,8 @@ function buildEventArc(): NewEventInput[] {
   // 17. Hana (HR/Meta) records an org retrospective note
   inputs.push({
     type: 'MessagePosted',
-    actorType: 'agent',
-    actorAgentId: IDS.agentHana,
+    actorType: 'member',
+    actorMemberId: IDS.agentHana,
     scopeType: 'channel',
     scopeId: IDS.channel,
     payload: {
@@ -609,93 +921,189 @@ function buildEventArc(): NewEventInput[] {
     },
   });
 
+
+  // ── The chats ──────────────────────────────────────────────────────────────
+  // Kai's DM with Bob. Bob answers under his own name; the chip that says whose
+  // assistant he is does the rest (ADR-0009 §1).
+  const msg = (
+    scopeId: string,
+    actorMemberId: string,
+    body: string,
+    onBehalfOfMemberId?: string,
+  ): NewEventInput => ({
+    type: 'MessagePosted',
+    actorType: 'member',
+    actorMemberId,
+    ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+    scopeType: 'channel',
+    scopeId,
+    payload: { body },
+  });
+
+  inputs.push(
+    msg(IDS.channelGeneral, IDS.agentHana,
+      'Weekly org review is posted. Two things stand out: the release gate has been blocked for six days, and Performance is carrying the most reopened work of any team.'),
+    msg(IDS.channelGeneral, IDS.memberKai,
+      'Six days blocked is the one I care about. Peri, is the 142ms a property of the design or of the run?'),
+    msg(IDS.channelGeneral, IDS.agentPeri,
+      "Of the design. I re-ran it three times on a clean box; the spread was 4ms. It's the read amplification, not noise."),
+
+    msg(IDS.dmKaiBob, IDS.memberKai,
+      'What did I miss while I was out yesterday?'),
+    msg(IDS.dmKaiBob, IDS.agentBob,
+      "Three things. Peri's benchmark came back at 142ms p99 against your 50ms target, so the claim moved to falsified and the release gate blocked behind it. Aris opened a bloom-filter alternative in #storage-engine but hasn't attached evidence yet. And Mira asked you directly about the launch date — that one's still unanswered."),
+    msg(IDS.dmKaiBob, IDS.memberKai,
+      'Draft me a reply to Mira. Say the date holds only if the p99 work lands, and be honest that it might not.'),
+    msg(IDS.dmKaiBob, IDS.agentBob,
+      "Drafted. I'll answer in your thread with her, under my name and on your authority, the next time she raises it — the date is contingent on the read-path fix, and I'll flag it the moment the gate moves either way."),
+
+    // Not everything an assistant works out belongs in the room. This is
+    // narrower than the conversation it sits in: Kai reads it because Bob acts
+    // for him, and it is in #storage-engine because that is what it is about —
+    // but nobody else in the channel gets it. `Event.visibility` decides that,
+    // and until it was enforced this line was posted to everyone.
+    {
+      type: 'AgentThought',
+      actorType: 'member',
+      actorMemberId: IDS.agentBob,
+      scopeType: 'channel',
+      scopeId: IDS.channel,
+      visibility: 'private',
+      payload: {
+        thoughtType: 'doubt',
+        content:
+          "Peri's 142ms and Aris's bloom-filter estimate were measured on the same box, a week apart, and nobody has said whether the CI runner was on it. If it was, the read-amplification story is partly the neighbour. Worth Kai asking — but it is a hunch, not a measurement, so it is his to raise, not mine.",
+        topic: 'benchmark-validity',
+        visibility: 'agent',
+      },
+    },
+
+    // A DM stays a DM. Kai summons Bob with @, Bob answers inside it, and Mira
+    // sees the exchange — no second conversation is created.
+    msg(IDS.dmKaiMira, IDS.memberMira,
+      'Are we still holding the 12th for the customer preview? I need to tell them something today.'),
+    msg(IDS.dmKaiMira, IDS.memberKai,
+      '@Bob has the current state — Bob, give Mira the honest version.'),
+    msg(IDS.dmKaiMira, IDS.agentBob,
+      "The 12th holds only if the read-path work lands. Right now p99 is 142ms against a 50ms target and the release gate is blocked on that claim. Kai's position is that the date is contingent, not committed — I'd tell the customer the preview is likely but not confirmed, and I'll flag the moment the gate moves.",
+      IDS.memberKai),
+    msg(IDS.dmKaiMira, IDS.memberMira,
+      "That's what I needed. I'll tell them likely-not-confirmed and hold the invite until the gate clears."),
+
+    // One team room with traffic, the rest genuinely empty — both states are
+    // real on day one and both need to render.
+    msg('ch-team-engineering', IDS.memberMira,
+      'Standup, async: Aris is on the bloom-filter alternative, I\'m on the WAL format review. Nothing blocked on a person.'),
+    msg('ch-team-engineering', IDS.agentAris,
+      "Correction on mine — I am blocked, on Peri's measurement. The alternative is written but I won't open it for decision without a number attached."),
+
+    msg(IDS.groupLaunch, IDS.agentMaya,
+      "Pulling the five of us into one place so the launch conversation stops living in three channels. Open question: do we preview on the current numbers or wait for the fix?"),
+    msg(IDS.groupLaunch, IDS.agentAris,
+      'Wait. Previewing a read path we already know is 3x over target buys one demo and costs the benchmark story.'),
+    msg(IDS.groupLaunch, IDS.agentPeri,
+      "I can have the bloom-filter measurement by Thursday. If it lands where Aris thinks it will, the question answers itself."),
+    msg(IDS.groupLaunch, IDS.memberMira,
+      'Then Thursday is the decision point, not the 12th. I can hold the customer that long.'),
+  );
+
   return inputs;
 }
 
-async function createClaims(createdEvents: { id: string; type: string; payload: unknown }[]) {
-  // Find the ProposalOpened event — it is the provenance of the believed claim
+async function createClaims(
+  createdEvents: { id: string; type: string; payload: unknown; createdAt: string }[],
+) {
   const proposalEvent = createdEvents.find((e) => e.type === 'ProposalOpened');
   if (!proposalEvent) throw new Error('ProposalOpened event not found in seed arc');
   const benchmarkEvent = createdEvents.find((e) => e.type === 'BenchmarkReported');
   if (!benchmarkEvent) throw new Error('BenchmarkReported event not found in seed arc');
+  const objectionEvent = createdEvents.find((e) => e.type === 'ObjectionRaised');
 
-  // The believed claim — created when Aris opened the proposal
-  await db.claim.create({
-    data: {
-      id: IDS.claimP99,
-      tenantId: IDS.tenant,
-      orgId: IDS.org,
-      statement: 'p99 read latency < 50ms at 10k concurrent readers',
-      status: 'falsified', // post-falsification status
-      scopeType: 'project',
-      scopeId: IDS.project,
-      provenanceEventId: proposalEvent.id,
-      provenanceActorType: 'agent',
-      provenanceAgentId: IDS.agentAris,
-      evidenceIds: JSON.stringify([benchmarkEvent.id]),
-      contradictsIds: JSON.stringify([]),
-      statusReason:
-        'Falsified by benchmark: p99=142ms vs target=50ms at 10k concurrent readers. Bloom filter memory overhead pushed working set beyond RAM.',
-      updatedAt: new Date(),
-    },
+  // A claim moved when the evidence for it landed, not when the seed ran. The
+  // ledger otherwise reports a fortnight of debate as "updated 1m".
+  const when = (iso: string, plusMinutes = 0) => new Date(new Date(iso).getTime() + plusMinutes * 60_000);
+
+  // The seed no longer writes a claim that is *born* falsified. It walks the
+  // same path the product does: asserted when the proposal opens, believed once
+  // the team accepts it, falsified when the benchmark comes back. The trail in
+  // the ledger is therefore real, and replaying the log reproduces it.
+  const p99 = await assertClaim({
+    tenantId: IDS.tenant,
+    orgId: IDS.org,
+    statement: 'p99 read latency < 50ms at 10k concurrent readers',
+    scopeType: 'project',
+    scopeId: IDS.project,
+    memberId: IDS.agentAris,
+    provenanceEventId: proposalEvent.id,
   });
 
-  // A second claim: bloom filters add 1.5x memory (Devi's objection) — tested and confirmed
-  const objectionEvent = createdEvents.find((e) => e.type === 'ObjectionRaised');
+  await transitionClaim({
+    claimId: p99.id,
+    to: 'believed',
+    reason: 'Architecture proposal reviewed; the team accepted the LSM approach on its reasoning.',
+    memberId: IDS.agentAris,
+    occurredAt: when(proposalEvent.createdAt, 90),
+  });
+
+  await transitionClaim({
+    claimId: p99.id,
+    to: 'falsified',
+    reason:
+      'Benchmark measured p99 = 142ms at 10k concurrent readers against a 50ms target. Bloom filter memory overhead pushed the working set beyond RAM.',
+    evidenceEventIds: [benchmarkEvent.id],
+    memberId: IDS.agentPeri,
+    occurredAt: when(benchmarkEvent.createdAt, 4),
+  });
+
+  // Devi's objection, which the benchmark went on to confirm.
   if (objectionEvent) {
-    await db.claim.create({
-      data: {
-        id: 'claim-bloom-mem',
-        tenantId: IDS.tenant,
-        orgId: IDS.org,
-        statement: 'Bloom filters add ~1.5x memory overhead at 10M keys, pushing working set beyond RAM under concurrent read pressure.',
-        status: 'tested',
-        scopeType: 'decision',
-        scopeId: IDS.decision,
-        provenanceEventId: objectionEvent.id,
-        provenanceActorType: 'agent',
-        provenanceAgentId: IDS.agentDevi,
-        evidenceIds: JSON.stringify([benchmarkEvent.id]),
-        contradictsIds: JSON.stringify([IDS.claimP99]),
-        statusReason: 'Confirmed by benchmark: working set exceeded RAM; SSTable disk reads dominated tail latency.',
-        updatedAt: new Date(),
-      },
+    const bloom = await assertClaim({
+      tenantId: IDS.tenant,
+      orgId: IDS.org,
+      statement:
+        'Bloom filters add ~1.5x memory overhead at 10M keys, pushing working set beyond RAM under concurrent read pressure.',
+      scopeType: 'project',
+      scopeId: IDS.project,
+      memberId: IDS.agentDevi,
+      provenanceEventId: objectionEvent.id,
+    });
+    await transitionClaim({
+      claimId: bloom.id,
+      to: 'believed',
+      reason: 'Raised as an objection with a memory model behind it.',
+      memberId: IDS.agentDevi,
+      occurredAt: when(objectionEvent.createdAt, 12),
+    });
+    await transitionClaim({
+      claimId: bloom.id,
+      to: 'tested',
+      reason:
+        'Confirmed by the benchmark: working set exceeded RAM and SSTable disk reads dominated tail latency.',
+      evidenceEventIds: [benchmarkEvent.id],
+      memberId: IDS.agentPeri,
+      occurredAt: when(benchmarkEvent.createdAt, 11),
     });
   }
+
+  // A claim nobody has evidence for either way — the ledger should be able to
+  // say "we do not know" as clearly as it says yes or no.
+  await assertClaim({
+    tenantId: IDS.tenant,
+    orgId: IDS.org,
+    statement: 'A single node is sufficient through the first 12 months of load.',
+    scopeType: 'project',
+    scopeId: IDS.project,
+    memberId: IDS.memberMira,
+  });
 }
 
 async function updateGateStates() {
-  // Performance gate — blocked
-  await db.gate.update({
-    where: { id: IDS.gatePerf },
-    data: {
-      state: 'blocked',
-      reason: 'p99=142ms > 50ms target',
-      evaluatedAt: new Date(),
-    },
-  });
-  // Release gate — blocked
-  await db.gate.update({
-    where: { id: IDS.gateRelease },
-    data: {
-      state: 'blocked',
-      reason: 'Performance gate blocked AND open high-severity RiskFlag on this project',
-      evaluatedAt: new Date(),
-    },
-  });
-  // Security gate — passed (no risk on this dimension)
-  await db.gate.update({
-    where: { id: IDS.gateSecurity },
-    data: { state: 'passed', reason: 'No open RiskFlag of severity >= high on this project', evaluatedAt: new Date() },
-  });
-  // QA gate — passed (tests in place)
-  await db.gate.update({
-    where: { id: IDS.gateQA },
-    data: { state: 'passed', reason: 'All unit + integration tests pass', evaluatedAt: new Date() },
-  });
-  // Decision state — resolved (falsified)
-  await db.decision.update({
-    where: { id: IDS.decision },
-    data: { state: 'resolved', outcome: 'falsified', updatedAt: new Date() },
-  });
+  // Gate state is evaluated, never written. Each gate carries a predicate and
+  // the engine runs it as a query over the ledger — so the seeded gates block
+  // for a reason the UI can name, rather than because the seed said so
+  // (ADR-0007 §C).
+  const gates = await db.gate.findMany({ where: { orgId: IDS.org }, select: { id: true } });
+  for (const g of gates) {
+    await evaluateGate(g.id);
+  }
 }

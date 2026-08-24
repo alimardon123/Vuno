@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { EventSpine } from '@/lib/events/spine';
+import { enqueueStageWork } from '@/lib/orchestrator/runner';
 import type { NewEventInput } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -68,10 +69,15 @@ export async function POST(req: Request) {
   const scopeId = channel?.id ?? org.id;
   const scopeType = channel ? 'channel' : 'org';
 
+  // Filing an objective starts the lifecycle. This is the line that makes
+  // "set a goal and let them work" true rather than aspirational: the
+  // orchestrator picks it up from here, with no further request from anyone.
+  await enqueueStageWork(org.tenantId, org.id, objective.id, 'filed');
+
   const spine = new EventSpine(org.tenantId, org.id);
   const eventInput: NewEventInput<'ObjectiveFiled'> = {
     type: 'ObjectiveFiled',
-    actorType: 'human',
+    actorType: 'member',
     scopeType,
     scopeId,
     payload: {

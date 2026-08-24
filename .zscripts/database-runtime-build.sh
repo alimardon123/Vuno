@@ -21,7 +21,9 @@ fi
 echo "🗄️  同步构建产物中的数据库结构..."
 (
     cd "$PROJECT_DIR"
-    DATABASE_URL="file:$TARGET_DB_PATH" bun run db:push
+    # Migrations, not db push: push diffs the schema against the database and
+    # drops what no longer matches, which is not something to run at deploy time.
+    DATABASE_URL="file:$TARGET_DB_PATH" bun run db:deploy
 )
 
 if [ ! -f "$TARGET_DB_PATH" ]; then
