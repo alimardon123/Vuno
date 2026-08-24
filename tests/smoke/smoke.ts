@@ -1117,7 +1117,7 @@ async function agentEdge(browser: Browser) {
   );
   check(both, 'the roster shows both people and agents', 'one of the two kinds is missing');
 
-  for (const theme of ['ink', 'paper', 'warm', 'ledger', 'console'] as const) {
+  for (const theme of ['studio', 'daylight', 'ink', 'paper', 'warm', 'ledger', 'console'] as const) {
     await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
     await page.waitForTimeout(150);
     const seen = await page.evaluate(() => {
@@ -1143,6 +1143,8 @@ async function themes(browser: Browser) {
   await open(page, '/activity');
 
   for (const [label, id] of [
+    ['Studio', 'studio'],
+    ['Daylight', 'daylight'],
     ['Ink', 'ink'],
     ['Paper', 'paper'],
     ['Warm', 'warm'],

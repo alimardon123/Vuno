@@ -188,6 +188,166 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Studio and Daylight — the same design language, two grounds.
+
+   These are the default, and they exist because the first five were dense but
+   rough: everything between 11 and 13px with almost no size contrast, and a
+   hairline box around every list, so the screen read as boxes inside boxes
+   rather than as a hierarchy.
+
+   One structural change does most of the work: **a surface separates by
+   elevation, not by an outline.** The 1px ring around every panel goes; a
+   shadow and a lighter ground take its place. Dividers *inside* a panel stay,
+   because a line between two rows is information — a line around the panel was
+   only ever saying "this is a panel", which its position already said.
+
+   The rest is rhythm. A base of 14px instead of 13, a real step between a name
+   and the metadata under it, and padding that lets a dense list breathe without
+   fitting fewer rows on screen.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Studio — the dark ground ────────────────────────────────────────────── */
+[data-theme="studio"] {
+  /* Not black. A near-black with a trace of blue in it, so the elevated
+     surfaces above it read as lifted rather than as a lighter grey. */
+  --bg:      #0C0D11;
+  --surface: #14161C;
+  --raised:  #1B1E26;
+  --sunken:  #0A0B0E;
+  --rail:    #08090C;
+  --rail-fg: #7A8093;
+
+  --fg:   #EDEEF2;
+  --fg-2: #B4B8C6;
+  --fg-3: #82889A;
+  --fg-4: #5C6273;
+
+  --line:   #23262F;
+  --line-2: #31353F;
+
+  /* One accent with enough presence to be the only saturated thing that is not
+     a claim status. Indigo, because every status hue is taken. */
+  --accent:      #7C6BF5;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #1D1B33;
+  --select: #1E2029;
+  --hover:  #191C23;
+
+  --asserted:  #E0A83F;
+  --believed:  #6BA6DE;
+  --tested:    #4FC08D;
+  --falsified: #EC7B5E;
+  --uncertain: #8B90A0;
+  --asserted-bg:  #2A2314;
+  --believed-bg:  #16273A;
+  --tested-bg:    #122B21;
+  --falsified-bg: #331A12;
+  --uncertain-bg: #1F222A;
+
+  --agent-edge: #3FB8A6;
+  color-scheme: dark;
+}
+
+/* ─── Daylight — the light ground ──────────────────────────────────────────
+   Not Studio inverted. A shadow on white reads as dirt, so here the separation
+   is tint: a panel is white on a faintly grey page, and the hairline stays but
+   drops almost to invisible. ─────────────────────────────────────────────── */
+[data-theme="daylight"] {
+  --bg:      #F7F7F9;
+  --surface: #FFFFFF;
+  --raised:  #FFFFFF;
+  --sunken:  #F1F1F4;
+  --rail:    #14161C;
+  --rail-fg: #8B90A0;
+
+  --fg:   #15161C;
+  --fg-2: #45485A;
+  --fg-3: #6E7285;
+  --fg-4: #9BA0B0;
+
+  --line:   #EAEAEF;
+  --line-2: #DCDCE4;
+
+  --accent:      #5B4BE0;
+  --accent-fg:   #FFFFFF;
+  --accent-soft: #EEECFD;
+  --select: #F0EEFE;
+  --hover:  #F4F4F7;
+
+  --asserted:  #99700F;
+  --believed:  #2C5FA0;
+  --tested:    #1F7A55;
+  --falsified: #C04322;
+  --uncertain: #6E7285;
+  --asserted-bg:  #FBF2DC;
+  --believed-bg:  #E8EFF9;
+  --tested-bg:    #E1F2EA;
+  --falsified-bg: #FCE8E2;
+  --uncertain-bg: #F0F0F3;
+
+  --agent-edge: #0E9384;
+  color-scheme: light;
+}
+
+/* ─── What the two share ─────────────────────────────────────────────────── */
+
+[data-theme="studio"] body,
+[data-theme="daylight"] body {
+  font-family: var(--font-studio-sans), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: -0.006em;
+}
+
+/* A panel is lifted, not outlined. Targeted at the container radii the app
+   actually uses for panels — a chip at `rounded-[4px]` keeps its edge, because
+   a chip *is* its outline. */
+[data-theme="studio"] :is(.rounded-xl, .rounded-lg).border {
+  border-color: transparent;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.04),
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 12px 32px -16px rgb(0 0 0 / 0.55);
+}
+
+/* On white a shadow reads as dirt, so the light ground separates by tint and
+   keeps a hairline that is nearly gone. */
+[data-theme="daylight"] :is(.rounded-xl, .rounded-lg).border {
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgb(16 18 32 / 0.04), 0 8px 24px -18px rgb(16 18 32 / 0.14);
+}
+
+/* Softer corners than the base 8/12, which is most of what "sleek" means when
+   everything else is already dense. */
+[data-theme="studio"] .rounded-xl,
+[data-theme="daylight"] .rounded-xl { border-radius: 14px; }
+[data-theme="studio"] .rounded-lg,
+[data-theme="daylight"] .rounded-lg { border-radius: 10px; }
+[data-theme="studio"] .rounded-md,
+[data-theme="daylight"] .rounded-md { border-radius: 8px; }
+
+/* The step the old scale did not have: a name should not be the same size as
+   the timestamp beside it. */
+[data-theme="studio"] :is(h1, h2),
+[data-theme="daylight"] :is(h1, h2) {
+  letter-spacing: -0.022em;
+  font-weight: 650;
+}
+
+/* Numbers stay in mono so columns line up — the sans has tabular figures but
+   not the width consistency a spend column wants. */
+[data-theme="studio"] :is(.tnum, .font-mono),
+[data-theme="daylight"] :is(.tnum, .font-mono) {
+  font-family: var(--font-mono-stack), ui-monospace, monospace;
+  letter-spacing: -0.02em;
+}
+
+/* The rail is the one place that stays flat: it is a frame around the app, not
+   a surface in it, and lifting it would put a shadow on the edge of the window. */
+[data-theme="studio"] nav[aria-label="Sections"],
+[data-theme="daylight"] nav[aria-label="Sections"] { box-shadow: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Two directions, not two palettes.
 
    Ink, Paper and Warm are the same design language in three colourways: same
@@ -499,6 +659,8 @@ body {
 
 /* The theme menu marks its active option from the root attribute, so React
    holds no state for it and there is nothing to hydrate. */
+[data-theme="studio"]   .theme-option[data-theme-option="studio"]   .theme-dot,
+[data-theme="daylight"] .theme-option[data-theme-option="daylight"] .theme-dot,
 [data-theme="ink"]     .theme-option[data-theme-option="ink"]     .theme-dot,
 [data-theme="paper"]   .theme-option[data-theme-option="paper"]   .theme-dot,
 [data-theme="warm"]    .theme-option[data-theme-option="warm"]    .theme-dot,
@@ -507,6 +669,8 @@ body {
   background: var(--fg);
   border-color: var(--fg);
 }
+[data-theme="studio"]   .theme-option[data-theme-option="studio"]   span,
+[data-theme="daylight"] .theme-option[data-theme-option="daylight"] span,
 [data-theme="ink"]     .theme-option[data-theme-option="ink"]     span,
 [data-theme="paper"]   .theme-option[data-theme-option="paper"]   span,
 [data-theme="warm"]    .theme-option[data-theme-option="warm"]    span,

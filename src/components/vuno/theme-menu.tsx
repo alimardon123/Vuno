@@ -10,10 +10,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-// Three colourways of one design language, then two directions that are
+// Studio and Daylight are the default pair: one design language, two grounds,
+// separating surfaces by elevation rather than by an outline. Then three
+// colourways of the older, denser language, then two directions that are
 // different arguments about what the product is — they change the type, the
 // shape language and the density, which is why they are listed apart.
 const THEMES = [
+  { id: 'studio', label: 'Studio', hint: 'Lifted surfaces, dark', group: 'Default' },
+  { id: 'daylight', label: 'Daylight', hint: 'Lifted surfaces, light', group: 'Default' },
   { id: 'ink', label: 'Ink', hint: 'Deep neutral', group: 'Palette' },
   { id: 'paper', label: 'Paper', hint: 'Light neutral', group: 'Palette' },
   { id: 'warm', label: 'Warm', hint: 'Cream and gold', group: 'Palette' },

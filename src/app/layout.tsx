@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono, Inter, JetBrains_Mono, Source_Serif_4 } from 'next/font/google';
+import { IBM_Plex_Mono, Inter, JetBrains_Mono, Plus_Jakarta_Sans, Source_Serif_4 } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -12,6 +12,15 @@ const mono = JetBrains_Mono({ variable: '--font-mono-stack', subsets: ['latin'],
 // these only when a rule under the direction's selector actually asks for them.
 const ledgerSerif = Source_Serif_4({
   variable: '--font-ledger-serif',
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+});
+// Studio and Daylight are one design language in two grounds, and the face is
+// half of what makes it: a humanist geometric with open counters, which stays
+// readable at 11px metadata while carrying a name at 14.5 with some presence.
+const studioSans = Plus_Jakarta_Sans({
+  variable: '--font-studio-sans',
   subsets: ['latin'],
   display: 'swap',
   preload: false,
@@ -33,8 +42,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#0F1215' },
-    { media: '(prefers-color-scheme: light)', color: '#F6F7F8' },
+    { media: '(prefers-color-scheme: dark)', color: '#0C0D11' },
+    { media: '(prefers-color-scheme: light)', color: '#FAFAFA' },
   ],
 };
 
@@ -44,25 +53,25 @@ const THEME_BOOTSTRAP = `
 (function () {
   try {
     var t = localStorage.getItem('vuno-theme');
-    if (t === 'ink' || t === 'paper' || t === 'warm' || t === 'ledger' || t === 'console') {
+    if (t === 'studio' || t === 'daylight' || t === 'ink' || t === 'paper' || t === 'warm' || t === 'ledger' || t === 'console') {
       document.documentElement.setAttribute('data-theme', t);
       return;
     }
   } catch (e) {}
   document.documentElement.setAttribute(
     'data-theme',
-    window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'paper' : 'ink'
+    window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'studio'
   );
 })();
 `;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="ink" suppressHydrationWarning>
+    <html lang="en" data-theme="studio" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
-      <body className={`${inter.variable} ${mono.variable} ${ledgerSerif.variable} ${consoleMono.variable}`}>
+      <body className={`${inter.variable} ${mono.variable} ${ledgerSerif.variable} ${consoleMono.variable} ${studioSans.variable}`}>
         {children}
         <Toaster />
       </body>
