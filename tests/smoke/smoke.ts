@@ -665,6 +665,46 @@ async function boardView(browser: Browser) {
   await ctx.close();
 }
 
+// ── The org, as a shape ─────────────────────────────────────────────────────
+async function orgView(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1050 }, storageState });
+  const page = await ctx.newPage();
+
+  await open(page, '/members?view=org');
+  check((await page.locator('main svg[role="img"]').count()) > 0, 'the org has a topology graph');
+  check(
+    (await page.locator('main details').count()) > 0,
+    'departments and teams expand',
+  );
+
+  // Native `<details>`, so it works from the keyboard without a hook.
+  const first = page.locator('main details').first();
+  const wasOpen = await first.evaluate((el) => (el as HTMLDetailsElement).open);
+  await first.locator('summary').first().click();
+  await page.waitForTimeout(200);
+  check(
+    (await first.evaluate((el) => (el as HTMLDetailsElement).open)) !== wasOpen,
+    'a department opens and closes',
+  );
+
+  // Somebody with no team is named rather than dropped from a view that claims
+  // to show the org.
+  const text = await page.locator('main').innerText();
+  check(text.includes('Not on a team') || text.includes('DEPARTMENTS'), 'the org names everyone it has');
+
+  // The link out of the graph has to land on that person, not on an unfiltered
+  // roster — that is a dangling anchor with extra steps.
+  const link = page.locator('main a[href*="?q="]').first();
+  if ((await link.count()) > 0) {
+    const href = await link.getAttribute('href');
+    await open(page, href ?? '');
+    const rows = await page.locator('main ul li').count();
+    check(rows > 0 && rows <= 3, 'a link into the roster arrives filtered', `${rows} rows for ${href}`);
+  }
+
+  await ctx.close();
+}
+
 /** Take a plugin out if it is installed, so the round trip starts from nothing. */
 async function removeIfInstalled(page: Page, name: string): Promise<void> {
   await open(page, '/extensions?tab=plugins');
@@ -962,6 +1002,7 @@ try {
       ['composer', composer],
       ['message actions', messageActions],
       ['board', boardView],
+      ['org', orgView],
       ['extensions', extensions],
       ['keyboard', keyboard],
       ['agent edge', agentEdge],

@@ -61,14 +61,21 @@ export function Roster({
   members,
   teams,
   runnable,
+  initialQuery = '',
 }: {
   members: RosterMember[];
   teams: TeamOption[];
   /** Harnesses this install can actually run, so a member who cannot is flagged. */
   runnable: string[];
+  /**
+   * Seeded from `?q=` so a link to a person lands on that person. The Org view
+   * links here by handle; without this the link arrived at an unfiltered
+   * roster, which is a dangling anchor with extra steps.
+   */
+  initialQuery?: string;
 }) {
   const [open, setOpen] = useState<Open>(null);
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQuery);
   const router = useRouter();
   const { toast } = useToast();
 
