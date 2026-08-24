@@ -125,10 +125,12 @@ stdout, events first, for reading or moving somewhere that is not SQLite;
 password hashes and sessions are deliberately left out of it.
 
 `bun run start` still binds 127.0.0.1 and warns if you point it elsewhere.
-Authentication is not the same as being ready for the open internet — there is
-no rate limiting yet, and `Event.visibility` is written but not enforced, so
-every member of an org can read all of it. `docs/REVIEW-2026-08-23.md` lists
-what is left and why.
+Authentication is not the same as being ready for the open internet. Writes are
+limited to sixty a minute per member, but the counters live in one process, so a
+second server would not share them. `Event.visibility` is written and never
+read: a conversation you are not in is closed to you, and everything inside a
+conversation you *are* in is open. `docs/REVIEW-2026-08-23.md` lists what is
+left and why.
 
 ---
 
