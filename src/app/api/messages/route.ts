@@ -24,13 +24,17 @@ import { extractHandles } from '@/lib/mentions';
 import { enqueue } from '@/lib/orchestrator/queue';
 import { takeWrite } from '@/lib/limits';
 import { canRead, getConversation } from '@/lib/conversations';
+import { AttachmentError, linkToEvent, MAX_PER_MESSAGE } from '@/lib/attachments';
 import type { NewEventInput } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
-  body: z.string().min(1).max(4000),
+  // Empty is allowed when files are attached — "here is the screenshot" with no
+  // sentence is a message people actually send.
+  body: z.string().max(4000).default(''),
   channelId: z.string().min(1),
+  attachmentIds: z.array(z.string().min(1)).max(MAX_PER_MESSAGE).default([]),
   actorType: z.enum(['member', 'system']).default('member'),
   actorMemberId: z.string().optional(),
   onBehalfOfMemberId: z.string().optional(),
@@ -46,6 +50,10 @@ export async function POST(req: Request) {
       { ok: false, error: e instanceof Error ? e.message : 'Invalid body' },
       { status: 400 },
     );
+  }
+
+  if (parsed.body.trim().length === 0 && parsed.attachmentIds.length === 0) {
+    return NextResponse.json({ ok: false, error: 'Nothing to send.' }, { status: 400 });
   }
 
   const org = await db.organization.findFirst({
@@ -127,6 +135,31 @@ export async function POST(req: Request) {
     payload: { body: parsed.body },
   };
   const [created] = await spine.append([eventInput]);
+
+  // Linked after the event exists, because the event is what they belong to.
+  // If this fails the message still stands — a message that posted and lost its
+  // screenshot is recoverable; one that vanished because a file was already
+  // claimed is not, and the reader saw it go.
+  if (parsed.attachmentIds.length > 0) {
+    try {
+      await linkToEvent({
+        orgId: org.id,
+        channelId: channel.id,
+        uploaderId: poster?.id ?? '',
+        eventId: created.id,
+        attachmentIds: parsed.attachmentIds,
+      });
+    } catch (e) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: e instanceof AttachmentError ? e.message : 'Those files could not be attached.',
+          event: created,
+        },
+        { status: e instanceof AttachmentError ? e.status : 500 },
+      );
+    }
+  }
 
 
   // `@bob` brings Bob in. A lookup against handles that exist, not a guess at

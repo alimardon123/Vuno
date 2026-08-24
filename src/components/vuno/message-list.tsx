@@ -6,6 +6,7 @@
 
 import { Fragment } from 'react';
 import { Avatar, MemberName, RelativeTime, StatusPill, type ClaimStatus } from '@/components/vuno/primitives';
+import { MessageBody } from '@/components/vuno/message-body';
 import type { ConversationMessage } from '@/lib/conversations';
 import { cn } from '@/lib/utils';
 
@@ -150,8 +151,8 @@ function MessageRow({ message: m, grouped }: { message: ConversationMessage; gro
           </div>
         ) : null}
 
-        {m.body ? (
-          <p className="max-w-[78ch] whitespace-pre-wrap break-words text-[13px] leading-[1.5] text-[var(--fg-2)]">{m.body}</p>
+        {m.body || m.attachments.length > 0 ? (
+          <MessageBody body={m.body} attachments={m.attachments} className="max-w-[78ch] break-words" />
         ) : null}
 
         <RecordCard message={m} />

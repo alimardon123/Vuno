@@ -65,3 +65,6 @@ db/*.db-wal
 db/*.db-shm
 # `bun run export --backup` writes these next to the database.
 db/backup-*.db
+
+# Uploaded files. The database references them; they are not source.
+/storage/

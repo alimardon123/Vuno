@@ -364,6 +364,64 @@
   font-weight: 600;
 }
 
+/* ─── Message markdown ────────────────────────────────────────────────────── */
+/* Scoped to `.vuno-md` rather than set on the elements: a message is the one
+   place in the app where arbitrary markup arrives, and styling `ul` globally
+   would reach every list in every panel. Spacing is tight on purpose — a
+   message is a paragraph in a conversation, not a page. */
+
+.vuno-md > :first-child { margin-top: 0; }
+.vuno-md > :last-child { margin-bottom: 0; }
+.vuno-md p { margin: 0 0 0.35em; }
+.vuno-md p:last-child { margin-bottom: 0; }
+.vuno-md strong { color: var(--fg); font-weight: 650; }
+.vuno-md em { font-style: italic; }
+.vuno-md del { color: var(--fg-4); text-decoration: line-through; }
+
+.vuno-md :is(h1, h2, h3, h4) {
+  margin: 0.6em 0 0.3em;
+  color: var(--fg);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.008em;
+}
+.vuno-md h1 { font-size: 15px; }
+.vuno-md h2 { font-size: 14px; }
+
+.vuno-md :is(ul, ol) { margin: 0.25em 0 0.4em; padding-left: 1.35em; }
+.vuno-md ul { list-style: disc; }
+.vuno-md ol { list-style: decimal; }
+.vuno-md li { margin: 0.1em 0; }
+.vuno-md li::marker { color: var(--fg-4); }
+
+.vuno-md blockquote {
+  margin: 0.35em 0;
+  padding-left: 0.7em;
+  border-left: 2px solid var(--line-2);
+  color: var(--fg-3);
+}
+
+.vuno-md hr { margin: 0.7em 0; border: 0; border-top: 1px solid var(--line); }
+
+/* A table in a message scrolls inside itself. The conversation never does. */
+.vuno-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 12px;
+}
+.vuno-md :is(th, td) {
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.vuno-md th { background: var(--sunken); color: var(--fg); font-weight: 600; }
+
+.vuno-md :is(input[type="checkbox"]) { margin-right: 0.4em; accent-color: var(--accent); }
+
 /* ─── Base ────────────────────────────────────────────────────────────────── */
 
 /* In `base`, not unlayered. An unlayered rule beats every layered one whatever

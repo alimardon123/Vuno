@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getConversation, listMessages } from '@/lib/conversations';
 import { currentViewer } from '@/lib/auth';
 import { ConversationView } from '@/components/vuno/conversation-view';
+import { mentionableIn } from '@/lib/members/mentionable';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,5 +28,11 @@ export default async function ChannelPage({
   const window = await listMessages(org.id, id, viewer, {
     before: Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
   });
-  return <ConversationView conversation={conversation} window={window} />;
+  return (
+    <ConversationView
+      conversation={conversation}
+      window={window}
+      mentionable={await mentionableIn(org.id, conversation)}
+    />
+  );
 }

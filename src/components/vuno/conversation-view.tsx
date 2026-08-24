@@ -5,12 +5,21 @@
 // into: an objection and a message are both things you say.
 
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useConversationStream } from '@/hooks/use-conversation-stream';
 import { MessageList } from '@/components/vuno/message-list';
-import { Composer } from '@/components/vuno/composer';
+import { Composer, type Mentionable } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
 import type { Conversation, MessageWindow } from '@/lib/conversations';
+
+/**
+ * `useLayoutEffect`, except on the server, where it does nothing and warns.
+ *
+ * This component is server-rendered before it hydrates, and the one thing that
+ * has to happen before paint — putting a busy conversation at its live end —
+ * is exactly what `useLayoutEffect` is for.
+ */
+const useLayoutEffectOnClient = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 const KIND_LABEL: Record<Conversation['kind'], string> = {
   dm: 'Direct message',
@@ -22,9 +31,12 @@ const KIND_LABEL: Record<Conversation['kind'], string> = {
 export function ConversationView({
   conversation,
   window: view,
+  mentionable = [],
 }: {
   conversation: Conversation;
   window: MessageWindow;
+  /** Everyone `@` can reach here, resolved on the server. */
+  mentionable?: Mentionable[];
 }) {
   const { messages, earlier, isHistory } = view;
 
@@ -38,11 +50,77 @@ export function ConversationView({
   const backTo = basePath;
   const bottom = useRef<HTMLDivElement>(null);
 
+  const stream = useRef<HTMLDivElement>(null);
+  // A stable id so the inline script below can find this element. Derived from
+  // the conversation rather than random, so the server and the client agree.
+  const streamId = `stream-${conversation.id}`;
+  /** Whether the reader is at the live end, rather than scrolled up reading. */
+  const atBottom = useRef(true);
+
+  /**
+   * How far from the bottom still counts as "at the bottom".
+   *
+   * Generous, because a reader a line or two up has not left the conversation —
+   * and because a browser that is mid-smooth-scroll reports a position that is
+   * a few pixels short of where it is going.
+   */
+  const NEAR = 120;
+
+  const scrollToEnd = useCallback((force = false) => {
+    if (isHistory) return;
+    if (!force && !atBottom.current) return;
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [isHistory]);
+
+  // Track where the reader is. Without this every new message drags them back
+  // down mid-sentence, which is the behaviour that makes a busy channel
+  // unreadable — and, on a hard load of a long conversation, the scroll fires
+  // under whatever they were about to click.
   useEffect(() => {
-    // Only when looking at the live end. Jumping to the bottom of a window of
-    // history would undo the reason someone opened it.
-    if (!isHistory) bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length, isHistory]);
+    const el = stream.current;
+    if (!el) return;
+    const onScroll = () => {
+      atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR;
+    };
+    onScroll();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Opening a conversation lands at the live end; a new message only follows if
+  // that is where the reader already was.
+  //
+  // The first paint is handled by the inline script below, not here — no effect
+  // of any kind runs until React has hydrated, and on a busy channel that is
+  // several hundred milliseconds of the oldest messages on screen followed by a
+  // ten-thousand-pixel jump. Anything clicked in that window landed somewhere
+  // else; "Earlier messages" became an image three screens below it, reliably
+  // enough that the browser suite caught it. This handles moving *between*
+  // conversations, where hydration has already happened.
+  useLayoutEffectOnClient(() => {
+    scrollToEnd(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id]);
+
+  useEffect(() => {
+    scrollToEnd();
+  }, [messages.length, scrollToEnd]);
+
+  // An image finishing its download makes the message taller than it was when
+  // the scroll above ran, so the bottom of it ends up under the composer.
+  // Uploads record their pixel size, which reserves the space — but a browser
+  // that has not decoded the file yet still lays it out at zero, and messages
+  // from before attachments existed have no size at all.
+  useEffect(() => {
+    const el = stream.current;
+    if (!el) return;
+    const onLoad = (e: Event) => {
+      if ((e.target as HTMLElement).tagName === 'IMG') scrollToEnd();
+    };
+    // Capture, because `load` on an image does not bubble.
+    el.addEventListener('load', onLoad, true);
+    return () => el.removeEventListener('load', onLoad, true);
+  }, [scrollToEnd]);
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-[var(--bg)]">
@@ -77,7 +155,7 @@ export function ConversationView({
         </div>
       </header>
 
-      <div className="scroll-y min-h-0 flex-1">
+      <div ref={stream} id={streamId} className="scroll-y min-h-0 flex-1">
         {/* The window is bounded, so history is reached by asking for it — and
             because the cursor is in the URL, a point in a long conversation is
             a link someone can send. */}
@@ -110,8 +188,24 @@ export function ConversationView({
         ) : null}
         <div ref={bottom} />
       </div>
+      {/* Runs while the browser is still parsing, so the conversation is drawn
+          at its live end rather than scrolled there afterwards. The same
+          technique the theme bootstrap uses (src/app/layout.tsx), for the same
+          reason: some things have to be right on the first paint, and hydration
+          is far too late. */}
+      {!isHistory ? (
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var e=document.getElementById(${JSON.stringify(streamId)});if(e)e.scrollTop=e.scrollHeight;})()`,
+          }}
+        />
+      ) : null}
 
-      <Composer conversationId={conversation.id} conversationName={conversation.name} />
+      <Composer
+        conversationId={conversation.id}
+        conversationName={conversation.name}
+        mentionable={mentionable}
+      />
     </main>
   );
 }

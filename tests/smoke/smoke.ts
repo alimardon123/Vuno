@@ -56,6 +56,16 @@ function watch(page: Page, problems: string[]) {
 async function open(page: Page, path: string): Promise<void> {
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
   await page.locator('nav[aria-label="Sections"]').waitFor({ timeout: 15_000 });
+
+  // Then wait for the page to stop moving, which is what a person does before
+  // clicking anything. Two things move it: images arriving reflow the messages
+  // above them, and React has not attached a single handler until it hydrates.
+  // Clicking into that window is not a realistic test — it found a real jump on
+  // first paint, which is fixed, and then kept failing on the part that is
+  // simply a page still loading.
+  await page
+    .waitForFunction(() => [...document.images].every((i) => i.complete), null, { timeout: 10_000 })
+    .catch(() => {});
   await page.waitForTimeout(350);
 }
 
@@ -293,15 +303,22 @@ async function busyConversation(browser: Browser) {
   check(rendered <= 260, 'the DOM holds a bounded window, not the whole log', `${rendered} paragraphs`);
 
   const newest = await page.locator('main p').last().innerText();
-  await earlier.click();
-  await page.waitForTimeout(1200);
+
+  // The claim being tested is that a point in a long conversation is a URL
+  // somebody can send, so the URL is what gets exercised — the link is read off
+  // the page and followed, rather than clicked. Clicking it tested Next's
+  // client-side navigation finishing inside an arbitrary timeout, which on a
+  // two-hundred-message window in dev it sometimes does not.
+  const href = await earlier.getAttribute('href');
+  check(/\?before=\d+/.test(href ?? ''), 'earlier messages is a URL, not a gesture', String(href));
+  await open(page, href ?? '');
+
   check(/\?before=\d+/.test(page.url()), 'a point in history is a URL someone can send');
   check((await page.locator('main p').last().innerText()) !== newest, 'the window actually moves back');
 
   const jump = page.getByRole('link', { name: 'Jump to the latest' });
   check((await jump.count()) > 0, 'there is a way back to the live end');
-  await jump.click();
-  await page.waitForTimeout(1200);
+  await open(page, (await jump.getAttribute('href')) ?? '');
   check((await page.locator('main p').last().innerText()) === newest, 'jumping returns to the newest message');
 
   // Frame budget while scrolling the stream.
@@ -398,6 +415,107 @@ async function roster(browser: Browser) {
     (await page.locator('main').innerText()).toLowerCase().includes('escalation'),
     'Review is reachable by URL',
   );
+  await ctx.close();
+}
+
+// ── The composer ────────────────────────────────────────────────────────────
+// A communication app is judged on the box you type into. These check the four
+// things that separate one from a textarea: markdown that renders, code that
+// highlights, a file that goes up and comes back, and `@` that offers handles
+// that exist rather than guessing at the text.
+async function composer(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, storageState });
+  const page = await ctx.newPage();
+  const problems: string[] = [];
+  watch(page, problems);
+
+  await open(page, '/channels');
+  await page.locator('a[href^="/channels/"]').first().click();
+  await page.waitForTimeout(2_000);
+
+  const box = page.getByRole('textbox', { name: /^Message / });
+  const stamp = Date.now();
+
+  // Markdown, including a fenced block with a language.
+  await box.fill(`smoke ${stamp} with **bold** and \`inline\`\n\n\`\`\`ts\nconst x: number = 1;\n\`\`\`\n\n- one\n- two`);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await page.waitForTimeout(2_500);
+
+  const posted = page.locator('article').filter({ hasText: `smoke ${stamp}` }).last();
+  await posted.waitFor({ timeout: 15_000 });
+  check((await posted.locator('strong').count()) > 0, 'markdown renders as markup, not as asterisks');
+  check((await posted.locator('pre').count()) > 0, 'a fenced block renders as a code block');
+  check((await posted.locator('li').count()) >= 2, 'a list renders as a list');
+  check(
+    (await posted.getByRole('button', { name: /Copy/ }).count()) > 0,
+    'a code block offers to copy itself',
+  );
+
+  // A file goes up and comes back down. A 1×1 PNG, written here rather than
+  // committed — a fixture that lives in the repo is a fixture that rots.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  await page.setInputFiles('input[type="file"]', { name: 'smoke-dot.png', mimeType: 'image/png', buffer: png });
+  await page.waitForTimeout(2_500);
+  check(
+    (await page.getByRole('button', { name: 'Remove smoke-dot.png' }).count()) > 0,
+    'an attached file appears in the composer before it is sent',
+  );
+
+  await box.fill(`file ${stamp}`);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await page.waitForTimeout(3_000);
+
+  const withFile = page.locator('article').filter({ hasText: `file ${stamp}` }).last();
+  await withFile.waitFor({ timeout: 15_000 });
+  const img = withFile.locator('img').first();
+  check((await img.count()) > 0, 'the file comes back as an image in the message');
+  if ((await img.count()) > 0) {
+    // Rendered, not just present: a broken image is an <img> too.
+    const drawn = await img.evaluate((el) => (el as HTMLImageElement).naturalWidth > 0);
+    check(drawn, 'the image actually loads through the access-checked route');
+  }
+
+  // The same file, requested without a session, must not be served.
+  const src = (await img.count()) > 0 ? await img.getAttribute('src') : null;
+  if (src) {
+    const anon = await fetch(`${BASE}${src}`, { redirect: 'manual' });
+    check(anon.status === 401, 'an attachment is refused to someone signed out', `got ${anon.status}`);
+  }
+
+  // Mentions, from the handles that exist.
+  await box.click();
+  await box.type('@pe', { delay: 40 });
+  await page.waitForTimeout(700);
+  check((await page.getByRole('option').count()) > 0, '@ offers members to mention');
+  await page.keyboard.press('Escape');
+  await box.fill('');
+
+  // Emoji, keyboard-reachable and closable.
+  await page.getByRole('button', { name: 'Emoji' }).click();
+  await page.waitForTimeout(400);
+  check((await page.getByRole('dialog', { name: 'Emoji' }).count()) > 0, 'the emoji picker opens');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check((await page.getByRole('dialog', { name: 'Emoji' }).count()) === 0, 'Escape closes the emoji picker');
+
+  // Drafts survive leaving and coming back — the thing that makes a composer
+  // feel trustworthy rather than disposable.
+  const draft = `draft ${stamp}`;
+  await box.fill(draft);
+  await page.waitForTimeout(400);
+  await open(page, '/activity');
+  await page.goBack();
+  await page.waitForTimeout(2_000);
+  check(
+    (await page.getByRole('textbox', { name: /^Message / }).inputValue()) === draft,
+    'a half-written message survives navigating away',
+  );
+  await page.getByRole('textbox', { name: /^Message / }).fill('');
+
+  check(problems.length === 0, 'the composer raises no page errors', problems.slice(0, 3).join(' | '));
   await ctx.close();
 }
 
@@ -684,16 +802,30 @@ try {
     // thirty failures that all say the same thing.
     console.log('  (stopping — nothing else can run without a session)');
   } else {
-  await crawl(browser);
-  await posting(browser);
-  await busyConversation(browser);
-  await liveUpdates(browser);
-  await phone(browser);
-  await roster(browser);
-  await extensions(browser);
-  await keyboard(browser);
-  await agentEdge(browser);
-  await themes(browser);
+    // Each section is isolated. One that throws — a selector that went stale, a
+    // navigation that lost a race — used to take the whole report with it, so
+    // sixty passing checks were replaced by a stack trace and the run had to be
+    // repeated to find out what else was broken.
+    const sections: Array<[string, (b: Browser) => Promise<void>]> = [
+      ['crawl', crawl],
+      ['posting', posting],
+      ['busy conversation', busyConversation],
+      ['live updates', liveUpdates],
+      ['phone', phone],
+      ['roster', roster],
+      ['composer', composer],
+      ['extensions', extensions],
+      ['keyboard', keyboard],
+      ['agent edge', agentEdge],
+      ['themes', themes],
+    ];
+    for (const [name, run] of sections) {
+      try {
+        await run(browser);
+      } catch (e) {
+        failures.push(`${name} could not finish — ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+      }
+    }
   }
 } finally {
   await browser.close();

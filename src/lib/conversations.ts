@@ -9,6 +9,7 @@
 import { db } from '@/lib/db';
 import { isRestricted, reachOf, teamScopesFor, visibleTo, type Reach } from '@/lib/events/visibility';
 import { getMember, memberMap, type MemberSummary } from '@/lib/members';
+import { attachmentsForEvents, type StoredAttachment } from '@/lib/attachments';
 
 export type ConversationKind = 'dm' | 'group' | 'team_room' | 'channel';
 
@@ -214,6 +215,8 @@ export interface ConversationMessage {
    * this is how they know not everyone in the room can.
    */
   restrictedTo: 'private' | 'team' | null;
+  /** Files posted with it. Empty for almost every message. */
+  attachments: StoredAttachment[];
 }
 
 export interface MessageWindow {
@@ -278,9 +281,12 @@ export async function listMessages(
   const hasOlder = rows.length > limit;
   const page = (hasOlder ? rows.slice(0, limit) : rows).reverse();
 
-  const members = await memberMap(
-    page.flatMap((e) => [e.actorMemberId, e.onBehalfOfMemberId].filter((v): v is string => Boolean(v))),
-  );
+  const [members, files] = await Promise.all([
+    memberMap(page.flatMap((e) => [e.actorMemberId, e.onBehalfOfMemberId].filter((v): v is string => Boolean(v)))),
+    // One query for the window rather than one per message: a page of 200
+    // messages with a screenshot each is 200 round trips the other way.
+    attachmentsForEvents(page.map((e) => e.id)),
+  ]);
 
   const messages = page.map((e) => {
     let payload: Record<string, unknown> = {};
@@ -298,6 +304,7 @@ export async function listMessages(
       at: String(e.createdAt),
       author: e.actorMemberId ? (members.get(e.actorMemberId) ?? null) : null,
       onBehalfOf: e.onBehalfOfMemberId ? (members.get(e.onBehalfOfMemberId) ?? null) : null,
+      attachments: files.get(e.id) ?? [],
       isSystem: e.actorType === 'system',
       restrictedTo: isRestricted(e.visibility) ? (e.visibility as 'private' | 'team') : null,
     };

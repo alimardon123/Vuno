@@ -65,6 +65,7 @@ model Member {
   skills          MemberSkill[]
   connections     MemberConnection[]
   sessions        Session[]
+  uploads         Attachment[]
 
   @@unique([orgId, handle])
   @@index([orgId, kind, status])
@@ -151,6 +152,7 @@ model Organization {
   skills      Skill[]
   connections Connection[]
   plugins     Plugin[]
+  attachments Attachment[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -363,6 +365,51 @@ model Plugin {
   @@index([orgId])
 }
 
+// A file posted in a conversation.
+//
+// Never under `public/`. A file served from a static directory is readable by
+// anyone who has the URL, which would make an attachment in a DM the one part
+// of that conversation with no access control at all. These live outside the
+// web root and are served by a route that asks the same question the message
+// list asks: may this viewer read this conversation.
+//
+// `channelId` rather than a link to the event, because the file exists before
+// the message does — you attach, see the preview, then send. An upload that is
+// never sent has no event and is swept.
+model Attachment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// The conversation this belongs to. Access is decided from it.
+  channelId   String
+  /// The event that carries it, once the message is sent. Null while a draft.
+  eventId     String?
+  uploaderId  String
+  /// 'image', 'audio' or 'file' — what the reader gets, not the mime type.
+  kind        String
+  /// The name as uploaded, for the download and for a screen reader.
+  name        String
+  mimeType    String
+  bytes       Int
+  /// Where it is under the storage root. Relative, so the root can move.
+  path        String
+  /// Set for images, so the layout reserves the right space before it loads.
+  width       Int?
+  height      Int?
+  /// Set for audio, so a voice note shows its length before you play it.
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  uploader    Member       @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, channelId])
+  @@index([eventId])
+  /// Sweeping unsent uploads asks for exactly this.
+  @@index([eventId, createdAt])
+}
+
 model Channel {
   id          String   @id @default(cuid())
   tenantId    String
@@ -384,6 +431,7 @@ model Channel {
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
   members     ChannelMember[]
+  attachments Attachment[]
 
   @@unique([orgId, slug])
   @@index([orgId, teamId])
