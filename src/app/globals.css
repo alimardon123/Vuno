@@ -472,6 +472,20 @@ body {
 .scroll-y::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--fg-4); }
 .scroll-y { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 
+/* Sideways, for the board. The same thumb, and `overscroll-behavior` so a
+   trackpad swipe at the end of the columns does not navigate the browser back. */
+.scroll-x { overflow-x: auto; overscroll-behavior-x: contain; }
+.scroll-x::-webkit-scrollbar { height: 10px; }
+.scroll-x::-webkit-scrollbar-track { background: transparent; }
+.scroll-x::-webkit-scrollbar-thumb {
+  background-color: var(--line-2);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
+}
+.scroll-x::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--fg-4); }
+.scroll-x { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

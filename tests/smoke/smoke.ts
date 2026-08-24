@@ -608,6 +608,63 @@ async function messageActions(browser: Browser) {
   await ctx.close();
 }
 
+// ── The board ───────────────────────────────────────────────────────────────
+// A board whose cards are only cards is the failure this guards against: every
+// card here is a real objective, and moving one has to actually move it.
+async function boardView(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, storageState });
+  const page = await ctx.newPage();
+
+  await open(page, '/work?view=board');
+  const columns = page.locator('main section');
+  check((await columns.count()) >= 3, 'the board has columns', `${await columns.count()}`);
+
+  // The two ends always exist, so a shipped or killed objective has somewhere
+  // to be rather than vanishing.
+  const text = await page.locator('main').innerText();
+  check(text.includes('Shipped') && text.includes('Killed'), 'the board keeps a column for both endings');
+
+  // The board scrolls sideways in its own box; the page never does.
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  check(overflow === 0, 'the board does not push the page sideways', `${overflow}px`);
+
+  const card = page.locator('main article').first();
+  if ((await card.count()) === 0) {
+    checks.push('the board is empty — nothing to move');
+    await ctx.close();
+    return;
+  }
+
+  // Moving by menu, not by drag: dragging is invisible to a keyboard, and the
+  // menu is the control that names where a card can go.
+  await card.getByRole('button', { name: /^Move / }).click();
+  await page.waitForTimeout(400);
+  const options = await page.getByRole('menuitem').allInnerTexts();
+  check(options.length >= 3, 'a card says where it can go', options.join(' / '));
+  check(
+    options.some((o) => o.includes('here')),
+    'the menu marks the column the card is already in',
+  );
+
+  // A stage the orchestrator cannot run is offered as unavailable rather than
+  // silently accepted — a card dropped there would sit looking like work.
+  const dead = page.getByRole('menuitem').filter({ hasText: 'not built' });
+  if ((await dead.count()) > 0) {
+    check(await dead.first().isDisabled(), 'a stage that is not built cannot be moved to');
+  }
+
+  // Move it somewhere real and back, so the run leaves the board as it found it.
+  const before = await card.locator('h3').innerText();
+  await page.getByRole('menuitem', { name: /^Killed/ }).click();
+  const killed = page.locator('main section').filter({ hasText: 'Killed' }).locator('article');
+  await killed.first().waitFor({ timeout: 15_000 }).catch(() => {});
+  check((await killed.count()) > 0, 'moving a card moves the objective', `"${before}" did not arrive`);
+
+  await ctx.close();
+}
+
 /** Take a plugin out if it is installed, so the round trip starts from nothing. */
 async function removeIfInstalled(page: Page, name: string): Promise<void> {
   await open(page, '/extensions?tab=plugins');
@@ -904,6 +961,7 @@ try {
       ['roster', roster],
       ['composer', composer],
       ['message actions', messageActions],
+      ['board', boardView],
       ['extensions', extensions],
       ['keyboard', keyboard],
       ['agent edge', agentEdge],

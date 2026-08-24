@@ -35,6 +35,7 @@ export type EventType =
   | 'MessageRedacted'
   | 'MessagePinned'
   | 'MessageUnpinned'
+  | 'ObjectiveStageChanged'
   | 'PreemptIssued'
   | 'AttentionWakeup'
   | 'MemoryUpdated'
@@ -266,6 +267,19 @@ export interface EventPayloadMap {
   };
   MessageUnpinned: {
     targetEventId: string;
+  };
+  // Every move an objective makes through the lifecycle, whoever made it.
+  // Without this the spine could replay every message in the org and not say
+  // how a piece of work got to where it is — which is the one question the
+  // stage column exists to answer.
+  ObjectiveStageChanged: {
+    objectiveId: string;
+    from: string;
+    to: string;
+    /** Why. The orchestrator's reason is that the stage's work finished. */
+    reason: string;
+    /** True when a person moved it rather than the runtime advancing it. */
+    byHand: boolean;
   };
   PreemptIssued: {
     interruptingAgentId: string;

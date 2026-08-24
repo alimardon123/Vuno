@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '@/lib/db';
 import { claimNext, complete, enqueue, fail, heartbeat, LEASE_MS } from './queue';
 import { handlerFor, nextStage } from './handlers';
+import { EventSpine } from '@/lib/events/spine';
 import { isStage, STAGES, type Stage } from './stages';
 
 export interface RunnerOptions {
@@ -137,6 +138,26 @@ async function advanceObjective(objectiveId: string, log: (l: string) => void): 
   const current: Stage = isStage(objective.stage) ? objective.stage : 'filed';
   const next = nextStage(current);
   if (!next) return null;
+
+  // The event before the column. Until this existed, the spine could replay
+  // every message in the org and not say how a piece of work reached the stage
+  // it is in — the one question the stage column exists to answer. The board's
+  // by-hand moves append the same type, so both paths read back the same way.
+  await new EventSpine(objective.tenantId, objective.orgId).append([
+    {
+      type: 'ObjectiveStageChanged',
+      actorType: 'system',
+      scopeType: 'objective',
+      scopeId: objectiveId,
+      payload: {
+        objectiveId,
+        from: current,
+        to: next,
+        reason: `Every work item for ${current} finished.`,
+        byHand: false,
+      },
+    },
+  ]);
 
   await db.objective.update({
     where: { id: objectiveId },

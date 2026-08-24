@@ -2,14 +2,23 @@
 // filing an objective was a button in Settings with nowhere to go afterwards,
 // which is why there was nothing to watch.
 
+import Link from 'next/link';
 import { db } from '@/lib/db';
+import { cn } from '@/lib/utils';
+import { board } from '@/lib/work/board';
+import { Board } from '@/components/vuno/board';
 import { memberMap } from '@/lib/members';
 import { isStage, STAGES, STAGE_ORDER, stageProgress } from '@/lib/orchestrator/stages';
 import { Avatar, Empty, GateChip, RelativeTime, gateLabel } from '@/components/vuno/primitives';
 
 export const dynamic = 'force-dynamic';
 
-export default async function WorkPage() {
+export default async function WorkPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  // A view of the same objectives, not a second destination. The board is an
+  // arrangement of this work — putting it on the rail would imply it is
+  // somewhere else, and it would then need its own way of filing an objective
+  // (docs/IA-NAVIGATION.md).
+  const view = (await searchParams).view === 'board' ? 'board' : 'list';
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) {
     return <main className="flex flex-1 items-center justify-center"><Empty title="No organisation yet" hint="Run bun run setup." /></main>;
@@ -23,6 +32,49 @@ export default async function WorkPage() {
   ]);
   const members = await memberMap(sessions.map((s) => s.memberId));
 
+  const nav = (
+    <nav className="mt-2 flex gap-1" aria-label="Work view">
+      {([['list', 'List'], ['board', 'Board']] as const).map(([id, label]) => (
+        <Link
+          key={id}
+          href={id === 'list' ? '/work' : '/work?view=board'}
+          aria-current={view === id ? 'page' : undefined}
+          className={cn(
+            'rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors',
+            'focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
+            view === id
+              ? 'bg-[var(--select)] font-semibold text-[var(--fg)]'
+              : 'text-[var(--fg-3)] hover:bg-[var(--hover)] hover:text-[var(--fg)]',
+          )}
+        >
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+
+  if (view === 'board') {
+    return (
+      // Not `scroll-y`: the board owns its own scrolling in both directions, and
+      // a page that also scrolls would give a card two scrollbars to fight.
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="shrink-0 border-b border-[var(--line)] bg-[var(--surface)] px-6 py-3">
+          <h1 className="text-[15px] font-semibold tracking-[-0.015em]">Work</h1>
+          <p className="mt-0.5 text-[11.5px] text-[var(--fg-3)]">
+            The same objectives, by stage. Drag a card or use its menu to move one — that is a judgment the
+            orchestrator records and then carries on from.
+          </p>
+          {nav}
+        </header>
+        {objectives.length === 0 ? (
+          <Empty title="No objectives yet" hint="File one and the orchestrator routes it, assembles a working group, and starts interrogating it." />
+        ) : (
+          <Board columns={await board(org.id)} />
+        )}
+      </main>
+    );
+  }
+
   return (
     <main className="scroll-y min-w-0 flex-1">
       <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)] px-6 py-3">
@@ -31,6 +83,7 @@ export default async function WorkPage() {
         <p className="mt-0.5 text-[11.5px] text-[var(--fg-3)]">
           Objectives, and what the organisation is doing about them. The orchestrator advances these on its own.
         </p>
+        {nav}
         </div>
       </header>
 

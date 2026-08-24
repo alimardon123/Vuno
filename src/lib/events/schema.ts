@@ -38,7 +38,7 @@ export const EVENT_TYPES = [
   'WikiSectionAuthored', 'AgentThought', 'SharedItem', 'ReactionAdded',
   'PreemptIssued', 'AttentionWakeup', 'MemoryUpdated', 'PaProactiveNote',
   'AgentHandoff', 'ToolCalled', 'ReactionRemoved', 'MessageEdited',
-  'MessageRedacted', 'MessagePinned', 'MessageUnpinned',
+  'MessageRedacted', 'MessagePinned', 'MessageUnpinned', 'ObjectiveStageChanged',
 ] as const;
 
 export const SCOPE_TYPES = [
@@ -79,6 +79,19 @@ const strictPayloads: Partial<Record<(typeof EVENT_TYPES)[number], z.ZodTypeAny>
   MessageRedacted: z.object({ targetEventId: z.string().min(1) }).loose(),
   MessagePinned: z.object({ targetEventId: z.string().min(1) }).loose(),
   MessageUnpinned: z.object({ targetEventId: z.string().min(1) }).loose(),
+
+  // Strict: a stage change with no `to` moves an objective nowhere and says it
+  // moved, which is worse than an error.
+  ObjectiveStageChanged: z
+    .object({
+      objectiveId: z.string().min(1),
+      from: z.string().min(1),
+      to: z.string().min(1),
+      reason: z.string().min(1),
+      byHand: z.boolean(),
+    })
+    .loose()
+    .refine((p) => p.from !== p.to, { message: 'a stage change has to change the stage' }),
 
   ClaimStatusChanged: z
     .object({
