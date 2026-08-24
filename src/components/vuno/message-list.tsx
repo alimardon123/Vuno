@@ -43,6 +43,11 @@ export function MessageList({ messages }: { messages: ConversationMessage[] }) {
       prev != null &&
       prev.author?.id === m.author?.id &&
       prev.isSystem === m.isSystem &&
+      // A restricted event keeps its own header, because the header is where
+      // the badge that says so lives. Folded into the group above it, a
+      // private thought would render as an ordinary line of the conversation.
+      prev.restrictedTo === m.restrictedTo &&
+      !m.restrictedTo &&
       !RECORD_LABEL[m.type] &&
       !RECORD_LABEL[prev.type] &&
       new Date(m.at).getTime() - new Date(prev.at).getTime() < GROUP_WINDOW_MS;
@@ -122,6 +127,21 @@ function MessageRow({ message: m, grouped }: { message: ConversationMessage; gro
             {label ? (
               <span className="rounded-[3px] bg-[var(--sunken)] px-1 py-px text-[9.5px] font-bold uppercase tracking-[0.05em] text-[var(--fg-3)]">
                 {label}
+              </span>
+            ) : null}
+            {/* You are reading something the rest of the room is not. Without
+                saying so, a private thought looks like a thing that was said
+                out loud, and you would reply to it as though it had been. */}
+            {m.restrictedTo ? (
+              <span
+                className="rounded-[3px] border border-dashed border-[var(--line-2)] px-1 py-px text-[9.5px] font-bold uppercase tracking-[0.05em] text-[var(--fg-4)]"
+                title={
+                  m.restrictedTo === 'private'
+                    ? 'Only you and its author can see this'
+                    : 'Only this team can see this'
+                }
+              >
+                {m.restrictedTo === 'private' ? 'Not shared' : 'Team only'}
               </span>
             ) : null}
             <time className="tnum text-[10.5px] text-[var(--fg-4)]" dateTime={m.at}>
@@ -205,6 +225,20 @@ function RecordCard({ message: m }: { message: ConversationMessage }) {
         {typeof p.successCriteria === 'string' ? (
           <p className="font-mono text-[11px] text-[var(--fg-2)]">{p.successCriteria}</p>
         ) : null}
+      </Card>
+    );
+  }
+
+  // Reasoning an agent kept to itself. It renders at all only because
+  // `Event.visibility` is enforced now — before, a thought was either posted to
+  // the whole channel or, since nothing drew it, silently blank.
+  if (m.type === 'AgentThought' && typeof p.content === 'string') {
+    return (
+      <Card kicker={typeof p.topic === 'string' ? p.topic : 'thought'}>
+        {typeof p.thoughtType === 'string' ? (
+          <span className="text-[9.5px] font-bold uppercase tracking-[0.06em] text-[var(--fg-4)]">{p.thoughtType}</span>
+        ) : null}
+        <p className="text-[12px] leading-[1.5] text-[var(--fg-2)]">{p.content}</p>
       </Card>
     );
   }

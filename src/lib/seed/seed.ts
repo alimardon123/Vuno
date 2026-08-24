@@ -957,6 +957,27 @@ function buildEventArc(): NewEventInput[] {
     msg(IDS.dmKaiBob, IDS.agentBob,
       "Drafted. I'll answer in your thread with her, under my name and on your authority, the next time she raises it — the date is contingent on the read-path fix, and I'll flag it the moment the gate moves either way."),
 
+    // Not everything an assistant works out belongs in the room. This is
+    // narrower than the conversation it sits in: Kai reads it because Bob acts
+    // for him, and it is in #storage-engine because that is what it is about —
+    // but nobody else in the channel gets it. `Event.visibility` decides that,
+    // and until it was enforced this line was posted to everyone.
+    {
+      type: 'AgentThought',
+      actorType: 'member',
+      actorMemberId: IDS.agentBob,
+      scopeType: 'channel',
+      scopeId: IDS.channel,
+      visibility: 'private',
+      payload: {
+        thoughtType: 'doubt',
+        content:
+          "Peri's 142ms and Aris's bloom-filter estimate were measured on the same box, a week apart, and nobody has said whether the CI runner was on it. If it was, the read-amplification story is partly the neighbour. Worth Kai asking — but it is a hunch, not a measurement, so it is his to raise, not mine.",
+        topic: 'benchmark-validity',
+        visibility: 'agent',
+      },
+    },
+
     // A DM stays a DM. Kai summons Bob with @, Bob answers inside it, and Mira
     // sees the exchange — no second conversation is created.
     msg(IDS.dmKaiMira, IDS.memberMira,

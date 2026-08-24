@@ -18,12 +18,13 @@ export default async function ChannelPage({
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) notFound();
   const viewer = await currentViewer();
-  const conversation = await getConversation(org.id, id, viewer?.id);
+  if (!viewer) notFound();
+  const conversation = await getConversation(org.id, id, viewer.id);
   if (!conversation) notFound();
   // `before` walks back through history, so a point in a long conversation is
   // a link someone can send.
   const cursor = Number(before);
-  const window = await listMessages(org.id, id, {
+  const window = await listMessages(org.id, id, viewer, {
     before: Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
   });
   return <ConversationView conversation={conversation} window={window} />;

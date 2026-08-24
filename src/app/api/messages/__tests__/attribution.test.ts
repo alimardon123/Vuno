@@ -87,7 +87,7 @@ describe('a posted message names who posted it', () => {
   test('the message renders with an author rather than as "Unknown"', async () => {
     await post({ channelId: CHANNEL, body: 'Rendered with a name.' });
     const { listMessages } = await import('@/lib/conversations');
-    const [m] = (await listMessages(ORG, CHANNEL)).messages;
+    const [m] = (await listMessages(ORG, CHANNEL, 'system')).messages;
     expect(m.author?.displayName).toBe('Kai Alvarez');
     expect(m.isSystem).toBe(false);
   });

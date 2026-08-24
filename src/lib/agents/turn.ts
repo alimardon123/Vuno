@@ -14,6 +14,7 @@
 //     Only a measurement moves a claim there (ADR-0005).
 
 import { db } from '@/lib/db';
+import { reachOf, teamScopesFor, visibleTo } from '@/lib/events/visibility';
 import { EventSpine } from '@/lib/events/spine';
 import { assertClaim } from '@/lib/ledger/claims';
 import { getAgentRow } from '@/lib/members';
@@ -82,9 +83,23 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
   const spend = await spendToday(req.orgId);
   if (spend.exhausted) throw new BudgetExhausted(spend);
 
+  // An agent reads under the same rule a person does. Without this, the one
+  // member who could see every private thought in the org was whichever agent
+  // happened to be answering — and it would then repeat them out loud.
+  const reach = await reachOf({ id: agent.id, ownerMemberId: agent.ownerMemberId });
+  const channel =
+    req.scopeType === 'channel'
+      ? await db.channel.findUnique({ where: { id: req.scopeId }, select: { teamId: true } })
+      : null;
+
   const [events, claims, held] = await Promise.all([
     db.event.findMany({
-      where: { orgId: req.orgId, scopeType: req.scopeType, scopeId: req.scopeId },
+      where: {
+        orgId: req.orgId,
+        scopeType: req.scopeType,
+        scopeId: req.scopeId,
+        ...visibleTo(reach, teamScopesFor(reach, [{ id: req.scopeId, teamId: channel?.teamId ?? null }])),
+      },
       orderBy: { seq: 'desc' },
       take: req.contextEvents ?? 24,
     }),

@@ -227,7 +227,7 @@ describe('a long conversation opens at the end, not the beginning', () => {
 
   test('the newest messages are the ones shown, not the oldest', async () => {
     const { listMessages } = await import('@/lib/conversations');
-    const { messages } = await listMessages(ORG, BUSY, { limit: 25 });
+    const { messages } = await listMessages(ORG, BUSY, 'system', { limit: 25 });
 
     expect(messages).toHaveLength(25);
     // The bug: `orderBy: seq asc, take: n` returned 1..25 and hid everything after.
@@ -237,7 +237,7 @@ describe('a long conversation opens at the end, not the beginning', () => {
 
   test('messages within a window still read oldest to newest', async () => {
     const { listMessages } = await import('@/lib/conversations');
-    const { messages } = await listMessages(ORG, BUSY, { limit: 25 });
+    const { messages } = await listMessages(ORG, BUSY, 'system', { limit: 25 });
     const seqs = messages.map((m) => m.seq);
     expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
   });
@@ -245,15 +245,15 @@ describe('a long conversation opens at the end, not the beginning', () => {
   test('the cursor walks back through history and stops at the beginning', async () => {
     const { listMessages } = await import('@/lib/conversations');
 
-    const first = await listMessages(ORG, BUSY, { limit: 25 });
+    const first = await listMessages(ORG, BUSY, 'system', { limit: 25 });
     expect(first.earlier).not.toBeNull();
     expect(first.isHistory).toBe(false);
 
-    const second = await listMessages(ORG, BUSY, { limit: 25, before: first.earlier! });
+    const second = await listMessages(ORG, BUSY, 'system', { limit: 25, before: first.earlier! });
     expect(second.messages[second.messages.length - 1].body).toBe('message 35');
     expect(second.isHistory).toBe(true);
 
-    const third = await listMessages(ORG, BUSY, { limit: 25, before: second.earlier! });
+    const third = await listMessages(ORG, BUSY, 'system', { limit: 25, before: second.earlier! });
     expect(third.messages[0].body).toBe('message 1');
     // Nothing precedes the first message, so there is nothing more to offer.
     expect(third.earlier).toBeNull();
@@ -264,7 +264,7 @@ describe('a long conversation opens at the end, not the beginning', () => {
     const seen: string[] = [];
     let cursor: number | undefined;
     for (let guard = 0; guard < 10; guard++) {
-      const w = await listMessages(ORG, BUSY, { limit: 25, before: cursor });
+      const w = await listMessages(ORG, BUSY, 'system', { limit: 25, before: cursor });
       seen.unshift(...w.messages.map((m) => m.body));
       if (w.earlier === null) break;
       cursor = w.earlier;
@@ -277,13 +277,13 @@ describe('a long conversation opens at the end, not the beginning', () => {
 
   test('the window is bounded however much is asked for — the DOM cannot be flooded', async () => {
     const { listMessages } = await import('@/lib/conversations');
-    const { messages } = await listMessages(ORG, BUSY, { limit: 100_000 });
+    const { messages } = await listMessages(ORG, BUSY, 'system', { limit: 100_000 });
     expect(messages.length).toBeLessThanOrEqual(500);
   });
 
   test('a conversation shorter than the window offers no history', async () => {
     const { listMessages } = await import('@/lib/conversations');
-    const w = await listMessages(ORG, DM_BOB, { limit: 25 });
+    const w = await listMessages(ORG, DM_BOB, 'system', { limit: 25 });
     expect(w.earlier).toBeNull();
     expect(w.isHistory).toBe(false);
   });
@@ -369,5 +369,149 @@ describe('a conversation is only readable by the people in it', () => {
 
     expect(toBob).toContain(DM_BOB);    // its own
     expect(toBob).toContain(DM_MIRA);   // Kai's, inherited
+  });
+});
+
+describe('an event can be narrower than the conversation it sits in', () => {
+  // `Event.visibility` was written on every row and read on none, so an agent
+  // that declared a thought private posted it into the channel for everyone.
+  // The column allowed it, the schema documented it, and nothing enforced it.
+  const PERI = 'mbr-conv-peri';
+  const OUTSIDER2 = 'mbr-conv-outsider2';
+
+  beforeAll(async () => {
+    await db.member.create({
+      data: {
+        id: PERI, tenantId: TENANT, orgId: ORG, kind: 'agent', displayName: 'Peri', handle: 'conv-peri',
+        agent: { create: { role: 'performance' } },
+      },
+    });
+    await db.member.create({
+      data: {
+        id: OUTSIDER2, tenantId: TENANT, orgId: ORG, kind: 'human', displayName: 'Dana Reyes', handle: 'conv-dana',
+        human: { create: { email: 'dana@conv.test' } },
+      },
+    });
+    await db.channelMember.createMany({
+      data: [
+        { tenantId: TENANT, orgId: ORG, channelId: CHANNEL, memberId: PERI },
+        { tenantId: TENANT, orgId: ORG, channelId: CHANNEL, memberId: OUTSIDER2 },
+      ],
+    });
+    // Mira is on Engineering; Kai and Dana are not.
+    await db.membership.create({
+      data: { tenantId: TENANT, orgId: ORG, teamId: TEAM, memberId: MIRA, role: 'MEMBER' },
+    });
+
+    const { EventSpine } = await import('@/lib/events/spine');
+    const spine = new EventSpine(TENANT, ORG);
+    await spine.append([
+      { type: 'MessagePosted', actorType: 'member', actorMemberId: PERI, scopeType: 'channel', scopeId: CHANNEL,
+        payload: { body: 'out loud' } },
+      { type: 'AgentThought', actorType: 'member', actorMemberId: PERI, scopeType: 'channel', scopeId: CHANNEL,
+        visibility: 'private',
+        payload: { thoughtType: 'doubt', content: 'the benchmark may not be representative', topic: 'bench', visibility: 'agent' } },
+    ]);
+    // Kai's assistant thinks something Kai should be able to read back.
+    await spine.append([
+      { type: 'AgentThought', actorType: 'member', actorMemberId: BOB, scopeType: 'channel', scopeId: CHANNEL,
+        visibility: 'private',
+        payload: { thoughtType: 'observation', content: 'Kai has not replied to Mira', topic: 'inbox', visibility: 'agent' } },
+    ]);
+    // And a note meant for the team that owns the room.
+    await spine.append([
+      { type: 'MessagePosted', actorType: 'member', actorMemberId: MIRA, scopeType: 'channel', scopeId: ROOM,
+        visibility: 'team', payload: { body: 'team only' } },
+    ]);
+  });
+
+  type Viewer = { id: string; ownerMemberId?: string | null } | 'system';
+
+  /** Everything this viewer can read in one conversation, as plain strings. */
+  const bodies = async (channel: string, viewer: Viewer) => {
+    const { listMessages } = await import('@/lib/conversations');
+    const w = await listMessages(ORG, channel, viewer, { limit: 50 });
+    return w.messages.map((m) => m.body || String((m.payload as { content?: string }).content ?? ''));
+  };
+
+  test('a private thought is not in anyone else\'s window', async () => {
+    expect(await bodies(CHANNEL, { id: OUTSIDER2 })).not.toContain('the benchmark may not be representative');
+    // The message it was posted alongside still is — this narrows one event,
+    // not the conversation.
+    expect(await bodies(CHANNEL, { id: OUTSIDER2 })).toContain('out loud');
+  });
+
+  test('its author reads it back', async () => {
+    expect(await bodies(CHANNEL, { id: PERI })).toContain('the benchmark may not be representative');
+  });
+
+  test('an assistant\'s private thought is its owner\'s to read', async () => {
+    // The delegation runs both ways: Kai can audit what Bob concluded before
+    // Bob said anything, which is the point of an assistant acting for you.
+    expect(await bodies(CHANNEL, { id: KAI })).toContain('Kai has not replied to Mira');
+    expect(await bodies(CHANNEL, { id: BOB, ownerMemberId: KAI })).toContain('Kai has not replied to Mira');
+    // And stops at the edge of that one identity.
+    expect(await bodies(CHANNEL, { id: MIRA })).not.toContain('Kai has not replied to Mira');
+  });
+
+  test('a team-visible event reaches the team and stops', async () => {
+    expect(await bodies(ROOM, { id: MIRA })).toContain('team only');
+    expect(await bodies(ROOM, 'system')).toContain('team only');
+    // Kai can open the room only as the system here; as himself he is not on
+    // the team, so a team note is not his to read.
+    expect(await bodies(ROOM, { id: KAI })).not.toContain('team only');
+  });
+
+  test('the window is still exact — filtering happens in the query, not after', async () => {
+    // The reason this is a `where` and not a pass over the result: the window
+    // asks for `limit + 1` rows to learn whether history precedes it. Dropping
+    // hidden rows afterwards would return a short page and, worse, report that
+    // nothing came before when something did.
+    const { EventSpine } = await import('@/lib/events/spine');
+    const { listMessages } = await import('@/lib/conversations');
+    const spine = new EventSpine(TENANT, ORG);
+
+    // Two events Dana can see, with two she cannot sitting between them.
+    await spine.append([
+      { type: 'MessagePosted', actorType: 'member', actorMemberId: PERI, scopeType: 'channel', scopeId: CHANNEL,
+        visibility: 'private', payload: { body: 'hidden one' } },
+      { type: 'MessagePosted', actorType: 'member', actorMemberId: PERI, scopeType: 'channel', scopeId: CHANNEL,
+        visibility: 'private', payload: { body: 'hidden two' } },
+      { type: 'MessagePosted', actorType: 'member', actorMemberId: PERI, scopeType: 'channel', scopeId: CHANNEL,
+        payload: { body: 'the newest one anybody can see' } },
+    ]);
+
+    const w = await listMessages(ORG, CHANNEL, { id: OUTSIDER2 }, { limit: 1 });
+    expect(w.messages).toHaveLength(1);
+    expect(w.messages[0].body).toBe('the newest one anybody can see');
+    // A filter applied after the fact would have taken the newest row plus one
+    // hidden row, dropped the hidden one, and had nothing left to say history
+    // exists. It does: 'out loud' is behind this.
+    expect(w.earlier).not.toBeNull();
+
+    const older = await listMessages(ORG, CHANNEL, { id: OUTSIDER2 }, { limit: 1, before: w.earlier! });
+    expect(older.messages[0].body).toBe('out loud');
+    expect(older.earlier).toBeNull();
+  });
+
+  test('a restricted event says so to the one person reading it', async () => {
+    const { listMessages } = await import('@/lib/conversations');
+    const w = await listMessages(ORG, CHANNEL, { id: PERI }, { limit: 50 });
+    const thought = w.messages.find((m) => m.type === 'AgentThought');
+    expect(thought?.restrictedTo).toBe('private');
+    expect(w.messages.find((m) => m.body === 'out loud')?.restrictedTo).toBeNull();
+  });
+
+  test('a preview never quotes what the reader cannot open', async () => {
+    const { EventSpine } = await import('@/lib/events/spine');
+    await new EventSpine(TENANT, ORG).append([
+      { type: 'MessagePosted', actorType: 'member', actorMemberId: PERI, scopeType: 'channel', scopeId: CHANNEL,
+        visibility: 'private', payload: { body: 'a private aside, most recent' } },
+    ]);
+    const { listConversations } = await import('@/lib/conversations');
+    const forDana = (await listConversations(ORG, OUTSIDER2)).find((c) => c.id === CHANNEL);
+    expect(forDana?.preview?.body).not.toBe('a private aside, most recent');
+    const forPeri = (await listConversations(ORG, PERI)).find((c) => c.id === CHANNEL);
+    expect(forPeri?.preview?.body).toBe('a private aside, most recent');
   });
 });

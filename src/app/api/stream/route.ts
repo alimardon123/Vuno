@@ -18,8 +18,10 @@
 // indexed range scan that is cheaper than running a second process, and it
 // behaves identically in development and in production.
 
+import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canRead, getConversation } from '@/lib/conversations';
+import { reachOf, teamScopesFor, visibleTo } from '@/lib/events/visibility';
 import { viewerFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -45,12 +47,18 @@ export async function GET(req: Request) {
   // a way around the access check on the page.
   const viewer = await viewerFromRequest(req);
   const conversation = await getConversation(org.id, scopeId, viewer?.id);
-  if (!conversation || !canRead(conversation, viewer)) {
+  if (!viewer || !conversation || !canRead(conversation, viewer)) {
     return new Response('Not found', { status: 404 });
   }
 
+  // Being in the conversation is not the same as being able to see everything
+  // in it. Waking a reader for an event they cannot read would tell them it
+  // happened and then show them nothing.
+  const reach = await reachOf(viewer);
+  const mine = visibleTo(reach, teamScopesFor(reach, [conversation]));
+
   const after = Number(params.get('afterSeq'));
-  let cursor = Number.isFinite(after) && after > 0 ? after : await latestSeq(org.id, scopeId);
+  let cursor = Number.isFinite(after) && after > 0 ? after : await latestSeq(org.id, scopeId, mine);
 
   const encoder = new TextEncoder();
   const startedAt = Date.now();
@@ -94,7 +102,7 @@ export async function GET(req: Request) {
 
           try {
             const rows = await db.event.findMany({
-              where: { orgId: org.id, scopeType: 'channel', scopeId, seq: { gt: cursor } },
+              where: { orgId: org.id, scopeType: 'channel', scopeId, seq: { gt: cursor }, ...mine },
               orderBy: { seq: 'asc' },
               take: 100,
               select: { seq: true, type: true, actorMemberId: true },
@@ -127,9 +135,13 @@ export async function GET(req: Request) {
   });
 }
 
-async function latestSeq(orgId: string, scopeId: string): Promise<number> {
+async function latestSeq(
+  orgId: string,
+  scopeId: string,
+  visible: Prisma.EventWhereInput,
+): Promise<number> {
   const row = await db.event.findFirst({
-    where: { orgId, scopeType: 'channel', scopeId },
+    where: { orgId, scopeType: 'channel', scopeId, ...visible },
     orderBy: { seq: 'desc' },
     select: { seq: true },
   });

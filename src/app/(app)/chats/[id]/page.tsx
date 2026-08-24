@@ -21,13 +21,14 @@ export default async function ChatPage({
   // A DM names itself from whoever is reading it, which only became true
   // once there was more than one possible reader.
   const viewer = await currentViewer();
-  const conversation = await getConversation(org.id, id, viewer?.id);
+  if (!viewer) notFound();
+  const conversation = await getConversation(org.id, id, viewer.id);
   if (!conversation) notFound();
 
   // `before` walks back through history, so a point in a long conversation is
   // a link someone can send.
   const cursor = Number(before);
-  const window = await listMessages(org.id, id, {
+  const window = await listMessages(org.id, id, viewer, {
     before: Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
   });
   return <ConversationView conversation={conversation} window={window} />;

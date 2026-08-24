@@ -7,6 +7,7 @@
 // (docs/IA-NAVIGATION.md)
 
 import { db } from '@/lib/db';
+import { isRestricted, reachOf, teamScopesFor, visibleTo, type Reach } from '@/lib/events/visibility';
 import { getMember, memberMap, type MemberSummary } from '@/lib/members';
 
 export type ConversationKind = 'dm' | 'group' | 'team_room' | 'channel';
@@ -61,6 +62,20 @@ export function canRead(
 }
 
 /**
+ * One viewer's reach, from the id the caller passed.
+ *
+ * `'system'` and "nobody" both read unfiltered, matching what the conversation
+ * check already does with them: the orchestrator and the seed are not members
+ * of anything, and a caller with no viewer has already decided this is not a
+ * rendering path.
+ */
+async function reachFor(viewerId?: string | 'system'): Promise<Reach | 'system'> {
+  if (!viewerId || viewerId === 'system') return 'system';
+  const viewer = await getMember(viewerId);
+  return viewer ? reachOf(viewer) : 'system';
+}
+
+/**
  * @param viewerId the member reading the list. A DM's name depends on it — the
  *   same row is "Bob" to Kai and "Kai Alvarez" to Bob — and so does whether it
  *   appears at all.
@@ -82,6 +97,11 @@ export async function listConversations(
   ]);
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
 
+  // A preview is a quotation of somebody's message in a list, so it answers to
+  // the same rule the conversation does: a restricted event must not leak into
+  // the sidebar of someone who could not open it.
+  const reach = await reachFor(viewerId);
+
   // One query for the previews rather than one per conversation.
   const latest = await db.event.findMany({
     where: {
@@ -89,6 +109,7 @@ export async function listConversations(
       scopeType: 'channel',
       scopeId: { in: rows.map((r) => r.id) },
       type: { in: ['MessagePosted', 'ThreadReplyPosted'] },
+      ...visibleTo(reach, teamScopesFor(reach, rows)),
     },
     orderBy: { seq: 'desc' },
     select: { scopeId: true, payload: true, createdAt: true, actorMemberId: true },
@@ -187,6 +208,12 @@ export interface ConversationMessage {
   /** Set only when the action carried another member's authority. */
   onBehalfOf: MemberSummary | null;
   isSystem: boolean;
+  /**
+   * Set when this event is narrower than the conversation it sits in — an
+   * agent's private reasoning, or a note to one team. The reader can see it;
+   * this is how they know not everyone in the room can.
+   */
+  restrictedTo: 'private' | 'team' | null;
 }
 
 export interface MessageWindow {
@@ -215,18 +242,34 @@ export interface MessageWindow {
 export async function listMessages(
   orgId: string,
   conversationId: string,
+  /**
+   * Who is reading. Required, and `'system'` is the word that reads
+   * unfiltered — the same bargain `listConversations` makes, for the same
+   * reason: the one way this check gets skipped is an argument somebody
+   * forgot, so it is not one you can leave out.
+   */
+  viewer: { id: string; ownerMemberId?: string | null } | 'system',
   opts: { limit?: number; before?: number } = {},
 ): Promise<MessageWindow> {
   const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
 
+  const reach = viewer === 'system' ? ('system' as const) : await reachOf(viewer);
+  const channel =
+    reach === 'system'
+      ? null
+      : await db.channel.findUnique({ where: { id: conversationId }, select: { teamId: true } });
+
   // One more than asked for, to learn whether anything precedes this window
-  // without a second count query.
+  // without a second count query. The visibility filter is part of the query
+  // rather than a pass over the result, so `limit + 1` still means "one more
+  // than this viewer can see" and `earlier` stays true.
   const rows = await db.event.findMany({
     where: {
       orgId,
       scopeType: 'channel',
       scopeId: conversationId,
       ...(opts.before !== undefined ? { seq: { lt: opts.before } } : {}),
+      ...visibleTo(reach, teamScopesFor(reach, [{ id: conversationId, teamId: channel?.teamId ?? null }])),
     },
     orderBy: { seq: 'desc' },
     take: limit + 1,
@@ -256,6 +299,7 @@ export async function listMessages(
       author: e.actorMemberId ? (members.get(e.actorMemberId) ?? null) : null,
       onBehalfOf: e.onBehalfOfMemberId ? (members.get(e.onBehalfOfMemberId) ?? null) : null,
       isSystem: e.actorType === 'system',
+      restrictedTo: isRestricted(e.visibility) ? (e.visibility as 'private' | 'team') : null,
     };
   });
 
