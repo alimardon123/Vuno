@@ -6,9 +6,14 @@
 // needs an eighth, it probably belongs inside one that already exists
 // (docs/IA-NAVIGATION.md).
 //
-// Extensions earned the seventh. It was a tab inside Members, which put "what
-// can this org do" inside "who is in this org" — two different questions, and
-// people looking for the first one had to already know to look in the second.
+// Extensions earned the seventh: it is the app catalogue, where a board, calls
+// or a meeting scheduler are added to the org — a whole feature each, and every
+// one of them puts a surface on screen that goes away again when it is removed.
+//
+// Settings is deliberately *not* here. Skills, plugins and connectors configure
+// the members the org already has rather than adding anything to it, and they
+// are administrative and rare — so they hang off the viewer menu at the foot of
+// this rail, next to signing out (docs/IA-NAVIGATION.md).
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -22,7 +27,7 @@ const TABS = [
   { href: '/channels', label: 'Channels', hint: 'Team and project channels', icon: HashIcon },
   { href: '/work', label: 'Work', hint: 'Objectives, products, experiments', icon: WorkIcon },
   { href: '/members', label: 'Members', hint: 'People and agents', icon: MembersIcon },
-  { href: '/extensions', label: 'Extensions', hint: 'Skills, plugins and connectors', icon: ExtensionsIcon },
+  { href: '/extensions', label: 'Extensions', hint: 'Apps added to this org', icon: ExtensionsIcon },
   { href: '/ledger', label: 'Ledger', hint: 'What the org believes', icon: LedgerIcon },
 ] as const;
 

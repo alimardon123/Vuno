@@ -825,9 +825,48 @@ async function call(browser: Browser) {
   await b.close();
 }
 
+// ── Extensions: apps added to the org ───────────────────────────────────────
+// The test an entry here has to pass is that removing it takes a surface away.
+// So the check does exactly that: turn Boards off, confirm the Board tab is
+// gone from Work, turn it back on, confirm it returns.
+async function extensions(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, storageState });
+  const page = await ctx.newPage();
+
+  await open(page, '/extensions');
+  const text = await page.locator('main').innerText();
+  check(text.includes('Boards') && text.includes('Calls'), 'Extensions lists the apps this build ships');
+  check(
+    text.includes('Always on'),
+    'an app that is part of the product says so rather than being hidden',
+  );
+  check(
+    !text.includes('Skills') && !text.includes('Connectors'),
+    'skills and connectors are not apps, and are not here',
+  );
+
+  const boardTab = async () => {
+    await open(page, '/work');
+    return (await page.getByRole('link', { name: 'Board' }).count()) > 0;
+  };
+  check(await boardTab(), 'Work has a Board while the app is added');
+
+  await open(page, '/extensions');
+  await page.getByRole('button', { name: 'Remove Boards' }).click();
+  await page.getByRole('button', { name: 'Add Boards' }).waitFor({ timeout: 15_000 }).catch(() => {});
+  check(!(await boardTab()), 'removing an app takes its surface away');
+
+  await open(page, '/extensions');
+  await page.getByRole('button', { name: 'Add Boards' }).click();
+  await page.getByRole('button', { name: 'Remove Boards' }).waitFor({ timeout: 15_000 }).catch(() => {});
+  check(await boardTab(), 'adding it back brings the surface with it');
+
+  await ctx.close();
+}
+
 /** Take a plugin out if it is installed, so the round trip starts from nothing. */
 async function removeIfInstalled(page: Page, name: string): Promise<void> {
-  await open(page, '/extensions?tab=plugins');
+  await open(page, '/settings?tab=plugins');
   await page.locator('main li').first().waitFor({ timeout: 15_000 });
 
   // "Remove Incident Response", not "Remove": the row's button carries an
@@ -846,20 +885,20 @@ async function removeIfInstalled(page: Page, name: string): Promise<void> {
   await page.waitForTimeout(500);
 }
 
-// ── Extensions: skills, plugins, connectors ─────────────────────────────────
+// ── Settings: skills, plugins, connectors ───────────────────────────────────
 // The check that matters is the round trip. A plugin screen that lists things
 // and installs nothing is the failure this whole section guards against, so the
 // test installs one, watches the Skills count go up by exactly what the plugin
 // carries, and takes it back out again.
-async function extensions(browser: Browser) {
+async function settings(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
 
-  await open(page, '/extensions');
+  await open(page, '/settings');
   const skillsText = await page.locator('main').innerText();
   check(
     skillsText.includes('Skills') && skillsText.includes('Connectors') && skillsText.includes('Plugins'),
-    'Extensions has all three sections',
+    'Settings has all three sections',
   );
 
   const read = page.getByRole('button', { name: 'Read' }).first();
@@ -874,11 +913,11 @@ async function extensions(browser: Browser) {
 
   // How many skills before. The count lives on the tab.
   const skillCount = async () => {
-    await open(page, '/extensions');
-    const label = await page.locator('nav[aria-label="Extensions view"] a').first().innerText();
+    await open(page, '/settings');
+    const label = await page.locator('nav[aria-label="Settings section"] a').first().innerText();
     return Number(label.replace(/[^0-9]/g, ''));
   };
-  await open(page, '/extensions?tab=plugins');
+  await open(page, '/settings?tab=plugins');
   check(
     (await page.locator('main').innerText()).includes('Incident Response'),
     'the bundled catalogue is listed',
@@ -894,7 +933,7 @@ async function extensions(browser: Browser) {
   await removeIfInstalled(page, 'Incident Response');
   const before = await skillCount();
 
-  await open(page, '/extensions?tab=plugins');
+  await open(page, '/settings?tab=plugins');
   const install = page.locator('li').filter({ hasText: 'Incident Response' }).getByRole('button', { name: /^Install$/ });
   await install.first().click();
   await page.waitForTimeout(3_000);
@@ -902,7 +941,7 @@ async function extensions(browser: Browser) {
   const after = await skillCount();
   check(after === before + 2, 'installing a plugin adds the skills it carries', `${before} → ${after}`);
 
-  await open(page, '/extensions?tab=plugins');
+  await open(page, '/settings?tab=plugins');
   check(
     (await page.locator('main').innerText()).includes('Blameless') ||
       (await page.locator('li').filter({ hasText: 'Incident Response' }).first().innerText()).includes('in this org'),
@@ -1132,6 +1171,7 @@ try {
       ['board', boardView],
       ['org', orgView],
       ['call', call],
+      ['settings', settings],
       ['extensions', extensions],
       ['keyboard', keyboard],
       ['agent edge', agentEdge],

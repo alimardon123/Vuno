@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 // Who you are signed in as, and the way out.
 //
 // It sits where the avatar used to, which showed the org owner's initial to
@@ -68,6 +70,18 @@ export function ViewerMenu({ viewer }: { viewer: { displayName: string; handle: 
               <p className="truncate text-[12px] font-medium text-[var(--fg)]">{viewer.displayName}</p>
               <p className="truncate text-[10.5px] text-[var(--fg-4)]">@{viewer.handle}</p>
             </div>
+            {/* Settings hangs here rather than on the rail: skills, plugins and
+                connectors configure the members the org already has, which is
+                administrative and rare. Extensions — a whole feature added to
+                the org — is the one that earned a destination. */}
+            <Link
+              href="/settings"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="block w-full px-2.5 py-1.5 text-left text-[12px] text-[var(--fg-2)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--fg)]"
+            >
+              Settings
+            </Link>
             <button
               type="button"
               role="menuitem"

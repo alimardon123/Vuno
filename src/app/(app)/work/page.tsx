@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { db } from '@/lib/db';
+import { isAppOn } from '@/lib/apps';
 import { cn } from '@/lib/utils';
 import { board } from '@/lib/work/board';
 import { Board } from '@/components/vuno/board';
@@ -13,16 +14,27 @@ import { Avatar, Empty, GateChip, RelativeTime, gateLabel } from '@/components/v
 
 export const dynamic = 'force-dynamic';
 
+/** The list is always there; the board arrives with the Boards app. */
+const VIEWS: Array<[string, string]> = [
+  ['list', 'List'],
+  ['board', 'Board'],
+];
+
 export default async function WorkPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   // A view of the same objectives, not a second destination. The board is an
   // arrangement of this work — putting it on the rail would imply it is
   // somewhere else, and it would then need its own way of filing an objective
   // (docs/IA-NAVIGATION.md).
-  const view = (await searchParams).view === 'board' ? 'board' : 'list';
+  const requested = (await searchParams).view;
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) {
     return <main className="flex flex-1 items-center justify-center"><Empty title="No organisation yet" hint="Run bun run setup." /></main>;
   }
+
+  // The Board is an app (Extensions). Without it the tab is not rendered, and a
+  // link someone sent last week falls back to the list rather than 404ing.
+  const boards = await isAppOn(org.id, 'boards');
+  const view = requested === 'board' && boards ? 'board' : 'list';
 
   const objectives = await db.objective.findMany({ where: { orgId: org.id }, orderBy: { createdAt: 'desc' } });
   const [items, sessions, gates] = await Promise.all([
@@ -34,7 +46,7 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
 
   const nav = (
     <nav className="mt-2 flex gap-1" aria-label="Work view">
-      {([['list', 'List'], ['board', 'Board']] as const).map(([id, label]) => (
+      {(boards ? VIEWS : VIEWS.slice(0, 1)).map(([id, label]) => (
         <Link
           key={id}
           href={id === 'list' ? '/work' : '/work?view=board'}

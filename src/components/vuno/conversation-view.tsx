@@ -39,6 +39,7 @@ export function ConversationView({
   mentionable = [],
   viewerId,
   meetings = [],
+  apps = { calls: true, meetings: true },
 }: {
   conversation: Conversation;
   window: MessageWindow;
@@ -48,6 +49,8 @@ export function ConversationView({
   viewerId: string;
   /** What is booked here. A meeting is this conversation, with a time on it. */
   meetings?: MeetingRow[];
+  /** Which optional surfaces this org has added (Extensions). */
+  apps?: { calls: boolean; meetings: boolean };
 }) {
   const [replyingTo, setReplyingTo] = useState<ConversationMessage | null>(null);
   const [call, setCall] = useState<{ call: LiveCall; ice: { iceServers: RTCIceServer[]; limitation: string | null } } | null>(null);
@@ -158,7 +161,7 @@ export function ConversationView({
   // conversations, where hydration has already happened.
   useLayoutEffectOnClient(() => {
     scrollToEnd(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [conversation.id]);
 
   useEffect(() => {
@@ -205,8 +208,10 @@ export function ConversationView({
           ) : null}
         </div>
         <div className="ml-auto flex items-center gap-2 text-[11px] text-[var(--fg-4)]">
-          {!call ? <ScheduleButton channelId={conversation.id} conversationName={conversation.name} /> : null}
-          {!call ? (
+          {!call && apps.meetings ? (
+            <ScheduleButton channelId={conversation.id} conversationName={conversation.name} />
+          ) : null}
+          {!call && apps.calls ? (
             <button
               type="button"
               onClick={() => void joinCall()}
@@ -235,7 +240,7 @@ export function ConversationView({
         </div>
       </header>
 
-      {!call && meetings.length > 0 ? (
+      {!call && apps.meetings && meetings.length > 0 ? (
         <MeetingStrip meetings={meetings} onJoin={() => void joinCall()} />
       ) : null}
 

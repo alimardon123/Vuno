@@ -3,6 +3,7 @@
 // name — it is a team of agents inside the org, not a tab.
 
 import { db } from '@/lib/db';
+import { isAppOn } from '@/lib/apps';
 import { listMembers, roleLabel } from '@/lib/members';
 import { configuredHarnesses } from '@/lib/agents/registry';
 import { reviewOrg } from '@/lib/review/metrics';
@@ -16,6 +17,13 @@ import { Roster, type RosterMember } from '@/components/vuno/roster';
 
 export const dynamic = 'force-dynamic';
 
+/** Org is the Org chart app (Extensions); the other two are always here. */
+const MEMBER_VIEWS: Array<[string, string]> = [
+  ['roster', 'Roster'],
+  ['org', 'Org'],
+  ['review', 'Review'],
+];
+
 export default async function MembersPage({
   searchParams,
 }: {
@@ -27,11 +35,15 @@ export default async function MembersPage({
   // than "who is in it" (docs/IA-NAVIGATION.md).
   const params = await searchParams;
   const requested = params.view;
-  const view = requested === 'review' || requested === 'org' ? requested : 'roster';
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) {
     return <main className="flex flex-1 items-center justify-center"><Empty title="No organisation yet" hint="Run bun run setup." /></main>;
   }
+
+  // The org chart is an app (Extensions). Without it the tab is not rendered,
+  // and its URL falls back to the roster rather than 404ing.
+  const showOrg = await isAppOn(org.id, 'org-chart');
+  const view = requested === 'review' || (requested === 'org' && showOrg) ? requested : 'roster';
 
   const [members, teams, memberships, agents] = await Promise.all([
     // Retired members stay on the roster in their own section: they authored
@@ -88,7 +100,7 @@ export default async function MembersPage({
             One roster. A person and an agent are the same kind of member — same teams, same workflow, same rows.
           </p>
           <nav className="mt-2 flex gap-1" aria-label="Members view">
-            {([['roster', 'Roster'], ['org', 'Org'], ['review', 'Review']] as const).map(([id, label]) => (
+            {MEMBER_VIEWS.filter(([id]) => id !== 'org' || showOrg).map(([id, label]) => (
               <Link
                 key={id}
                 href={id === 'roster' ? '/members' : `/members?view=${id}`}

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
+import { isAppOn } from '@/lib/apps';
 import { getConversation, listMessages } from '@/lib/conversations';
 import { currentViewer } from '@/lib/auth';
 import { ConversationView } from '@/components/vuno/conversation-view';
@@ -29,13 +30,19 @@ export default async function ChannelPage({
   const window = await listMessages(org.id, id, viewer, {
     before: Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
   });
+  // Calls and meetings are apps (Extensions). Off, the buttons are not there
+  // and nothing queries for them.
+  const [calls, meetings] = await Promise.all([isAppOn(org.id, 'calls'), isAppOn(org.id, 'meetings')]);
+  const apps = { calls, meetings };
+
   return (
     <ConversationView
       conversation={conversation}
       window={window}
       mentionable={await mentionableIn(org.id, conversation)}
       viewerId={viewer.id}
-      meetings={await meetingsIn(org.id, id)}
+      meetings={apps.meetings ? await meetingsIn(org.id, id) : []}
+      apps={apps}
     />
   );
 }

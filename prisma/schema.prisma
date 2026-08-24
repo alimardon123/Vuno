@@ -155,6 +155,7 @@ model Organization {
   skills      Skill[]
   connections Connection[]
   plugins     Plugin[]
+  apps        AppInstall[]
   attachments Attachment[]
   calls       Call[]
   meetings    Meeting[]
@@ -365,6 +366,34 @@ model Plugin {
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   skills      Skill[]
   connections Connection[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
+}
+
+// An app this org has added.
+//
+// Extensions is the app catalogue — the Teams "add an app to your team" idea,
+// or a VS Code extension: a whole feature, not a setting. Skills, plugins and
+// connectors are not apps and do not live here; they configure the members the
+// org already has, so they are in Settings, the way Claude Code has them.
+//
+// Only apps that ship with this build can be installed, and every one of them
+// controls a surface that visibly appears and disappears. An entry that
+// installed nothing would be a row claiming a capability the org does not have.
+model AppInstall {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Matches a key in `src/lib/apps/catalogue.ts`. Unknown keys are ignored on
+  /// read rather than deleted — a build that dropped an app should not silently
+  /// destroy the record that somebody had added it.
+  key         String
+  installedAt DateTime @default(now())
+  /// Who added it, for the record. Null once that member is gone.
+  installedBy String?
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@unique([orgId, key])
   @@index([orgId])

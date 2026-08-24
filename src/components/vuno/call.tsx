@@ -222,7 +222,7 @@ export function CallSurface({
       for (const track of local.current?.getTracks() ?? []) track.stop();
       local.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [call.id]);
 
   useEffect(() => {
