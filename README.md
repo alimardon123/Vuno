@@ -87,6 +87,8 @@ Install an agent. Existing agents default to `anthropic`.
 | `bun run build` && `bun run start` | production build and serve |
 | `bun run seed` | replace the database with the sample org |
 | `bun run db:migrate` | create a migration from a schema change |
+| `bun run export` | the whole org as JSON, on stdout |
+| `bun run export --backup` | a copy of the database file, next to it |
 
 `bun run setup` fills an empty database and leaves a used one alone. `bun run
 seed` clears first — that is its job.
@@ -101,7 +103,18 @@ and a password like anything else. Sessions are rows, so signing out actually
 signs you out, and retiring a member ends their access immediately rather than
 in thirty days.
 
-Nothing is reachable signed out: a page redirects, an API call gets a 401.
+Nothing is reachable signed out: a page redirects, an API call gets a 401. And
+being signed in is not the same as being in a conversation — a DM is readable
+by the people in it and nobody else, which includes not being able to post into
+one or subscribe to it. An assistant reads whatever its owner reads.
+
+## Getting the org out
+
+Everything is one SQLite file, which is worth knowing before you need to know
+it. `bun run export --backup` checkpoints the write-ahead log and copies it —
+that is what you restore from. `bun run export` writes the whole org as JSON on
+stdout, events first, for reading or moving somewhere that is not SQLite;
+password hashes and sessions are deliberately left out of it.
 
 `bun run start` still binds 127.0.0.1 and warns if you point it elsewhere.
 Authentication is not the same as being ready for the open internet — there is

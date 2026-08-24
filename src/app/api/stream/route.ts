@@ -19,6 +19,8 @@
 // behaves identically in development and in production.
 
 import { db } from '@/lib/db';
+import { canRead, getConversation } from '@/lib/conversations';
+import { viewerFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +40,14 @@ export async function GET(req: Request) {
     select: { id: true },
   });
   if (!org) return new Response('No organisation', { status: 409 });
+
+  // A stream of a conversation is a read of it. Without this, subscribing was
+  // a way around the access check on the page.
+  const viewer = await viewerFromRequest(req);
+  const conversation = await getConversation(org.id, scopeId, viewer?.id);
+  if (!conversation || !canRead(conversation, viewer)) {
+    return new Response('Not found', { status: 404 });
+  }
 
   const after = Number(params.get('afterSeq'));
   let cursor = Number.isFinite(after) && after > 0 ? after : await latestSeq(org.id, scopeId);

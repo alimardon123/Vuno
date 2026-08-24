@@ -94,7 +94,9 @@ afterAll(async () => {
 describe('a conversation states its kind rather than having it guessed', () => {
   test('each row comes back as the kind it was stored as', async () => {
     const { listConversations } = await import('@/lib/conversations');
-    const kinds = new Map((await listConversations(ORG, KAI)).map((c) => [c.id, c.kind]));
+    // As the system: Kai is not on the Engineering team, so his own list no
+    // longer contains its room — which is the access check working.
+    const kinds = new Map((await listConversations(ORG, 'system')).map((c) => [c.id, c.kind]));
 
     expect(kinds.get(DM_BOB)).toBe('dm');
     expect(kinds.get(DM_MIRA)).toBe('dm');
@@ -105,7 +107,7 @@ describe('a conversation states its kind rather than having it guessed', () => {
 
   test('no DM reaches the Channels pane — the `# Aris` bug cannot recur', async () => {
     const { listConversations } = await import('@/lib/conversations');
-    const inChannels = (await listConversations(ORG, KAI)).filter((c) => c.kind === 'channel');
+    const inChannels = (await listConversations(ORG, 'system')).filter((c) => c.kind === 'channel');
     expect(inChannels.map((c) => c.id)).toEqual([CHANNEL]);
   });
 
@@ -115,7 +117,7 @@ describe('a conversation states its kind rather than having it guessed', () => {
     await db.channel.create({
       data: { id, tenantId: TENANT, orgId: ORG, kind: 'wormhole', name: 'bogus', slug: 'conv-bogus' },
     });
-    const found = (await listConversations(ORG, KAI)).find((c) => c.id === id);
+    const found = (await listConversations(ORG, 'system')).find((c) => c.id === id);
     expect(found?.kind).toBe('channel');
     await db.channel.deleteMany({ where: { id } });
   });
@@ -135,7 +137,7 @@ describe('a DM names itself from whoever is reading it', () => {
 
   test('only a DM has a counterpart; a group chat keeps its own name', async () => {
     const { listConversations } = await import('@/lib/conversations');
-    const all = await listConversations(ORG, KAI);
+    const all = await listConversations(ORG, 'system');
     for (const c of all.filter((x) => x.kind !== 'dm')) {
       expect(c.counterpart).toBeNull();
     }
@@ -165,7 +167,7 @@ describe('a DM names itself from whoever is reading it', () => {
 describe('the list is ordered like an inbox', () => {
   test('the most recent conversation comes first and silent ones sink', async () => {
     const { listConversations } = await import('@/lib/conversations');
-    const all = await listConversations(ORG, KAI);
+    const all = await listConversations(ORG, 'system');
 
     // DM_BOB was posted to last, so it leads; DM_MIRA follows; the rest are silent.
     expect(all[0].id).toBe(DM_BOB);
@@ -175,7 +177,7 @@ describe('the list is ordered like an inbox', () => {
 
   test('conversations with no traffic keep a stable alphabetical order', async () => {
     const { listConversations } = await import('@/lib/conversations');
-    const silent = (await listConversations(ORG, KAI))
+    const silent = (await listConversations(ORG, 'system'))
       .filter((c) => c.lastActivityAt === null)
       .map((c) => c.name);
     expect(silent).toEqual([...silent].sort((a, b) => a.localeCompare(b)));
@@ -284,5 +286,88 @@ describe('a long conversation opens at the end, not the beginning', () => {
     const w = await listMessages(ORG, DM_BOB, { limit: 25 });
     expect(w.earlier).toBeNull();
     expect(w.isHistory).toBe(false);
+  });
+});
+
+describe('a conversation is only readable by the people in it', () => {
+  // Until there was authentication there was one viewer, so nothing enforced
+  // this and any DM was one URL away from anybody who could reach the port.
+  const OUTSIDER = 'mbr-conv-outsider';
+
+  beforeAll(async () => {
+    await db.member.create({
+      data: {
+        id: OUTSIDER, tenantId: TENANT, orgId: ORG, kind: 'human',
+        displayName: 'Outsider', handle: 'conv-outsider',
+        human: { create: { email: 'outsider@conv.test' } },
+      },
+    });
+  });
+
+  test('a channel is the org\'s — every member reads it', async () => {
+    const { canRead } = await import('@/lib/conversations');
+    const channel = { kind: 'channel' as const, participants: [] };
+    expect(canRead(channel, { id: OUTSIDER })).toBe(true);
+  });
+
+  test('a DM is its participants\', and nobody else\'s', async () => {
+    const { canRead } = await import('@/lib/conversations');
+    const dm = {
+      kind: 'dm' as const,
+      participants: [{ id: KAI }, { id: MIRA }] as never,
+    };
+    expect(canRead(dm, { id: KAI })).toBe(true);
+    expect(canRead(dm, { id: MIRA })).toBe(true);
+    expect(canRead(dm, { id: OUTSIDER })).toBe(false);
+  });
+
+  test('an assistant reads whatever its owner reads (ADR-0009 §2)', async () => {
+    const { canRead } = await import('@/lib/conversations');
+    const kaiAndMira = {
+      kind: 'dm' as const,
+      participants: [{ id: KAI }, { id: MIRA }] as never,
+    };
+
+    // Bob is not in it. He reads it because Kai does — asked for explicitly,
+    // and what makes an assistant useful rather than a chatbot with amnesia.
+    expect(canRead(kaiAndMira, { id: BOB, ownerMemberId: KAI })).toBe(true);
+    // An assistant belonging to someone outside it still cannot.
+    expect(canRead(kaiAndMira, { id: BOB, ownerMemberId: OUTSIDER })).toBe(false);
+  });
+
+  test('nobody signed out reads anything', async () => {
+    const { canRead } = await import('@/lib/conversations');
+    expect(canRead({ kind: 'channel', participants: [] }, null)).toBe(false);
+  });
+
+  test('the list only shows what the viewer can open', async () => {
+    const { listConversations } = await import('@/lib/conversations');
+
+    const toKai = (await listConversations(ORG, KAI)).map((c) => c.id);
+    expect(toKai).toContain(DM_BOB);
+    expect(toKai).toContain(DM_MIRA);
+
+    const toOutsider = (await listConversations(ORG, OUTSIDER)).map((c) => c.id);
+    // The channel, yes. Other people's DMs and the group they are not in, no.
+    expect(toOutsider).toContain(CHANNEL);
+    expect(toOutsider).not.toContain(DM_BOB);
+    expect(toOutsider).not.toContain(DM_MIRA);
+    expect(toOutsider).not.toContain(GROUP);
+  });
+
+  test('a conversation the viewer cannot read comes back as if it is not there', async () => {
+    const { getConversation } = await import('@/lib/conversations');
+    expect(await getConversation(ORG, DM_MIRA, KAI)).not.toBeNull();
+    // Not "forbidden": saying a conversation exists but is closed to you still
+    // tells you it exists.
+    expect(await getConversation(ORG, DM_MIRA, OUTSIDER)).toBeNull();
+  });
+
+  test('an assistant sees its owner\'s DMs in its own list', async () => {
+    const { listConversations } = await import('@/lib/conversations');
+    const toBob = (await listConversations(ORG, BOB)).map((c) => c.id);
+
+    expect(toBob).toContain(DM_BOB);    // its own
+    expect(toBob).toContain(DM_MIRA);   // Kai's, inherited
   });
 });

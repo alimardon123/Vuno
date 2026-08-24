@@ -22,6 +22,8 @@ import { viewerFromRequest } from '@/lib/auth';
 import { EventSpine } from '@/lib/events/spine';
 import { extractHandles } from '@/lib/mentions';
 import { enqueue } from '@/lib/orchestrator/queue';
+import { takeWrite } from '@/lib/limits';
+import { canRead, getConversation } from '@/lib/conversations';
 import type { NewEventInput } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -89,6 +91,29 @@ export async function POST(req: Request) {
       },
       { status: 400 },
     );
+  }
+
+  // Counted against the member, not the connection: limiting by IP punishes an
+  // office behind one router and does nothing to a script running locally,
+  // which is the case this actually guards.
+  const rate = takeWrite(`message:${poster?.id ?? parsed.actorType}`);
+  if (!rate.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `That is a lot of messages very quickly. Try again in ${rate.retryAfterSeconds}s.`,
+      },
+      { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } },
+    );
+  }
+
+  // Being signed in is not the same as being in this conversation. Without
+  // this, any member could post into anyone's DM by knowing its id.
+  const conversation = await getConversation(org.id, channel.id, poster?.id);
+  if (!conversation || !canRead(conversation, poster)) {
+    // The same answer as a channel that does not exist: confirming that a
+    // conversation is there but closed to you is still telling you it is there.
+    return NextResponse.json({ ok: false, error: 'Unknown channel for this org.' }, { status: 400 });
   }
 
   const spine = new EventSpine(org.tenantId, org.id);

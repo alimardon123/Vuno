@@ -7,7 +7,7 @@
 // (docs/IA-NAVIGATION.md)
 
 import { db } from '@/lib/db';
-import { memberMap, type MemberSummary } from '@/lib/members';
+import { getMember, memberMap, type MemberSummary } from '@/lib/members';
 
 export type ConversationKind = 'dm' | 'group' | 'team_room' | 'channel';
 
@@ -35,10 +35,46 @@ function classify(kind: string): ConversationKind {
 }
 
 /**
- * @param viewerId the member reading the list. A DM's name depends on it: the
- *   same row is "Bob" to Kai and "Kai Alvarez" to Bob.
+ * Can this member read this conversation?
+ *
+ * Until there was authentication there was one viewer, so nothing enforced
+ * this and any DM was one URL away from anybody. The rules:
+ *
+ *   - a channel is the org's, and every member of it can read it;
+ *   - a team room is the team's, so its participants can read it;
+ *   - a DM or a group chat is its participants', and nobody else's;
+ *   - an assistant reads whatever its owner reads (ADR-0009 §2) — that was
+ *     asked for explicitly, and it is what makes an assistant useful rather
+ *     than a chatbot with amnesia.
  */
-export async function listConversations(orgId: string, viewerId?: string): Promise<Conversation[]> {
+export function canRead(
+  conversation: Pick<Conversation, 'kind' | 'participants'>,
+  viewer: { id: string; ownerMemberId?: string | null } | null,
+): boolean {
+  if (!viewer) return false;
+  if (conversation.kind === 'channel') return true;
+
+  const ids = new Set(conversation.participants.map((m) => m.id));
+  if (ids.has(viewer.id)) return true;
+  // An assistant sees what its owner sees, including their DMs.
+  return Boolean(viewer.ownerMemberId && ids.has(viewer.ownerMemberId));
+}
+
+/**
+ * @param viewerId the member reading the list. A DM's name depends on it — the
+ *   same row is "Bob" to Kai and "Kai Alvarez" to Bob — and so does whether it
+ *   appears at all.
+ */
+export async function listConversations(
+  orgId: string,
+  /**
+   * Pass `'system'` deliberately to read unfiltered — the orchestrator and the
+   * seed are not members of anything. Anything rendering for a person passes
+   * their id, and forgetting to is the one way this check gets skipped, so the
+   * bypass is a word you have to type rather than an argument you can omit.
+   */
+  viewerId?: string | 'system',
+): Promise<Conversation[]> {
   const [rows, teams, links] = await Promise.all([
     db.channel.findMany({ where: { orgId }, orderBy: { name: 'asc' } }),
     db.team.findMany({ where: { orgId }, select: { id: true, name: true } }),
@@ -112,10 +148,16 @@ export async function listConversations(orgId: string, viewerId?: string): Promi
     };
   });
 
+  // What this viewer may read. A list that showed a conversation you cannot
+  // open would be a directory of other people's DMs.
+  const viewer =
+    viewerId && viewerId !== 'system' ? (members.get(viewerId) ?? (await getMember(viewerId))) : null;
+  const visible = viewerId === 'system' || !viewerId ? resolved : resolved.filter((c) => canRead(c, viewer));
+
   // Recency first — a chat list that never reorders is a directory, not an
   // inbox. Quiet conversations fall to the bottom, alphabetically among
   // themselves so their order is at least stable.
-  return resolved.sort((a, b) => {
+  return visible.sort((a, b) => {
     if (a.lastActivityAt && b.lastActivityAt) {
       return a.lastActivityAt < b.lastActivityAt ? 1 : a.lastActivityAt > b.lastActivityAt ? -1 : 0;
     }
@@ -128,7 +170,7 @@ export async function listConversations(orgId: string, viewerId?: string): Promi
 export async function getConversation(
   orgId: string,
   id: string,
-  viewerId?: string,
+  viewerId?: string | 'system',
 ): Promise<Conversation | null> {
   const all = await listConversations(orgId, viewerId);
   return all.find((c) => c.id === id) ?? null;

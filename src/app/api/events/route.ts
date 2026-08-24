@@ -20,6 +20,8 @@ import { getMember } from '@/lib/members';
 import { viewerFromRequest } from '@/lib/auth';
 import { EventSpine } from '@/lib/events/spine';
 import { projectChatMessages } from '@/lib/events/project';
+import { canRead, getConversation } from '@/lib/conversations';
+import { takeWrite } from '@/lib/limits';
 import type { EventType, NewEventInput, ScopeType } from '@/lib/events/types';
 
 export const dynamic = 'force-dynamic';
@@ -130,15 +132,21 @@ export async function POST(req: Request) {
     );
   }
 
+  const rate = takeWrite(`event:${actor.id}`);
+  if (!rate.ok) {
+    return NextResponse.json(
+      { ok: false, error: `Too many events too quickly. Try again in ${rate.retryAfterSeconds}s.` },
+      { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } },
+    );
+  }
+
   const scopeType = (parsed.scopeType ?? (parsed.channelId ? 'channel' : 'decision')) as ScopeType;
   const scopeId = parsed.scopeId ?? parsed.channelId ?? parsed.decisionId!;
 
   if (scopeType === 'channel') {
-    const channel = await db.channel.findFirst({
-      where: { id: scopeId, orgId: org.id },
-      select: { id: true },
-    });
-    if (!channel) {
+    // Signed in is not the same as being in this conversation.
+    const conversation = await getConversation(org.id, scopeId, actor.id);
+    if (!conversation || !canRead(conversation, actor)) {
       return NextResponse.json({ ok: false, error: 'Unknown channel for this org.' }, { status: 400 });
     }
   }
