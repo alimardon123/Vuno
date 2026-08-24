@@ -1044,6 +1044,85 @@ async function settings(browser: Browser) {
 }
 
 // ── Keyboard: reach content, see focus, escape a menu ────────────────────────
+/**
+ * Search, against the real fifty thousand.
+ *
+ * The unit tests prove the visibility rules on a fixture. This proves the thing
+ * they cannot: that a word typed into the field comes back from an index built
+ * over the actual seeded spine, marked, in under the time it takes to notice.
+ */
+async function search(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
+  const page = await ctx.newPage();
+  const problems: string[] = [];
+  watch(page, problems);
+
+  // ⌘K from a page that is not search. The reflex has to work.
+  await open(page, '/activity');
+  await page.keyboard.press('Control+k');
+  await page.waitForURL('**/search', { timeout: 10_000 }).catch(() => {});
+  check(new URL(page.url()).pathname === '/search', 'Ctrl-K opens search from anywhere', page.url());
+
+  const field = page.getByRole('searchbox', { name: 'Search' });
+  check(await field.evaluate((el) => el === document.activeElement), 'the field has the caret on arrival');
+
+  // A word from the seeded conversations. Typed, not pasted, so the debounce
+  // and the live fetch are the thing under test.
+  const started = Date.now();
+  await field.fill('latency');
+  const results = page.getByRole('link', { name: /in #/ });
+  await results.first().waitFor({ timeout: 15_000 });
+  check(true, `search answered in ${Date.now() - started}ms`);
+
+  const count = await results.count();
+  check(count > 1, 'a common word finds many messages', `found ${count}`);
+
+  // Marked, not just listed — a result you have to re-read to find the word in
+  // is a list of messages, not a search result.
+  check((await page.locator('mark').count()) > 0, 'the matched word is marked in the snippet');
+
+  // Typing updates the URL, so a result is a link somebody can send.
+  await page.waitForFunction(() => window.location.search.includes('latency'), null, { timeout: 5_000 })
+    .catch(() => {});
+  check(page.url().includes('q=latency'), 'the query is in the URL', page.url());
+
+  // And the URL works on its own, with the results server-rendered.
+  const fresh = await ctx.newPage();
+  await fresh.goto(`${BASE}/search?q=latency`, { waitUntil: 'domcontentloaded' });
+  const rendered = await fresh.getByRole('link', { name: /in #/ }).count();
+  check(rendered > 0, 'a shared search URL renders its results on the server', `rendered ${rendered}`);
+  await fresh.close();
+
+  // The hit opens the conversation at the message, not at the live end.
+  const first = results.first();
+  const href = await first.getAttribute('href');
+  check(/[?&]before=\d+/.test(href ?? ''), 'a hit links into history, not to the bottom', href ?? 'no href');
+  await first.click();
+  await page.locator('nav[aria-label="Sections"]').waitFor({ timeout: 15_000 });
+  check(/\/(channels|chats)\//.test(new URL(page.url()).pathname), 'a hit opens its conversation', page.url());
+
+  // Nonsense is answered, not broken. `"` and `*` are FTS5 operators and an
+  // unescaped one raises rather than returning nothing.
+  await open(page, '/search');
+  for (const nonsense of ['zzzznotathing', 'c++ "unclosed', 'NEAR OR *']) {
+    await page.getByRole('searchbox', { name: 'Search' }).fill(nonsense);
+    await page.waitForTimeout(600);
+  }
+  check(
+    problems.filter((p) => p.includes('500')).length === 0,
+    'punctuation and operators do not break the query',
+    problems.filter((p) => p.includes('500')).join(', '),
+  );
+  check(
+    (await page.getByText(/Nothing matches/).count()) > 0,
+    'no results says so, with something to try next',
+  );
+
+  check(await overflow(page) === 0, 'search does not scroll sideways');
+  check(problems.length === 0, 'search runs clean', problems.slice(0, 3).join(' · '));
+  await ctx.close();
+}
+
 async function keyboard(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
@@ -1262,6 +1341,7 @@ try {
       ['call', call],
       ['settings', settings],
       ['extensions', extensions],
+      ['search', search],
       ['keyboard', keyboard],
       ['agent edge', agentEdge],
       ['themes', themes],

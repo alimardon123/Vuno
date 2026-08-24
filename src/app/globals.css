@@ -48,6 +48,8 @@
   --color-falsified-bg: var(--falsified-bg);
   --color-uncertain-bg: var(--uncertain-bg);
   --color-agent-edge: var(--agent-edge);
+  --color-mark: var(--mark);
+  --color-mark-fg: var(--mark-fg);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -100,6 +102,13 @@
   /* The edge on an agent's avatar. Teal is the one hue no claim status
      uses, so an agent cannot be misread as a verdict. */
   --agent-edge: #3FB8A6;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #4C3EC0;
+  --mark-fg: #F0EDFF;
   color-scheme: dark;
 }
 
@@ -142,6 +151,13 @@
   /* The edge on an agent's avatar. Teal is the one hue no claim status
      uses, so an agent cannot be misread as a verdict. */
   --agent-edge: #0E7C6B;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #DCD5FA;
+  --mark-fg: #241C6B;
   color-scheme: light;
 }
 
@@ -184,6 +200,13 @@
   /* The edge on an agent's avatar. Teal is the one hue no claim status
      uses, so an agent cannot be misread as a verdict. */
   --agent-edge: #0F7566;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #E1D8F6;
+  --mark-fg: #2B2170;
   color-scheme: light;
 }
 
@@ -245,6 +268,13 @@
   --uncertain-bg: #1F222A;
 
   --agent-edge: #3FB8A6;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #4A38CE;
+  --mark-fg: #F1EEFF;
   color-scheme: dark;
 }
 
@@ -286,6 +316,13 @@
   --uncertain-bg: #F0F0F3;
 
   --agent-edge: #0E9384;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #DCD7FD;
+  --mark-fg: #281C8C;
   color-scheme: light;
 }
 
@@ -408,6 +445,13 @@
   /* The edge on an agent's avatar. Teal is the one hue no claim status
      uses, so an agent cannot be misread as a verdict. */
   --agent-edge: #1F6B5E;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #E2DCF2;
+  --mark-fg: #241C63;
   color-scheme: light;
 }
 
@@ -494,6 +538,13 @@
   /* The edge on an agent's avatar. Teal is the one hue no claim status
      uses, so an agent cannot be misread as a verdict. */
   --agent-edge: #35C2AE;
+  /* The band on a search match. Violet: every claim status is spoken for
+     (gold, blue, green, orange, grey) and teal is the agent edge, so this is
+     the one hue left that cannot be misread as a verdict or as a member kind.
+     A band rather than a tint, because on a page of snippets the matched word
+     is the only thing the eye is looking for. */
+  --mark:    #5340D8;
+  --mark-fg: #F3F0FF;
   color-scheme: dark;
 }
 

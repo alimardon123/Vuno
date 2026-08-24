@@ -10,13 +10,18 @@
 // or a meeting scheduler are added to the org — a whole feature each, and every
 // one of them puts a surface on screen that goes away again when it is removed.
 //
+// Search is above the seven rather than among them. It is not a place you go
+// and stay — it reads across every destination at once and hands you back to
+// one of them, which is why it is a field with a rule under it and not a tab.
+//
 // Settings is deliberately *not* here. Skills, plugins and connectors configure
 // the members the org already has rather than adding anything to it, and they
 // are administrative and rare — so they hang off the viewer menu at the foot of
 // this rail, next to signing out (docs/IA-NAVIGATION.md).
 
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ThemeMenu } from '@/components/vuno/theme-menu';
 import { ViewerMenu } from '@/components/vuno/viewer-menu';
@@ -33,6 +38,20 @@ const TABS = [
 
 export function Rail({ viewer }: { viewer: { displayName: string; handle: string } }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  // ⌘K from anywhere. Not a shortcut anyone has to learn — it is the one every
+  // app of this shape already has, so the cost of not having it is that the
+  // reflex fails silently.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'k' || !(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      router.push('/search');
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [router]);
 
   return (
     <nav
@@ -45,6 +64,31 @@ export function Rail({ viewer }: { viewer: { displayName: string; handle: string
         className="mb-2.5 grid size-[26px] place-items-center rounded-[7px]"
         style={{ background: 'linear-gradient(148deg,#E8EBEE 0%,#E8EBEE 48%,#7C8792 48%,#7C8792 100%)' }}
       />
+
+      {/* Search sits above the seven, with a rule under it, because it is not
+          an eighth place to be — it is the way into the other seven. It reads
+          across every one of them at once, which no destination does. */}
+      <Link
+        href="/search"
+        aria-current={pathname === '/search' ? 'page' : undefined}
+        title="Search — ⌘K"
+        className={cn(
+          'group relative grid size-[38px] place-items-center rounded-lg transition-colors',
+          pathname === '/search'
+            ? 'bg-white/[0.11] text-white'
+            : 'text-[var(--rail-fg)] hover:bg-white/[0.07] hover:text-white',
+        )}
+      >
+        <svg {...S} strokeWidth={1.9}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <span className="sr-only">Search</span>
+        <span
+          className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--raised)] px-2 py-1 text-[11px] text-[var(--fg)] shadow-lg group-hover:block"
+          role="tooltip"
+        >
+          Search <span className="text-[var(--fg-4)]">⌘K</span>
+        </span>
+      </Link>
+      <span className="my-1.5 h-px w-5 bg-white/10" aria-hidden />
 
       {TABS.map((tab) => {
         const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
