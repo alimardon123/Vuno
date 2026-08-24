@@ -470,6 +470,45 @@ async function keyboard(browser: Browser) {
 }
 
 // ── Each theme applies, and survives a reload ────────────────────────────────
+/**
+ * An agent reads apart from a person at a glance, in every theme.
+ *
+ * Two signals, deliberately: the shape (squircle vs circle) survives greyscale
+ * and a colourblind reader, and the edge colour is what catches the eye
+ * scrolling a roster. Asserting only one of them would let the other rot.
+ */
+async function agentEdge(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
+  const page = await ctx.newPage();
+  await open(page, '/members');
+
+  const both = await page.evaluate(
+    () =>
+      document.querySelector('[data-member-kind="agent"]') !== null &&
+      document.querySelector('[data-member-kind="human"]') !== null,
+  );
+  check(both, 'the roster shows both people and agents', 'one of the two kinds is missing');
+
+  for (const theme of ['ink', 'paper', 'warm', 'ledger', 'console'] as const) {
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await page.waitForTimeout(150);
+    const seen = await page.evaluate(() => {
+      const read = (k: string) => {
+        const el = document.querySelector(`[data-member-kind="${k}"]`);
+        return el ? getComputedStyle(el).borderTopColor : null;
+      };
+      return { agent: read('agent'), human: read('human') };
+    });
+    check(
+      seen.agent !== null && seen.agent !== seen.human,
+      `an agent's avatar is edged apart from a person's in ${theme}`,
+      `both drew ${seen.agent}`,
+    );
+  }
+
+  await ctx.close();
+}
+
 async function themes(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
@@ -573,6 +612,7 @@ try {
   await phone(browser);
   await roster(browser);
   await keyboard(browser);
+  await agentEdge(browser);
   await themes(browser);
   }
 } finally {

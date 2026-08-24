@@ -115,6 +115,19 @@ export function Roster({
         </div>
       </div>
 
+      {/* When one harness is missing, that is a fact about one agent and the
+          row says so. When none is configured, it is a fact about the install,
+          and repeating it on every agent says the same thing nine times while
+          hiding the one thing worth doing about it. */}
+      {runnable.length === 0 ? (
+        <p className="mb-2 rounded-lg border border-line-2 bg-[var(--sunken)] px-3 py-2 text-[11.5px] text-[var(--fg-2)]">
+          No model is configured, so no agent here can run. Set{' '}
+          <code className="rounded bg-[var(--raised)] px-1 font-mono text-[11px]">ANTHROPIC_API_KEY</code> for hosted
+          models, or <code className="rounded bg-[var(--raised)] px-1 font-mono text-[11px]">OLLAMA_HOST</code> for local
+          ones, and restart. Everything else on this page works without one.
+        </p>
+      ) : null}
+
       <SectionLabel count={active.length}>Everyone</SectionLabel>
       <ul className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
         {active.map((m) => (
@@ -164,10 +177,16 @@ function Row({
   onAct: (o: Open) => void;
 }) {
   // The same chip on every row carries no information. This one appears only
-  // when it changes something: this agent's harness is not configured, so
-  // mentioning them queues a turn that fails.
+  // when it changes something: this agent's harness is not configured while
+  // another one is, so mentioning them queues a turn that fails and moving
+  // them to the working harness fixes it. With nothing configured at all there
+  // is no such choice to make, and the roster says it once at the top instead.
   const cannotRun =
-    m.kind === 'agent' && m.status === 'active' && m.harnessName !== null && !runnable.includes(m.harnessName);
+    runnable.length > 0 &&
+    m.kind === 'agent' &&
+    m.status === 'active' &&
+    m.harnessName !== null &&
+    !runnable.includes(m.harnessName);
   const canPromote = m.status === 'active' && m.teamId !== null;
   const canBeColleague = m.status === 'active' && m.kind === 'agent' && m.ownerMemberId !== null;
   const canRetire = m.status === 'active' && !m.isOrgOwner;
@@ -183,7 +202,7 @@ function Row({
           {cannotRun ? (
             <span
               title={`No ${m.harnessName} harness is configured, so ${m.displayName} cannot run.`}
-              className="shrink-0 rounded-[4px] border border-[var(--falsified)] bg-[var(--falsified-bg)] px-1 py-px text-[10px] font-medium text-[var(--falsified)]"
+              className="shrink-0 rounded-[4px] border border-falsified bg-[var(--falsified-bg)] px-1 py-px text-[10px] font-medium text-[var(--falsified)]"
             >
               {m.harnessName} not configured
             </span>

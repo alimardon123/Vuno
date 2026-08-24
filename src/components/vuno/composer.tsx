@@ -48,7 +48,7 @@ export function Composer({ conversationId, conversationName }: { conversationId:
 
   return (
     <div className="shrink-0 px-4 pb-3 pt-1">
-      <div className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] focus-within:border-[var(--line-2)]">
+      <div className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] focus-within:border-line-2">
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}

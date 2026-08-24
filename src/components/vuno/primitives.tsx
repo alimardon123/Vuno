@@ -17,7 +17,7 @@ const PRESENCE_COLOR: Record<PresenceState, string> = {
   available: 'bg-[var(--tested)]',
   busy: 'bg-[var(--asserted)]',
   away: 'bg-[var(--uncertain)]',
-  offline: 'bg-transparent border border-[var(--line-2)]',
+  offline: 'bg-transparent border border-line-2',
   dnd: 'bg-[var(--falsified)]',
 };
 
@@ -49,8 +49,11 @@ export function PresenceDot({
 }
 
 // ─── Avatar ──────────────────────────────────────────────────────────────────
-// Humans get a circle, agents a squircle. One shape difference carries the
-// distinction that a repeated "agent" badge on every row used to carry badly.
+// Humans get a circle, agents a squircle with a teal edge. Two quiet signals
+// carry the distinction that a repeated "agent" badge on every row used to
+// carry badly — shape survives greyscale and a colourblind reader, colour is
+// what catches the eye scrolling a list. Teal is the one hue no claim status
+// uses, so the edge cannot be read as a verdict.
 
 export type MemberKind = 'human' | 'agent';
 
@@ -79,10 +82,13 @@ export function Avatar({
   return (
     <span className={cn('relative inline-flex shrink-0', className)}>
       <span
+        data-member-kind={kind}
         className={cn(
           'inline-grid place-items-center font-semibold select-none',
-          'bg-[var(--sunken)] text-[var(--fg-2)] border border-[var(--line)]',
-          kind === 'agent' ? 'rounded-[7px]' : 'rounded-full',
+          'bg-[var(--sunken)] text-[var(--fg-2)] border',
+          kind === 'agent'
+            ? 'rounded-[7px] border-agent-edge'
+            : 'rounded-full border-[var(--line)]',
           SIZES[size],
         )}
         aria-hidden

@@ -95,7 +95,7 @@ export function ThemeMenu() {
                 onClick={() => apply(t.id)}
                 className="theme-option flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)]"
               >
-                <span className="theme-dot size-2 shrink-0 rounded-full border border-[var(--line-2)]" />
+                <span className="theme-dot size-2 shrink-0 rounded-full border border-line-2" />
                 <span className="flex min-w-0 flex-col">
                   <span className="text-[12px] text-[var(--fg-2)]">{t.label}</span>
                   <span className="text-[10px] text-[var(--fg-4)]">{t.hint}</span>

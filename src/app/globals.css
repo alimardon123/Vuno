@@ -47,6 +47,7 @@
   --color-tested-bg: var(--tested-bg);
   --color-falsified-bg: var(--falsified-bg);
   --color-uncertain-bg: var(--uncertain-bg);
+  --color-agent-edge: var(--agent-edge);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-stack), ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -95,6 +96,10 @@
   --falsified-bg: #33190F;
   --uncertain-bg: #21262B;
 
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #3FB8A6;
   color-scheme: dark;
 }
 
@@ -133,6 +138,10 @@
   --falsified-bg: #F8E0D8;
   --uncertain-bg: #E9ECEF;
 
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #0E7C6B;
   color-scheme: light;
 }
 
@@ -171,6 +180,10 @@
   --falsified-bg: #F8E1D9;
   --uncertain-bg: #EFEADC;
 
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #0F7566;
   color-scheme: light;
 }
 
@@ -231,6 +244,10 @@
   --falsified-bg: #F4DED8;
   --uncertain-bg: #EDE9DE;
 
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #1F6B5E;
   color-scheme: light;
 }
 
@@ -313,6 +330,10 @@
   --falsified-bg: #2E120A;
   --uncertain-bg: #171E24;
 
+
+  /* The edge on an agent's avatar. Teal is the one hue no claim status
+     uses, so an agent cannot be misread as a verdict. */
+  --agent-edge: #35C2AE;
   color-scheme: dark;
 }
 
@@ -345,7 +366,14 @@
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */
 
-* { box-sizing: border-box; border-color: var(--line); }
+/* In `base`, not unlayered. An unlayered rule beats every layered one whatever
+   its specificity, and Tailwind puts its utilities in `@layer utilities` — so
+   an unlayered `*` here silently overrode `border-falsified`, `border-line-2`
+   and every other border colour in the app. Everything drew `--line` and
+   looked deliberate. */
+@layer base {
+  * { box-sizing: border-box; border-color: var(--line); }
+}
 
 html, body { height: 100%; }
 

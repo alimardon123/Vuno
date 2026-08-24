@@ -75,7 +75,7 @@ export function ListPane({
             className={cn(
               'w-full rounded-md border border-[var(--line)] bg-[var(--bg)] py-[5px] pl-[26px] pr-2',
               'text-[12px] text-[var(--fg)] placeholder:text-[var(--fg-4)]',
-              'focus:border-[var(--line-2)] focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
+              'focus:border-line-2 focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
             )}
           />
         </div>

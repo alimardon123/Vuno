@@ -144,7 +144,7 @@ export function Field({
 export const inputClass = cn(
   'w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-[6px]',
   'text-[12.5px] text-[var(--fg)] placeholder:text-[var(--fg-4)]',
-  'focus:border-[var(--line-2)] focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
+  'focus:border-line-2 focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--accent)]',
 );
 
 export function Button({
@@ -161,7 +161,7 @@ export function Button({
         variant === 'primary' && 'bg-[var(--accent)] text-[var(--accent-fg)] hover:opacity-90',
         variant === 'ghost' &&
           'border border-[var(--line)] text-[var(--fg-2)] hover:bg-[var(--hover)] hover:text-[var(--fg)]',
-        variant === 'danger' && 'border border-[var(--falsified)] text-[var(--falsified)] hover:bg-[var(--falsified-bg)]',
+        variant === 'danger' && 'border border-falsified text-[var(--falsified)] hover:bg-[var(--falsified-bg)]',
         props.disabled && 'cursor-not-allowed opacity-40',
         props.className,
       )}
@@ -175,7 +175,7 @@ export function FormError({ message }: { message: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-md border border-[var(--falsified)] bg-[var(--falsified-bg)] px-2.5 py-1.5 text-[11.5px] leading-[1.5] text-[var(--falsified)]"
+      className="rounded-md border border-falsified bg-[var(--falsified-bg)] px-2.5 py-1.5 text-[11.5px] leading-[1.5] text-[var(--falsified)]"
     >
       {message}
     </p>

@@ -134,7 +134,7 @@ function MessageRow({ message: m, grouped }: { message: ConversationMessage; gro
                 out loud, and you would reply to it as though it had been. */}
             {m.restrictedTo ? (
               <span
-                className="rounded-[3px] border border-dashed border-[var(--line-2)] px-1 py-px text-[9.5px] font-bold uppercase tracking-[0.05em] text-[var(--fg-4)]"
+                className="rounded-[3px] border border-dashed border-line-2 px-1 py-px text-[9.5px] font-bold uppercase tracking-[0.05em] text-[var(--fg-4)]"
                 title={
                   m.restrictedTo === 'private'
                     ? 'Only you and its author can see this'
