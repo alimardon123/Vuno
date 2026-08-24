@@ -28,7 +28,7 @@ beforeAll(async () => {
   await db.member.create({
     data: {
       id: PERI, tenantId: TENANT, orgId: ORG, kind: 'agent', displayName: 'Peri', handle: 'skill-peri',
-      agent: { create: { role: 'perf', modelName: 'claude-sonnet-4', harnessName: 'anthropic' } },
+      agent: { create: { role: 'perf', modelName: 'claude-opus-5', harnessName: 'anthropic' } },
     },
   });
   await db.member.create({
@@ -156,7 +156,7 @@ describe('a held skill reaches the model', () => {
         return Response.json({
           content: [{ type: 'text', text: JSON.stringify({ events: [], claims: [] }) }],
           usage: { input_tokens: 10, output_tokens: 1 },
-          model: 'claude-sonnet-4',
+          model: 'claude-opus-5',
         });
       },
     });

@@ -19,7 +19,7 @@
       "displayName": "Vera",
       "roleLabel": "Devil's advocate",
       "harnessName": "anthropic",
-      "modelName": "claude-sonnet-4",
+      "modelName": "claude-opus-5",
       "skills": ["hostile-review"],
       "connectors": []
     }

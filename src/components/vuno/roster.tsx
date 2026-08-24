@@ -296,7 +296,7 @@ function HireDialog({
   const [teamId, setTeamId] = useState('');
   const [role, setRole] = useState(as === 'agent' ? 'security' : '');
   const [harness, setHarness] = useState<string>('anthropic');
-  const [model, setModel] = useState('claude-sonnet-4');
+  const [model, setModel] = useState('claude-opus-5');
   const [ownerId, setOwnerId] = useState('');
   const { busy, error, run } = useSubmit(onSubmit);
 
@@ -361,7 +361,7 @@ function HireDialog({
             </select>
           </Field>
           <Field label="Model">
-            <input className={inputClass} value={model} onChange={(e) => setModel(e.target.value)} placeholder="claude-sonnet-4" />
+            <input className={inputClass} value={model} onChange={(e) => setModel(e.target.value)} placeholder="claude-opus-5" />
           </Field>
           <Field label="Works for" hint="Leave empty for a colleague who works for the org.">
             <select className={inputClass} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>

@@ -22,11 +22,28 @@ export interface AgentRun {
 }
 
 /** Dollars per million tokens, in, out. Unknown models cost nothing recorded. */
+/**
+ * Dollars per million tokens, `[input, output]`.
+ *
+ * These are the ids the API actually answers to. The table this replaced named
+ * `claude-opus-4`, `claude-sonnet-4` and `claude-haiku-4`, none of which exist
+ * — so an agent installed on the default model would have been refused by the
+ * API, and any run that did land was priced against a model that was never
+ * called. Review reports spend from this table; a wrong number here is a wrong
+ * number on a page whose whole point is that its numbers are real.
+ *
+ * An unknown model prices at zero and `run.ts` says so rather than guessing,
+ * because a plausible invented price is worse than an obvious blank.
+ */
 export const MODEL_PRICES: Record<string, [number, number]> = {
-  'claude-opus-4': [15, 75],
-  'claude-sonnet-4': [3, 15],
-  'claude-haiku-4': [0.8, 4],
-  'claude-3-5-haiku': [0.8, 4],
+  'claude-fable-5': [10, 50],
+  'claude-opus-5': [5, 25],
+  'claude-opus-4-8': [5, 25],
+  'claude-opus-4-7': [5, 25],
+  'claude-opus-4-6': [5, 25],
+  'claude-sonnet-5': [3, 15],
+  'claude-sonnet-4-6': [3, 15],
+  'claude-haiku-4-5': [1, 5],
 };
 
 export function priceFor(
@@ -35,7 +52,9 @@ export function priceFor(
   tokensOut: number,
   prices: Record<string, [number, number]>,
 ): number {
-  // Match on prefix: "claude-sonnet-4-20250514" is priced as "claude-sonnet-4".
+  // Longest matching prefix. Current model ids carry no date suffix, so this is
+  // mostly defensive — but the sort matters either way: `claude-opus-4-8` and a
+  // shorter `claude-opus-4` would both match, and the specific one has to win.
   const key = Object.keys(prices)
     .filter((k) => model.startsWith(k))
     .sort((a, b) => b.length - a.length)[0];

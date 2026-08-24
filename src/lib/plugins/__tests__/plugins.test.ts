@@ -46,7 +46,7 @@ const MANIFEST = {
       displayName: 'Demo Bot',
       roleLabel: 'Performance',
       harnessName: 'anthropic',
-      modelName: 'claude-sonnet-4',
+      modelName: 'claude-opus-5',
       skills: ['demo-method'],
       connectors: ['demo-metrics'],
     },

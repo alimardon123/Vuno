@@ -43,13 +43,13 @@ beforeAll(async () => {
   await db.member.create({
     data: {
       id: BOB, tenantId: TENANT, orgId: ORG, kind: 'agent', displayName: 'Bob', handle: 'bob',
-      agent: { create: { role: 'assistant', ownerMemberId: KAI, modelName: 'claude-sonnet-4', harnessName: 'anthropic' } },
+      agent: { create: { role: 'assistant', ownerMemberId: KAI, modelName: 'claude-opus-5', harnessName: 'anthropic' } },
     },
   });
   await db.member.create({
     data: {
       id: SID, tenantId: TENANT, orgId: ORG, kind: 'agent', displayName: 'Sid', handle: 'sid',
-      agent: { create: { role: 'security', modelName: 'claude-sonnet-4', harnessName: 'anthropic' } },
+      agent: { create: { role: 'security', modelName: 'claude-opus-5', harnessName: 'anthropic' } },
     },
   });
   await db.channel.create({
@@ -198,7 +198,7 @@ describe('with a model behind it, an agent turn is a real turn', () => {
         return Response.json({
           content: [{ type: 'text', text: reply }],
           usage: { input_tokens: 2000, output_tokens: 1000 },
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-opus-5',
         });
       },
     });
@@ -252,8 +252,8 @@ describe('with a model behind it, an agent turn is a real turn', () => {
     expect(session!.tokensIn).toBe(2000);
     expect(session!.tokensOut).toBe(1000);
     expect(session!.harnessName).toBe('anthropic');
-    // 2000 in at $3/M + 1000 out at $15/M = $0.021 → 2 cents.
-    expect(session!.costCents).toBe(2);
+    // claude-opus-5: 2000 in at $5/M + 1000 out at $25/M = $0.035 → 4 cents.
+    expect(session!.costCents).toBe(4);
   });
 
   test('the agent is shown the conversation it was called into', async () => {
@@ -337,7 +337,7 @@ describe('an agent calling a tool it holds', () => {
         return Response.json({
           content: [{ type: 'text', text: replies.shift() ?? JSON.stringify({ events: [], claims: [] }) }],
           usage: { input_tokens: 100, output_tokens: 50 },
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-opus-5',
         });
       },
     });

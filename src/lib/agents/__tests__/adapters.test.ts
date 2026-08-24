@@ -15,7 +15,7 @@ const manifest: AgentManifest = {
   id: 'mbr-sid',
   role: 'security',
   kind: 'independent',
-  modelName: 'claude-sonnet-4',
+  modelName: 'claude-opus-5',
   harnessName: 'anthropic',
   tools: [],
   permissions: [],
@@ -34,7 +34,7 @@ function anthropicSaying(text: string, usage = { input_tokens: 1000, output_toke
   const stub = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
     return new Response(
-      JSON.stringify({ content: [{ type: 'text', text }], usage, model: 'claude-sonnet-4-20250514' }),
+      JSON.stringify({ content: [{ type: 'text', text }], usage, model: 'claude-opus-5' }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   }) as unknown as typeof fetch;
@@ -136,17 +136,22 @@ describe('every run reports what it cost', () => {
     expect(run.usage.tokensIn).toBe(1000);
     expect(run.usage.tokensOut).toBe(500);
     expect(run.usage.harnessName).toBe('anthropic');
-    // 1000 in at $3/M + 500 out at $15/M = $0.0105 → 1 cent.
-    expect(run.usage.costCents).toBe(1);
+    // claude-opus-5: 1000 in at $5/M + 500 out at $25/M = $0.0175 → 2 cents.
+    expect(run.usage.costCents).toBe(2);
   });
 
-  test('a dated model id is priced as its family', () => {
-    const prices = { 'claude-sonnet-4': [3, 15] as [number, number] };
-    expect(priceFor('claude-sonnet-4-20250514', 1_000_000, 0, prices)).toBe(300);
+  test('the most specific price wins, not the first that matches', () => {
+    // Current ids carry no date suffix, but two of them still share a prefix:
+    // pricing `claude-opus-4-8` as `claude-opus-4` would be a silent 3x error.
+    const prices = {
+      'claude-opus-4': [15, 75] as [number, number],
+      'claude-opus-4-8': [5, 25] as [number, number],
+    };
+    expect(priceFor('claude-opus-4-8', 1_000_000, 0, prices)).toBe(500);
   });
 
   test('an unknown model records nothing rather than a guess', () => {
-    expect(priceFor('some-local-model', 1_000_000, 1_000_000, { 'claude-sonnet-4': [3, 15] })).toBe(0);
+    expect(priceFor('some-local-model', 1_000_000, 1_000_000, { 'claude-opus-5': [3, 15] })).toBe(0);
   });
 
   test('an API error surfaces the API\'s own words', async () => {

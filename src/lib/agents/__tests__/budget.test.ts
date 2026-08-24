@@ -19,7 +19,7 @@ beforeAll(async () => {
   await db.member.create({
     data: {
       id: MEMBER, tenantId: TENANT, orgId: ORG, kind: 'agent', displayName: 'Peri', handle: 'budget-peri',
-      agent: { create: { role: 'perf', modelName: 'claude-sonnet-4', harnessName: 'anthropic' } },
+      agent: { create: { role: 'perf', modelName: 'claude-opus-5', harnessName: 'anthropic' } },
     },
   });
   await db.workItem.create({

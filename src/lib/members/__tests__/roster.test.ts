@@ -69,7 +69,7 @@ describe('hiring a person and hiring an agent are the same act', () => {
   test('an agent joining is on the spine, in the same shape', async () => {
     await hireMember({
       ...base, kind: 'agent', displayName: 'Sid', handle: 'sid', role: 'security',
-      modelName: 'claude-sonnet-4', harnessName: 'anthropic', teamId: TEAM,
+      modelName: 'claude-opus-5', harnessName: 'anthropic', teamId: TEAM,
     });
 
     const joined = await lastEvent('MemberJoined');
@@ -184,7 +184,7 @@ describe('an assistant can become a colleague', () => {
   async function hireAssistant() {
     const { id } = await hireMember({
       ...base, kind: 'agent', displayName: 'Bob', handle: 'bob', role: 'assistant',
-      modelName: 'claude-sonnet-4', harnessName: 'anthropic', ownerMemberId: OWNER,
+      modelName: 'claude-opus-5', harnessName: 'anthropic', ownerMemberId: OWNER,
     });
     return id;
   }

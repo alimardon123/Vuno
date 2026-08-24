@@ -12,7 +12,7 @@ const manifest = (over: Partial<AgentManifest> = {}): AgentManifest => ({
   id: 'mbr-x',
   role: 'security',
   kind: 'independent',
-  modelName: 'claude-sonnet-4',
+  modelName: 'claude-opus-5',
   harnessName: 'anthropic',
   tools: [],
   permissions: [],

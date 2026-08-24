@@ -108,7 +108,7 @@ model AgentProfile {
   // knows, so adding a key to .env is the only step between installing an agent
   // and it working — `deterministic` named nothing that exists, and an agent
   // set to it failed with "unknown harness" rather than "no key".
-  modelName     String    @default("claude-sonnet-4")
+  modelName     String    @default("claude-opus-5")
   harnessName   String    @default("anthropic")
   tools         String    @default("[]")   // JSON array of tool ids
   permissions   String    @default("[]")   // JSON array of scoped capability ids
