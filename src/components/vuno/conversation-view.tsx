@@ -87,7 +87,6 @@ export function ConversationView({
     if (!autoJoinCall || joined.current || !apps.calls || call) return;
     joined.current = true;
     void joinCall();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoJoinCall, apps.calls]);
 
   async function joinCall() {

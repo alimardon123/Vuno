@@ -47,7 +47,7 @@ before anything reaches the spine, and what it cost is recorded. With no model
 configured it fails on the first attempt saying which environment variable to
 set — it never falls back to something that sounds like an answer.
 
-**Extensions — skills, plugins and connectors.** The same three sections Claude
+**Settings — skills, plugins and connectors.** The same three sections Claude
 Code has, because they are the three real kinds of thing. A *skill* is
 instructions in the `SKILL.md` convention, and holding one changes what that
 member is told on their next turn. A *connector* is an MCP server the org has
@@ -59,6 +59,22 @@ holds and a connector nobody may call are equally inert.
 Three plugins ship in `catalogue/`. Anything else goes in as a manifest, in the
 same format the catalogue files use. `bun run mcp:example` starts an MCP server
 to point a connector at, for anyone who has not got one yet.
+
+**Extensions — apps added to the org.** A different question: not what a member
+is made of, but what the org can do. Boards, the org chart, calls and meetings
+can each be added and removed, and removing one takes its surface away. Ledger
+and Review are listed too, marked as part of the product, because a catalogue
+that showed only the removable half would misdescribe what is here.
+
+**A channel reads as posts; a chat reads as a stream.** A channel is threaded —
+each post carries its replies under it, and the composer starts a post rather
+than adding a line to whatever was said last. A chat is flat, the way WhatsApp
+and a Teams DM are, and a reply quotes what it answers inline.
+
+**Calls that know which room they are in.** A call in a DM rings the other
+person wherever they are in the app. A call in a channel rings nobody — it is a
+room that is open, and you join it if it concerns you. Six is the cap either
+way: a mesh has every browser encoding one stream per other participant.
 
 **Continuous review.** Claim survival, objection precision, escalation rate,
 spend — all derived from the spine, and no rate at all for a member with fewer
@@ -150,12 +166,13 @@ left and why.
 | Next.js 16 (App Router), React 19, TypeScript strict | |
 | Prisma + SQLite in WAL mode | one file, no server to run |
 | Bun | runtime, test runner, package manager |
-| Tailwind v4 | five looks: three colourways and two directions |
+| Tailwind v4 | seven looks: two defaults, three colourways, two directions |
 
 Architecture decisions are in `docs/adr/`. Read 0004 (the event spine), 0005
 (the ledger), 0008 (one writer) and 0009 (one member identity) before changing
 the shape of anything. `docs/IA-NAVIGATION.md` says where every surface belongs
-and why there are seven tabs and not nine. `docs/REVIEW-2026-08-23.md` is the standing
+and why there are seven tabs and not nine — and why Settings is not one of
+them. `docs/REVIEW-2026-08-23.md` is the standing
 account of what is broken, what was removed and why.
 
 `CLAUDE.md` is how work is done here: research before writing, evidence before

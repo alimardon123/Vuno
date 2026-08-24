@@ -146,7 +146,7 @@ A capability library, a Multica-style board, and a runtime panel. Each is a real
 Each would also be a seventh, eighth and ninth rail destination — which is exactly how a
 communication app stops being one. **All three fit without adding a tab.**
 
-### Skills, connectors and plugins → Extensions
+### Skills, connectors and plugins → Settings; apps → Extensions
 
 Multica gives Agents, Runtimes and Skills three separate nav items. That is an
 implementation detail promoted to navigation: all three answer the same question, *what
@@ -158,8 +158,18 @@ answer *what can this org do*. They are different questions, and burying the sec
 inside the first meant you had to already know it was there to find it — the failure the
 rule below is meant to prevent, arrived at from the other direction.
 
-So **Extensions** is the seventh destination, with the three sections people already
-know the words for, in the order Claude Code uses:
+That first correction produced a second one. Skills, plugins and connectors went
+behind a rail tab called Extensions, and the owner pointed out that this is the
+wrong word for them twice over: they configure the members the org already has
+rather than adding anything to it, and "Extensions" belongs to the thing you
+*add* — a board, a call, a whole app, the way Teams adds an app to a team or VS
+Code adds an extension.
+
+So there are two answers, not one.
+
+**Settings** holds the three sections people already know the words for, in the
+order Claude Code uses. It is reached from the viewer menu at the foot of the
+rail, next to signing out, because it is administrative and rare:
 
 - **Skills** — instructions in the `SKILL.md` convention. Holding one is not a setting:
   the text is put in front of the member on their next turn.
@@ -171,6 +181,13 @@ know the words for, in the order Claude Code uses:
 
 Assignment stays where it was: giving Aris database access is a staffing decision, and
 the row says who holds it.
+
+**Extensions** is the seventh rail destination, and it is the app catalogue.
+Boards, the org chart, calls and meetings can be added and removed; Ledger and
+Review are listed as part of the product. The rule that keeps it from becoming a
+brochure: **every entry controls a surface that visibly appears and disappears**,
+and each row names that surface in the words of the navigation — "A Board view
+in Work", not "enables boards".
 
 **Do not invent formats.** Adopt **MCP** for tools and connections and the **`SKILL.md`**
 convention for skills. Both are what the harnesses we want to plug in already speak —
