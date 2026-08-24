@@ -6,7 +6,7 @@
 // and returns it where it came from, and it traps Tab — a dialog you can Tab
 // out of leaves you editing the page behind it.
 
-import { useEffect, useRef } from 'react';
+import { cloneElement, isValidElement, useEffect, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 export function Dialog({
@@ -94,6 +94,14 @@ export function Dialog({
   );
 }
 
+/**
+ * A labelled field.
+ *
+ * The hint sits outside the label and is attached with `aria-describedby`. It
+ * used to be nested inside it, which made the field's accessible name "Password
+ * At least 8 characters" — a screen reader read the hint as part of the name,
+ * and nothing could address the field by what it is called.
+ */
 export function Field({
   label,
   hint,
@@ -103,12 +111,33 @@ export function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  const id = useId();
+  const hintId = hint ? `${id}-hint` : undefined;
+
+  // The control is cloned so the label and hint can point at it, rather than
+  // every caller having to remember to pass an id and an aria-describedby.
+  const control =
+    isValidElement(children) && hint
+      ? cloneElement(children as React.ReactElement<{ id?: string; 'aria-describedby'?: string }>, {
+          id,
+          'aria-describedby': hintId,
+        })
+      : isValidElement(children)
+        ? cloneElement(children as React.ReactElement<{ id?: string }>, { id })
+        : children;
+
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11.5px] font-medium text-[var(--fg-2)]">{label}</span>
-      {children}
-      {hint ? <span className="text-[10.5px] leading-[1.45] text-[var(--fg-4)]">{hint}</span> : null}
-    </label>
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-[11.5px] font-medium text-[var(--fg-2)]">
+        {label}
+      </label>
+      {control}
+      {hint ? (
+        <span id={hintId} className="text-[10.5px] leading-[1.45] text-[var(--fg-4)]">
+          {hint}
+        </span>
+      ) : null}
+    </div>
   );
 }
 

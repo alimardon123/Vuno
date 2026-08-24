@@ -16,7 +16,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { getMember, getOrgOwner } from '@/lib/members';
+import { getMember } from '@/lib/members';
+import { viewerFromRequest } from '@/lib/auth';
 import { EventSpine } from '@/lib/events/spine';
 import { projectChatMessages } from '@/lib/events/project';
 import type { EventType, NewEventInput, ScopeType } from '@/lib/events/types';
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
 
   // Every event names who made it. An unattributed one is a hole in the record
   // the ledger reads from.
-  const actor = parsed.actorMemberId ? await getMember(parsed.actorMemberId) : await getOrgOwner(org.id);
+  const actor = parsed.actorMemberId ? await getMember(parsed.actorMemberId) : await viewerFromRequest(req);
   if (!actor) {
     return NextResponse.json(
       {

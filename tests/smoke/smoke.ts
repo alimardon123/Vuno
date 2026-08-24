@@ -18,10 +18,18 @@
 import { chromium, type Browser, type Page } from 'playwright';
 
 const BASE = process.env.SMOKE_BASE_URL ?? 'http://localhost:3000';
+// Nothing is reachable signed out, so the run signs in first. On a freshly
+// seeded org it claims the owner account; after that it signs in with what it
+// set. Override both for an instance that already has real accounts.
+const EMAIL = process.env.SMOKE_EMAIL ?? 'kai@acme.storage';
+const PASSWORD = process.env.SMOKE_PASSWORD ?? 'smoke-test-password';
 const EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM;
 
 const failures: string[] = [];
 const checks: string[] = [];
+/** Cookies from the signed-in session, reused by every context and every fetch. */
+let storageState: Awaited<ReturnType<Awaited<ReturnType<Browser['newContext']>>['storageState']>>;
+let cookieHeader = '';
 
 function check(ok: boolean, what: string, detail = '') {
   if (ok) checks.push(what);
@@ -55,9 +63,62 @@ async function overflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
+
+// ── Nothing is reachable signed out ─────────────────────────────────────────
+//
+// This is also the check that catches an auth path that only works in tests:
+// the first version hashed with `Bun.password`, which is undefined inside
+// Next's runtime, so every unit test passed against an app that returned 500.
+async function signIn(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+
+  // Signed out, a page redirects and an API call is refused.
+  await page.goto(`${BASE}/ledger`, { waitUntil: 'domcontentloaded' });
+  check(page.url().includes('/sign-in'), 'a page is not reachable signed out');
+  check(page.url().includes('next='), 'it remembers where you were going');
+
+  const refused = await fetch(`${BASE}/api/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelId: 'ch-storage', body: 'should not work' }),
+  });
+  check(refused.status === 401, 'an API call is refused signed out', `got ${refused.status}`);
+
+  await page.waitForTimeout(1_200); // hydrate before typing into it
+  const firstRun = (await page.getByText('Set a password').count()) > 0;
+
+  if (firstRun) {
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByLabel('Again').fill(PASSWORD);
+    await page.getByRole('button', { name: /Set it/ }).click();
+  } else {
+    await page.getByLabel('Email').fill(EMAIL);
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+  }
+
+  try {
+    await page.waitForURL((u) => !u.pathname.includes('sign-in'), { timeout: 20_000 });
+  } catch {
+    const said = await page.getByRole('alert').first().innerText().catch(() => '');
+    check(false, firstRun ? 'the first run can claim the owner account' : 'signing in works', said || 'it never left the sign-in page');
+    await ctx.close();
+    return false;
+  }
+
+  check(true, firstRun ? 'the first run claims the owner account' : 'signing in works');
+  check(page.url().endsWith('/ledger'), 'signing in lands where you were going');
+
+  storageState = await ctx.storageState();
+  cookieHeader = storageState.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+  await ctx.close();
+  return true;
+}
+
 // ── Every route reachable from the rail, and every link on it ────────────────
 async function crawl(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
   const problems: string[] = [];
   watch(page, problems);
@@ -92,7 +153,7 @@ async function crawl(browser: Browser) {
 
 // ── Posting a message, by button and by keyboard, attributed to a person ─────
 async function posting(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
 
   await open(page, '/chats');
@@ -135,7 +196,7 @@ async function posting(browser: Browser) {
 // orchestrator and lands seconds later. Without this, the reply is invisible
 // until someone reloads the page, and the org appears not to have answered.
 async function liveUpdates(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
   await open(page, '/channels');
 
@@ -153,7 +214,7 @@ async function liveUpdates(browser: Browser) {
   const text = `live ${Date.now()}`;
   const posted = await fetch(`${BASE}/api/messages`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
     body: JSON.stringify({ channelId, body: text }),
   });
   check(posted.ok, 'a message can be posted out of band');
@@ -174,6 +235,7 @@ async function phone(browser: Browser) {
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,
+    storageState,
   });
   const page = await ctx.newPage();
   const problems: string[] = [];
@@ -213,7 +275,7 @@ async function phone(browser: Browser) {
 // without it the check reports what it found and passes, rather than
 // pretending it measured something.
 async function busyConversation(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
   await open(page, '/channels/ch-storage');
 
@@ -284,7 +346,7 @@ async function busyConversation(browser: Browser) {
 // hire, promote or retire anyone. These are the actions the org's own
 // composition depends on, and each one appends to the spine.
 async function roster(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, storageState });
   const page = await ctx.newPage();
   const dialog = () => page.getByRole('dialog');
   await open(page, '/members');
@@ -355,7 +417,7 @@ async function roster(browser: Browser) {
 
 // ── Keyboard: reach content, see focus, escape a menu ────────────────────────
 async function keyboard(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
 
   await open(page, '/activity');
@@ -409,7 +471,7 @@ async function keyboard(browser: Browser) {
 
 // ── Each theme applies, and survives a reload ────────────────────────────────
 async function themes(browser: Browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
   const page = await ctx.newPage();
   await open(page, '/activity');
 
@@ -448,6 +510,11 @@ try {
     throw new Error(`Nothing is serving ${BASE}. Start it with \`bun run dev\`, or set SMOKE_BASE_URL.`);
   });
 
+  if (!(await signIn(browser))) {
+    // Everything else needs a session; running it signed out would report
+    // thirty failures that all say the same thing.
+    console.log('  (stopping — nothing else can run without a session)');
+  } else {
   await crawl(browser);
   await posting(browser);
   await busyConversation(browser);
@@ -456,6 +523,7 @@ try {
   await roster(browser);
   await keyboard(browser);
   await themes(browser);
+  }
 } finally {
   await browser.close();
 }

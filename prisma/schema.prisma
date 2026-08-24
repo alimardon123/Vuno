@@ -63,6 +63,7 @@ model Member {
   memberships     Membership[]
   conversations   ChannelMember[]
   skills          MemberSkill[]
+  sessions        Session[]
 
   @@unique([orgId, handle])
   @@index([orgId, kind, status])
@@ -74,8 +75,28 @@ model HumanProfile {
   email      String   @unique
   timezone   String?
   isOrgOwner Boolean  @default(false)
+  /// Argon2id, via Bun.password. Null until this person has set one — a seeded
+  /// org has no passwords, so the first run claims the owner account.
+  passwordHash String?
 
   member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+// A signed-in session. A table rather than a self-contained token, because
+// signing someone out has to actually sign them out — a token you cannot revoke
+// is a password with an expiry date.
+model Session {
+  id         String   @id
+  memberId   String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  /// Enough to tell one browser from another when revoking, not a fingerprint.
+  userAgent  String?
+
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([expiresAt])
 }
 
 model AgentProfile {

@@ -17,7 +17,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { getMember, getOrgOwner } from '@/lib/members';
+import { getMember } from '@/lib/members';
+import { viewerFromRequest } from '@/lib/auth';
 import { EventSpine } from '@/lib/events/spine';
 import { extractHandles } from '@/lib/mentions';
 import { enqueue } from '@/lib/orchestrator/queue';
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
       ? null
       : parsed.actorMemberId
         ? await getMember(parsed.actorMemberId)
-        : await getOrgOwner(org.id);
+        : await viewerFromRequest(req);
 
   if (parsed.actorType === 'member' && !poster) {
     return NextResponse.json(

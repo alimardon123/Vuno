@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { getOrgOwner } from '@/lib/members';
+import { viewerFromRequest } from '@/lib/auth';
 import { changeRole, promoteToColleague, retireMember, RosterError, TEAM_ROLES } from '@/lib/members/roster';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // Who is making the change. It goes on the event, because "who demoted whom"
   // is a question the org should be able to answer.
-  const actor = await getOrgOwner(org.id);
+  const actor = await viewerFromRequest(req);
 
   try {
     if (parsed.action === 'change_role') {

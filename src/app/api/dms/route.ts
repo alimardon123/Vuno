@@ -13,7 +13,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { getMember, getOrgOwner } from '@/lib/members';
+import { getMember } from '@/lib/members';
+import { viewerFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
 
   // The org owner. Humans and agents resolve through the same helper, so there
   // is no branch on kind here any more (ADR-0009).
-  const owner = await getOrgOwner(org.id);
+  const owner = await viewerFromRequest(req);
   if (!owner) {
     return NextResponse.json({ ok: false, error: 'No org owner found' }, { status: 400 });
   }

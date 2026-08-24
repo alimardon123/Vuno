@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ThemeMenu } from '@/components/vuno/theme-menu';
+import { ViewerMenu } from '@/components/vuno/viewer-menu';
 
 const TABS = [
   { href: '/activity', label: 'Activity', hint: 'What needs you', icon: ActivityIcon },
@@ -20,7 +21,7 @@ const TABS = [
   { href: '/ledger', label: 'Ledger', hint: 'What the org believes', icon: LedgerIcon },
 ] as const;
 
-export function Rail({ ownerName }: { ownerName: string }) {
+export function Rail({ viewer }: { viewer: { displayName: string; handle: string } }) {
   const pathname = usePathname();
 
   return (
@@ -68,12 +69,7 @@ export function Rail({ ownerName }: { ownerName: string }) {
 
       <div className="mt-auto flex flex-col items-center gap-1">
         <ThemeMenu />
-        <span
-          className="grid size-[26px] place-items-center rounded-full bg-white/10 text-[10px] font-semibold text-white"
-          title={ownerName}
-        >
-          {ownerName.slice(0, 1).toUpperCase()}
-        </span>
+        <ViewerMenu viewer={viewer} />
       </div>
     </nav>
   );

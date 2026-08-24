@@ -8,6 +8,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { db } from '@/lib/db';
+import { clearSessions, signedInAs } from '../../../../tests/session';
 
 const TENANT = 'tnt-turn';
 const ORG = 'org-turn';
@@ -16,12 +17,14 @@ const BOB = 'mbr-turn-bob';     // Kai's assistant
 const SID = 'mbr-turn-sid';     // an independent agent
 const CHANNEL = 'ch-turn';
 
+let session: { header: { Cookie: string } };
+
 async function post(body: unknown) {
   const { POST } = await import('@/app/api/messages/route');
   const res = await POST(
     new Request('http://localhost/api/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...session.header },
       body: JSON.stringify(body),
     }),
   );
@@ -52,6 +55,7 @@ beforeAll(async () => {
   await db.channel.create({
     data: { id: CHANNEL, tenantId: TENANT, orgId: ORG, kind: 'channel', name: 'turn', slug: 'turn-ch' },
   });
+  session = await signedInAs(KAI);
 });
 
 afterEach(async () => {
@@ -61,6 +65,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  await clearSessions();
   await db.claim.deleteMany({ where: { orgId: ORG } });
   await db.channel.deleteMany({ where: { orgId: ORG } });
   await db.member.deleteMany({ where: { orgId: ORG } });

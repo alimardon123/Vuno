@@ -3,7 +3,8 @@
 
 import { db } from '@/lib/db';
 import { listConversations } from '@/lib/conversations';
-import { getAssistantFor, getOrgOwner } from '@/lib/members';
+import { getAssistantFor } from '@/lib/members';
+import { currentViewer } from '@/lib/auth';
 import { ChatsPane } from '@/components/vuno/chats-pane';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export default async function ChatsLayout({ children }: { children: React.ReactN
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) return <>{children}</>;
 
-  const owner = await getOrgOwner(org.id);
+  const owner = await currentViewer();
   const [conversations, assistant] = await Promise.all([
     listConversations(org.id, owner?.id),
     owner ? getAssistantFor(owner.id) : null,

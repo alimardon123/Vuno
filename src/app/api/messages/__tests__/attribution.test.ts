@@ -9,6 +9,7 @@
 
 import { afterEach, afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { db } from '@/lib/db';
+import { clearSessions, signedInAs } from '../../../../../tests/session';
 
 const TENANT = 'tnt-msg';
 const ORG = 'org-msg';
@@ -16,12 +17,16 @@ const OWNER = 'mbr-msg-owner';
 const AGENT = 'mbr-msg-agent';
 const CHANNEL = 'ch-msg';
 
+// Signed in as the org owner, the way the browser is. The route reads the
+// session off the cookie, so this exercises the auth path rather than skipping it.
+let session: { header: { Cookie: string } };
+
 async function post(body: unknown) {
   const { POST } = await import('../route');
   const res = await POST(
     new Request('http://localhost/api/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...session.header },
       body: JSON.stringify(body),
     }),
   );
@@ -46,6 +51,7 @@ beforeAll(async () => {
   await db.channel.create({
     data: { id: CHANNEL, tenantId: TENANT, orgId: ORG, kind: 'channel', name: 'msg', slug: 'msg-ch' },
   });
+  session = await signedInAs(OWNER);
 });
 
 afterEach(async () => {
@@ -53,6 +59,7 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
+  await clearSessions();
   await db.channel.deleteMany({ where: { orgId: ORG } });
   await db.member.deleteMany({ where: { orgId: ORG } });
   await db.organization.deleteMany({ where: { id: ORG } });

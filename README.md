@@ -93,16 +93,21 @@ seed` clears first — that is its job.
 
 ---
 
-## Before you put this on a network
+## Signing in
 
-**There is no authentication.** Whoever reaches the port is the org owner: they
-can post as them, hire, retire, and change roles. `bun run start` binds
-127.0.0.1 for that reason and warns if you point it anywhere else.
+The first time you open it, nobody has a password yet — the page offers to set
+one, and that claims the org owner's account. After that it asks for an email
+and a password like anything else. Sessions are rows, so signing out actually
+signs you out, and retiring a member ends their access immediately rather than
+in thirty days.
 
-This is the honest state of a local-first build, not an oversight to work around.
-If you need more than one person on it, put it behind something that
-authenticates, and read `docs/REVIEW-2026-08-23.md` first — it lists what else is
-missing and why.
+Nothing is reachable signed out: a page redirects, an API call gets a 401.
+
+`bun run start` still binds 127.0.0.1 and warns if you point it elsewhere.
+Authentication is not the same as being ready for the open internet — there is
+no rate limiting yet, and `Event.visibility` is written but not enforced, so
+every member of an org can read all of it. `docs/REVIEW-2026-08-23.md` lists
+what is left and why.
 
 ---
 
