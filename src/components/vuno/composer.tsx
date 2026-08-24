@@ -66,6 +66,7 @@ export function Composer({
   mentionable = [],
   replyingTo = null,
   onCancelReply,
+  threaded = false,
 }: {
   conversationId: string;
   conversationName: string;
@@ -74,6 +75,8 @@ export function Composer({
   /** The message being replied to, shown above the box and sent with it. */
   replyingTo?: ReplyTarget | null;
   onCancelReply?: () => void;
+  /** A channel: sending starts a new post unless a reply is selected. */
+  threaded?: boolean;
 }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -556,7 +559,13 @@ export function Composer({
             }
           }}
           rows={2}
-          placeholder={`Message ${conversationName}…`}
+          placeholder={
+            replyingTo
+              ? `Reply to ${replyingTo.author}…`
+              : threaded
+                ? `Start a post in ${conversationName}…`
+                : `Message ${conversationName}…`
+          }
           aria-label={`Message ${conversationName}`}
           className="w-full resize-none bg-transparent px-3 py-2.5 text-[13px] leading-[1.5] text-[var(--fg)] placeholder:text-[var(--fg-4)] focus:outline-none"
         />

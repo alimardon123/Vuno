@@ -527,8 +527,12 @@ async function messageActions(browser: Browser) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, storageState });
   const page = await ctx.newPage();
 
-  await open(page, '/channels');
-  await page.locator('a[href^="/channels/"]').first().click();
+  // In a chat, deliberately. A channel is threaded, and there the reply
+  // affordance belongs to the thread rather than to the hover toolbar — a
+  // second Reply button on the same post is worse than either. Everything else
+  // here is the same in both.
+  await open(page, '/chats');
+  await page.locator('a[href^="/chats/"]').first().click();
   await page.waitForTimeout(2_000);
 
   const box = page.getByRole('textbox', { name: /^Message / });
@@ -864,6 +868,68 @@ async function extensions(browser: Browser) {
   await ctx.close();
 }
 
+// ── A channel reads as posts; a chat reads as a stream ──────────────────────
+// The same events, two shapes. What is being checked is that a reply in a
+// channel goes *under* its post rather than becoming a post of its own, and
+// that a chat has no threads to fold anything into.
+async function threading(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, storageState });
+  const page = await ctx.newPage();
+  const stamp = Date.now();
+
+  await open(page, '/channels');
+  await page.locator('a[href^="/channels/"]').first().click();
+  await page.waitForTimeout(2_000);
+
+  const box = page.getByRole('textbox', { name: /^Message / });
+  check(
+    (await box.getAttribute('placeholder'))?.startsWith('Start a post') === true,
+    'a channel composer says it starts a post, not a message',
+  );
+
+  await box.fill(`thread ${stamp}`);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await page.waitForTimeout(2_500);
+
+  const post = () => page.locator('section').filter({ hasText: `thread ${stamp}` }).last();
+  await post().waitFor({ timeout: 15_000 });
+
+  await post().hover();
+  await post().getByRole('button', { name: /^Reply$/ }).click();
+  await page.waitForTimeout(500);
+  check(
+    (await box.getAttribute('placeholder'))?.startsWith('Reply to') === true,
+    'replying in a channel says who is being answered',
+  );
+
+  await box.fill(`under ${stamp}`);
+  await page.getByRole('button', { name: 'Send' }).click();
+  // Waited for inside the post, not anywhere on the page: the sidebar preview
+  // shows the reply's text the moment it is sent, so a page-level wait passes
+  // while the stream is still re-rendering.
+  await post().getByText(`under ${stamp}`).waitFor({ timeout: 15_000 });
+
+  // The reply is inside the post's block, not a sibling of it.
+  check((await post().innerText()).includes(`under ${stamp}`), 'a reply lands inside the post it answers');
+  check((await post().innerText()).includes('1 reply'), 'the post says how many replies it has');
+
+  const posts = await page.locator('section').filter({ hasText: `under ${stamp}` }).count();
+  check(posts === 1, 'a reply is not also a post of its own', `${posts} blocks contain it`);
+
+  // A chat is flat: no thread blocks at all.
+  await open(page, '/chats');
+  await page.locator('a[href^="/chats/"]').first().click();
+  await page.waitForTimeout(2_000);
+  check(
+    (await page.getByRole('textbox', { name: /^Message / }).getAttribute('placeholder'))?.startsWith('Message') ===
+      true,
+    'a chat composer sends a message, not a post',
+  );
+  check((await page.locator('main section').count()) === 0, 'a chat has no threads to fold anything into');
+
+  await ctx.close();
+}
+
 /** Take a plugin out if it is installed, so the round trip starts from nothing. */
 async function removeIfInstalled(page: Page, name: string): Promise<void> {
   await open(page, '/settings?tab=plugins');
@@ -1168,6 +1234,7 @@ try {
       ['roster', roster],
       ['composer', composer],
       ['message actions', messageActions],
+      ['threading', threading],
       ['board', boardView],
       ['org', orgView],
       ['call', call],

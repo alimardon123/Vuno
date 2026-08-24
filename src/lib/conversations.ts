@@ -222,6 +222,10 @@ export interface ConversationMessage {
   reactions: Reaction[];
   /** What this answers, when it is a reply — resolved so the row can quote it. */
   replyTo: { id: string; author: string; body: string } | null;
+  /** In a threaded conversation, the replies under this post, oldest first. */
+  replies: ConversationMessage[];
+  /** How many replies there are in total, which may exceed what was loaded. */
+  replyCount: number;
   /** When it was last edited, or null. The original is still on the spine. */
   editedAt: string | null;
   /** Deleted by its author. The row stays; the body does not. */
@@ -229,8 +233,29 @@ export interface ConversationMessage {
   pinned: boolean;
 }
 
+/**
+ * How a conversation reads.
+ *
+ * `threaded` — a channel. Root posts in the stream; replies live under the post
+ * they answer, the way a Teams channel works. Somebody arriving at a busy
+ * channel sees what was discussed, not four hundred interleaved lines.
+ *
+ * `flat` — a chat. One stream, newest at the bottom, the way WhatsApp, Telegram
+ * and a Teams DM work. Replies still happen; they quote what they answer and
+ * stay in the stream, because a two-person conversation has one subject at a
+ * time and hiding half of it behind a disclosure helps nobody.
+ */
+export type ConversationMode = 'flat' | 'threaded';
+
+/** The mode a conversation of this kind reads in. */
+export function modeFor(kind: ConversationKind): ConversationMode {
+  return kind === 'channel' || kind === 'team_room' ? 'threaded' : 'flat';
+}
+
 export interface MessageWindow {
   messages: ConversationMessage[];
+  /** How this window was built, so the view renders it the way it was read. */
+  mode: ConversationMode;
   /**
    * The seq to ask for next to see what came before this window, or null at the
    * beginning of the conversation.
@@ -262,9 +287,10 @@ export async function listMessages(
    * forgot, so it is not one you can leave out.
    */
   viewer: { id: string; ownerMemberId?: string | null } | 'system',
-  opts: { limit?: number; before?: number } = {},
+  opts: { limit?: number; before?: number; mode?: ConversationMode } = {},
 ): Promise<MessageWindow> {
   const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const mode = opts.mode ?? 'flat';
 
   const reach = viewer === 'system' ? ('system' as const) : await reachOf(viewer);
   const channel =
@@ -286,6 +312,13 @@ export async function listMessages(
       // and are folded onto them below; left in, every thumbs-up would render
       // as an empty row and push a real message out of the window.
       type: { notIn: [...ACTION_TYPES] },
+      // A channel is threaded: the window holds root posts, and the replies to
+      // each hang under it. A chat is flat, so everything is in one stream and
+      // a reply quotes what it answers inline. `targetEventId` is what makes
+      // the first query possible — the spine projects a reply's `parentId` into
+      // it, so "the posts of this channel" is an indexed lookup rather than a
+      // scan that opens every payload.
+      ...(mode === 'threaded' ? { targetEventId: null } : {}),
       ...visibleTo(reach, teamScopesFor(reach, [{ id: conversationId, teamId: channel?.teamId ?? null }])),
     },
     orderBy: { seq: 'desc' },
@@ -373,12 +406,112 @@ export async function listMessages(
       pinned: acted?.pinned ?? false,
       isSystem: e.actorType === 'system',
       restrictedTo: isRestricted(e.visibility) ? (e.visibility as 'private' | 'team') : null,
+      // Filled in below, for a threaded conversation only.
+      replies: [],
+      replyCount: 0,
     };
   });
 
+  // In a channel, the replies under each post. One query for the whole window
+  // rather than one per post, and bounded — a thread with nine hundred replies
+  // must not be able to make opening the channel expensive. The count is the
+  // truth; the loaded replies are a preview of it.
+  if (mode === 'threaded' && messages.length > 0) {
+    await attachReplies(orgId, conversationId, messages, reach, channel?.teamId ?? null, viewer);
+  }
+
   return {
     messages,
+    mode,
     earlier: hasOlder && messages.length > 0 ? messages[0].seq : null,
     isHistory: opts.before !== undefined,
   };
+}
+
+/** How many replies one post shows before "show all" is the only sane option. */
+const REPLIES_SHOWN = 30;
+
+/**
+ * Hang each post's replies under it.
+ *
+ * Replies obey the same visibility rule as their post — a private thought
+ * answering a public message is still private, and threading it under a post
+ * everyone can read must not be the thing that leaks it.
+ */
+async function attachReplies(
+  orgId: string,
+  conversationId: string,
+  roots: ConversationMessage[],
+  reach: Reach | 'system',
+  teamId: string | null,
+  viewer: { id: string; ownerMemberId?: string | null } | 'system',
+): Promise<void> {
+  const rootIds = roots.map((m) => m.id);
+
+  const rows = await db.event.findMany({
+    where: {
+      orgId,
+      scopeType: 'channel',
+      targetEventId: { in: rootIds },
+      type: 'ThreadReplyPosted',
+      // The conversation's id, not a message's. `teamScopesFor` answers "which
+      // of these conversations does the viewer's team own", and handing it a
+      // message id makes every team-visible reply invisible — which is exactly
+      // what happened, and what the browser suite caught.
+      scopeId: conversationId,
+      ...visibleTo(reach, teamScopesFor(reach, [{ id: conversationId, teamId }])),
+    },
+    orderBy: { seq: 'asc' },
+  });
+  if (rows.length === 0) return;
+
+  const [members, files, overlay] = await Promise.all([
+    memberMap(rows.flatMap((e) => [e.actorMemberId, e.onBehalfOfMemberId].filter((v): v is string => Boolean(v)))),
+    attachmentsForEvents(rows.map((e) => e.id)),
+    overlayFor(orgId, rows.map((e) => e.id), viewer === 'system' ? '' : viewer.id),
+  ]);
+
+  const byRoot = new Map<string, ConversationMessage[]>();
+  for (const e of rows) {
+    if (!e.targetEventId) continue;
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = JSON.parse(e.payload as string) as Record<string, unknown>;
+    } catch {
+      payload = {};
+    }
+    const acted = overlay.get(e.id);
+    const original = typeof payload.body === 'string' ? payload.body : '';
+
+    const list = byRoot.get(e.targetEventId) ?? [];
+    list.push({
+      id: e.id,
+      seq: e.seq,
+      type: e.type,
+      body: acted?.redacted ? '' : (acted?.editedBody ?? original),
+      payload: acted?.redacted ? {} : payload,
+      at: String(e.createdAt),
+      author: e.actorMemberId ? (members.get(e.actorMemberId) ?? null) : null,
+      onBehalfOf: e.onBehalfOfMemberId ? (members.get(e.onBehalfOfMemberId) ?? null) : null,
+      attachments: acted?.redacted ? [] : (files.get(e.id) ?? []),
+      reactions: acted?.reactions ?? [],
+      editedAt: acted?.editedAt ?? null,
+      redacted: acted?.redacted ?? false,
+      pinned: acted?.pinned ?? false,
+      isSystem: e.actorType === 'system',
+      restrictedTo: isRestricted(e.visibility) ? (e.visibility as 'private' | 'team') : null,
+      // A reply inside a thread does not quote its root: the root is the line
+      // above it. Quoting would say the same thing twice.
+      replyTo: null,
+      replies: [],
+      replyCount: 0,
+    });
+    byRoot.set(e.targetEventId, list);
+  }
+
+  for (const root of roots) {
+    const all = byRoot.get(root.id) ?? [];
+    root.replyCount = all.length;
+    root.replies = all.slice(-REPLIES_SHOWN);
+  }
 }

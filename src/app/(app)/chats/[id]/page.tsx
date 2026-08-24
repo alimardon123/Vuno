@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { isAppOn } from '@/lib/apps';
-import { getConversation, listMessages } from '@/lib/conversations';
+import { getConversation, listMessages, modeFor } from '@/lib/conversations';
 import { currentViewer } from '@/lib/auth';
 import { ConversationView } from '@/components/vuno/conversation-view';
 import { mentionableIn } from '@/lib/members/mentionable';
@@ -31,8 +31,11 @@ export default async function ChatPage({
   // `before` walks back through history, so a point in a long conversation is
   // a link someone can send.
   const cursor = Number(before);
+  // A channel reads as threads, a chat as one stream. The kind decides, not the
+  // route — a team room is threaded for the same reason a channel is.
   const window = await listMessages(org.id, id, viewer, {
     before: Number.isFinite(cursor) && cursor > 0 ? cursor : undefined,
+    mode: modeFor(conversation.kind),
   });
   // Calls and meetings are apps (Extensions). Off, the buttons are not there
   // and nothing queries for them.

@@ -277,6 +277,7 @@ export function ConversationView({
             conversationId={conversation.id}
             viewerId={viewerId}
             onReply={setReplyingTo}
+            mode={view.mode}
           />
         )}
 
@@ -308,6 +309,10 @@ export function ConversationView({
       <Composer
         conversationId={conversation.id}
         conversationName={conversation.name}
+        // In a channel, sending with nothing selected starts a new post rather
+        // than adding a line to whatever was said last. That is the difference
+        // between a threaded room and a stream, and the box should say so.
+        threaded={view.mode === 'threaded'}
         mentionable={mentionable}
         replyingTo={
           replyingTo

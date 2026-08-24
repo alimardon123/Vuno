@@ -15,15 +15,21 @@ import { db } from '@/lib/db';
 import type { EventRecord, NewEventInput, EventType } from './types';
 
 /**
- * The event an event acts on, for the ones that act on another.
+ * The event an event hangs off, for the ones that hang off another.
  *
  * SQLite cannot index into a JSON string, and "what happened to these forty
  * messages" is a question the message window asks on every render — so the
  * pointer lives in a column as well as in the payload.
  */
 function targetOf(input: NewEventInput): string | null {
-  const payload = input.payload as { targetEventId?: unknown };
-  return typeof payload?.targetEventId === 'string' ? payload.targetEventId : null;
+  const payload = input.payload as { targetEventId?: unknown; parentId?: unknown };
+  // Two field names, one relationship: a reaction names `targetEventId`, a
+  // thread reply names `parentId`, and both mean "the event this one hangs
+  // off". A channel asks for its root posts by `targetEventId IS NULL`, which
+  // only works if a reply fills it in.
+  if (typeof payload?.targetEventId === 'string') return payload.targetEventId;
+  if (typeof payload?.parentId === 'string') return payload.parentId;
+  return null;
 }
 
 export class EventSpine {

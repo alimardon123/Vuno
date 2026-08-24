@@ -40,10 +40,18 @@ export function MessageToolbar({
   on,
   onReply,
   onEdit,
+  canReply = true,
 }: {
   on: ActOn;
   onReply: () => void;
   onEdit: () => void;
+  /**
+   * False inside a threaded channel, where the thread has one reply button of
+   * its own. Two buttons doing the same thing on the same post is worse than
+   * either — and a reply to a reply would open a second level of nesting that
+   * the channel does not render.
+   */
+  canReply?: boolean;
 }) {
   const [picking, setPicking] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -93,9 +101,11 @@ export function MessageToolbar({
 
       <span className="mx-0.5 h-4 w-px bg-[var(--line)]" aria-hidden />
 
-      <Act label="Reply" onClick={onReply}>
-        <ReplyIcon />
-      </Act>
+      {canReply ? (
+        <Act label="Reply" onClick={onReply}>
+          <ReplyIcon />
+        </Act>
+      ) : null}
       <Act
         label={on.pinned ? 'Unpin' : 'Pin'}
         pressed={on.pinned}

@@ -8,7 +8,7 @@ import { Fragment, useState } from 'react';
 import { Avatar, MemberName, RelativeTime, StatusPill, type ClaimStatus } from '@/components/vuno/primitives';
 import { MessageBody } from '@/components/vuno/message-body';
 import { InlineEditor, MessageToolbar, Reactions } from '@/components/vuno/message-actions';
-import type { ConversationMessage } from '@/lib/conversations';
+import type { ConversationMessage, ConversationMode } from '@/lib/conversations';
 import { cn } from '@/lib/utils';
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -41,12 +41,15 @@ export function MessageList({
   conversationId,
   viewerId,
   onReply,
+  mode = 'flat',
 }: {
   messages: ConversationMessage[];
   conversationId: string;
   /** Whose messages carry an edit and a delete. */
   viewerId: string;
   onReply: (m: ConversationMessage) => void;
+  /** Threaded for a channel, flat for a chat (src/lib/conversations.ts). */
+  mode?: ConversationMode;
 }) {
   // Day boundaries and grouping are derived up front rather than accumulated
   // while rendering — a render pass that mutates as it goes is the kind of
@@ -84,16 +87,117 @@ export function MessageList({
       {rows.map(({ m, showDay, grouped }) => (
         <Fragment key={m.id}>
           {showDay ? <DayDivider date={m.at} /> : null}
-          <MessageRow
-            message={m}
-            grouped={grouped}
-            conversationId={conversationId}
-            viewerId={viewerId}
-            onReply={onReply}
-          />
+          {mode === 'threaded' ? (
+            <Thread post={m} conversationId={conversationId} viewerId={viewerId} onReply={onReply} />
+          ) : (
+            <MessageRow
+              message={m}
+              grouped={grouped}
+              conversationId={conversationId}
+              viewerId={viewerId}
+              onReply={onReply}
+            />
+          )}
         </Fragment>
       ))}
     </div>
+  );
+}
+
+/**
+ * One post and everything said under it.
+ *
+ * A channel reads as posts, not as a stream of lines — arriving at a busy one
+ * should show what was discussed rather than four hundred interleaved replies.
+ * The replies are indented under their post and the whole thing is one block
+ * with a rule down its left, so the boundary between two conversations is
+ * visible without reading either.
+ *
+ * The disclosure is `<details>`, not a state hook: a long thread collapses to
+ * its last few replies, and native disclosure gets keyboard operation, the
+ * right ARIA, and find-in-page for free.
+ */
+function Thread({
+  post,
+  conversationId,
+  viewerId,
+  onReply,
+}: {
+  post: ConversationMessage;
+  conversationId: string;
+  viewerId: string;
+  onReply: (m: ConversationMessage) => void;
+}) {
+  const hidden = post.replyCount - post.replies.length;
+
+  return (
+    <section className="group/thread mb-1.5 border-b border-[var(--line)] pb-1.5 last:border-b-0">
+      <MessageRow
+        message={post}
+        grouped={false}
+        conversationId={conversationId}
+        viewerId={viewerId}
+        onReply={onReply}
+        canReply={false}
+      />
+
+      {post.replies.length > 0 ? (
+        <div className="ml-[46px] mt-0.5 border-l-2 border-[var(--line)] pl-1">
+          {hidden > 0 ? (
+            <a
+              href={`#m-${post.replies[0].id}`}
+              className="ml-3 inline-block py-1 text-[11px] text-[var(--fg-4)] transition-colors hover:text-[var(--fg-2)]"
+            >
+              {hidden} earlier {hidden === 1 ? 'reply' : 'replies'}
+            </a>
+          ) : null}
+          {post.replies.map((r, i) => (
+            <MessageRow
+              key={r.id}
+              message={r}
+              // Consecutive replies from one person collapse, the same rule the
+              // flat stream uses — a thread of six lines from one person should
+              // not repeat their name six times.
+              grouped={
+                i > 0 &&
+                post.replies[i - 1].author?.id === r.author?.id &&
+                !r.restrictedTo &&
+                !r.pinned &&
+                !r.redacted
+              }
+              conversationId={conversationId}
+              viewerId={viewerId}
+              // Answering a reply answers the post: a channel has one level of
+              // nesting, the same as Teams, so there is one place a reply goes.
+              onReply={() => onReply(post)}
+              canReply={false}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {/* A post that has replies says how many, always — that count is the
+          thing you scan a channel for. A post with none shows the link on
+          hover and on keyboard focus only: a Reply under every silent post
+          turns the channel into a column of buttons, and it is the same rule
+          the roster uses for the same reason. */}
+      <button
+        type="button"
+        onClick={() => onReply(post)}
+        className={cn(
+          'ml-[46px] mt-0.5 rounded px-2 py-0.5 text-[11px] transition-all',
+          'hover:bg-[var(--hover)] hover:text-[var(--fg-2)]',
+          'focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]',
+          post.replyCount > 0
+            ? 'font-medium text-[var(--fg-3)]'
+            : 'text-[var(--fg-4)] opacity-0 group-hover/thread:opacity-100',
+        )}
+      >
+        {post.replyCount === 0
+          ? 'Reply'
+          : `${post.replyCount} ${post.replyCount === 1 ? 'reply' : 'replies'}`}
+      </button>
+    </section>
   );
 }
 
@@ -118,12 +222,14 @@ function MessageRow({
   conversationId,
   viewerId,
   onReply,
+  canReply = true,
 }: {
   message: ConversationMessage;
   grouped: boolean;
   conversationId: string;
   viewerId: string;
   onReply: (m: ConversationMessage) => void;
+  canReply?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const label = RECORD_LABEL[m.type];
@@ -153,6 +259,7 @@ function MessageRow({
           }}
           onReply={() => onReply(m)}
           onEdit={() => setEditing(true)}
+          canReply={canReply}
         />
       ) : null}
       <div className="pt-[3px]">
