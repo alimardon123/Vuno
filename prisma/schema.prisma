@@ -480,6 +480,12 @@ model Event {
   scopeType     String                     // 'channel' | 'decision' | 'project' | 'team' | 'org' | 'tenant'
   scopeId       String
   visibility    String   @default("org")   // 'tenant' | 'org' | 'team' | 'private'
+  // The event this one acts on, for the events that act on another: a reaction,
+  // an edit, a redaction, a pin. Denormalised out of the payload because
+  // rendering a window has to ask "what happened to these forty messages" and
+  // SQLite cannot index into a JSON string. The payload still carries it — this
+  // is a projection of the payload, not a second source of truth.
+  targetEventId String?
   createdAt     DateTime @default(now())
 
   tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -496,6 +502,8 @@ model Event {
   // this, opening a channel was a full scan of the spine (EXPLAIN said so).
   @@index([orgId, scopeType, scopeId, seq])
   @@index([type, createdAt])
+  // "Everything that acts on these messages", which is one query per window.
+  @@index([orgId, targetEventId])
   @@index([actorMemberId])
   @@index([onBehalfOfMemberId])
 }

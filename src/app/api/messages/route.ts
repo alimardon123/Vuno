@@ -35,6 +35,8 @@ const bodySchema = z.object({
   body: z.string().max(4000).default(''),
   channelId: z.string().min(1),
   attachmentIds: z.array(z.string().min(1)).max(MAX_PER_MESSAGE).default([]),
+  /** The message this answers. Makes it a ThreadReplyPosted rather than a post. */
+  replyToEventId: z.string().min(1).optional(),
   actorType: z.enum(['member', 'system']).default('member'),
   actorMemberId: z.string().optional(),
   onBehalfOfMemberId: z.string().optional(),
@@ -124,16 +126,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'Unknown channel for this org.' }, { status: 400 });
   }
 
+  // A reply to a message that is not in this conversation would render as a
+  // quotation of something the reader cannot see.
+  if (parsed.replyToEventId) {
+    const parent = await db.event.findFirst({
+      where: { id: parsed.replyToEventId, orgId: org.id, scopeType: 'channel', scopeId: channel.id },
+      select: { id: true },
+    });
+    if (!parent) {
+      return NextResponse.json({ ok: false, error: 'That message is not in this conversation.' }, { status: 400 });
+    }
+  }
+
   const spine = new EventSpine(org.tenantId, org.id);
-  const eventInput: NewEventInput<'MessagePosted'> = {
-    type: 'MessagePosted',
-    actorType: parsed.actorType,
-    actorMemberId: poster?.id,
-    onBehalfOfMemberId: parsed.onBehalfOfMemberId,
-    scopeType: 'channel',
-    scopeId: channel.id,
-    payload: { body: parsed.body },
-  };
+  const eventInput: NewEventInput = parsed.replyToEventId
+    ? {
+        type: 'ThreadReplyPosted',
+        actorType: parsed.actorType,
+        actorMemberId: poster?.id,
+        onBehalfOfMemberId: parsed.onBehalfOfMemberId,
+        scopeType: 'channel',
+        scopeId: channel.id,
+        payload: { body: parsed.body, parentId: parsed.replyToEventId },
+      }
+    : {
+        type: 'MessagePosted',
+        actorType: parsed.actorType,
+        actorMemberId: poster?.id,
+        onBehalfOfMemberId: parsed.onBehalfOfMemberId,
+        scopeType: 'channel',
+        scopeId: channel.id,
+        payload: { body: parsed.body },
+      };
   const [created] = await spine.append([eventInput]);
 
   // Linked after the event exists, because the event is what they belong to.

@@ -519,6 +519,95 @@ async function composer(browser: Browser) {
   await ctx.close();
 }
 
+// ── What you can do to a message that is already said ───────────────────────
+// The rule under all of these is that the spine is append-only, so each one has
+// to be visible on the screen *and* leave the original alone. The unit tests
+// assert the second half; these assert the first.
+async function messageActions(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, storageState });
+  const page = await ctx.newPage();
+
+  await open(page, '/channels');
+  await page.locator('a[href^="/channels/"]').first().click();
+  await page.waitForTimeout(2_000);
+
+  const box = page.getByRole('textbox', { name: /^Message / });
+  const stamp = Date.now();
+  await box.fill(`acted ${stamp}`);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await page.waitForTimeout(2_500);
+
+  const row = () => page.locator('article').filter({ hasText: `acted ${stamp}` }).last();
+  await row().waitFor({ timeout: 15_000 });
+
+  // Reacting.
+  await row().hover();
+  await row().getByRole('button', { name: 'React 👍' }).click();
+  await page.waitForTimeout(2_500);
+  const chip = row().locator('button[aria-pressed="true"]').filter({ hasText: '1' });
+  check((await chip.count()) > 0, 'a reaction appears on the message it was put on');
+
+  // And it is a toggle, not a counter.
+  await chip.first().click();
+  await page.waitForTimeout(2_500);
+  check(
+    (await row().locator('button[aria-pressed="true"]').filter({ hasText: '1' }).count()) === 0,
+    'clicking your own reaction takes it back',
+  );
+
+  // Pinning. Waited for rather than slept through: every one of these actions
+  // re-renders from the server, and how long that takes is not a constant.
+  await row().hover();
+  await row().getByRole('button', { name: 'Pin' }).click();
+  const pinned = page.locator('article').filter({ hasText: `acted ${stamp}` }).last().getByText('Pinned');
+  await pinned.waitFor({ timeout: 15_000 }).catch(() => {});
+  check((await pinned.count()) > 0, 'a pinned message says so');
+
+  await row().hover();
+  await row().getByRole('button', { name: 'Unpin' }).click();
+  await pinned.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
+
+  // Replying, and the quotation that makes a reply readable.
+  await row().hover();
+  await row().getByRole('button', { name: 'Reply' }).click();
+  await page.waitForTimeout(600);
+  check((await page.getByText('Replying to').count()) > 0, 'replying shows what you are answering');
+
+  await box.fill(`answer ${stamp}`);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await page.waitForTimeout(2_500);
+
+  const answer = page.locator('article').filter({ hasText: `answer ${stamp}` }).last();
+  await answer.waitFor({ timeout: 15_000 });
+  check((await answer.innerText()).includes(`acted ${stamp}`), 'a reply quotes what it answers');
+
+  // Editing, in place.
+  await answer.hover();
+  await answer.getByRole('button', { name: 'Edit' }).click();
+  await page.waitForTimeout(600);
+  const editor = page.getByRole('textbox', { name: 'Edit this message' });
+  check((await editor.count()) > 0, 'editing happens where the message is');
+  await editor.fill(`answer ${stamp} corrected`);
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.waitForTimeout(2_500);
+
+  const edited = page.locator('article').filter({ hasText: `answer ${stamp} corrected` }).last();
+  check((await edited.innerText()).includes('edited'), 'an edited message says it was edited');
+
+  // Deleting keeps the row, so a reply to it still makes sense.
+  await edited.hover();
+  await edited.getByRole('button', { name: 'Delete' }).click();
+  await page.waitForTimeout(500);
+  await page.getByRole('dialog', { name: /Delete this message/ }).getByRole('button', { name: 'Delete' }).click();
+  await page.waitForTimeout(2_500);
+  check(
+    (await page.getByText('This message was deleted.').count()) > 0,
+    'a deleted message leaves its place, and says what happened',
+  );
+
+  await ctx.close();
+}
+
 /** Take a plugin out if it is installed, so the round trip starts from nothing. */
 async function removeIfInstalled(page: Page, name: string): Promise<void> {
   await open(page, '/extensions?tab=plugins');
@@ -814,6 +903,7 @@ try {
       ['phone', phone],
       ['roster', roster],
       ['composer', composer],
+      ['message actions', messageActions],
       ['extensions', extensions],
       ['keyboard', keyboard],
       ['agent edge', agentEdge],

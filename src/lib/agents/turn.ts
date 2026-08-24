@@ -143,7 +143,9 @@ export async function runAgentTurn(req: TurnRequest): Promise<TurnResult> {
       ...e,
       payload: safeParse(e.payload as string),
       createdAt: String(e.createdAt),
-    })) as AgentContext['events'],
+      // Through `unknown`: the row now carries columns the typed record does
+      // not name, so the two shapes no longer overlap enough for a direct cast.
+    })) as unknown as AgentContext['events'],
     claims: claims.map((c) => ({ ...c, status: c.status as AgentContext['claims'][number]['status'] })),
     trigger: {
       type: req.triggerType ?? 'mentioned',

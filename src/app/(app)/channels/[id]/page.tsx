@@ -33,6 +33,7 @@ export default async function ChannelPage({
       conversation={conversation}
       window={window}
       mentionable={await mentionableIn(org.id, conversation)}
+      viewerId={viewer.id}
     />
   );
 }

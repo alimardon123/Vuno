@@ -5,12 +5,12 @@
 // into: an objection and a message are both things you say.
 
 import Link from 'next/link';
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useConversationStream } from '@/hooks/use-conversation-stream';
 import { MessageList } from '@/components/vuno/message-list';
 import { Composer, type Mentionable } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
-import type { Conversation, MessageWindow } from '@/lib/conversations';
+import type { Conversation, ConversationMessage, MessageWindow } from '@/lib/conversations';
 
 /**
  * `useLayoutEffect`, except on the server, where it does nothing and warns.
@@ -32,12 +32,16 @@ export function ConversationView({
   conversation,
   window: view,
   mentionable = [],
+  viewerId,
 }: {
   conversation: Conversation;
   window: MessageWindow;
   /** Everyone `@` can reach here, resolved on the server. */
   mentionable?: Mentionable[];
+  /** Whose messages carry an edit and a delete. */
+  viewerId: string;
 }) {
+  const [replyingTo, setReplyingTo] = useState<ConversationMessage | null>(null);
   const { messages, earlier, isHistory } = view;
 
   // An agent answering an @mention runs in the orchestrator and lands seconds
@@ -173,7 +177,12 @@ export function ConversationView({
         {messages.length === 0 ? (
           <Empty title="No messages yet" hint="Say something, or file a proposal — a proposal becomes a claim on the ledger." />
         ) : (
-          <MessageList messages={messages} />
+          <MessageList
+            messages={messages}
+            conversationId={conversation.id}
+            viewerId={viewerId}
+            onReply={setReplyingTo}
+          />
         )}
 
         {isHistory ? (
@@ -205,6 +214,16 @@ export function ConversationView({
         conversationId={conversation.id}
         conversationName={conversation.name}
         mentionable={mentionable}
+        replyingTo={
+          replyingTo
+            ? {
+                id: replyingTo.id,
+                author: replyingTo.author?.displayName ?? 'Someone',
+                body: replyingTo.body,
+              }
+            : null
+        }
+        onCancelReply={() => setReplyingTo(null)}
       />
     </main>
   );

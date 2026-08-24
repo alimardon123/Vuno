@@ -30,6 +30,11 @@ export type EventType =
   | 'AgentThought'
   | 'SharedItem'
   | 'ReactionAdded'
+  | 'ReactionRemoved'
+  | 'MessageEdited'
+  | 'MessageRedacted'
+  | 'MessagePinned'
+  | 'MessageUnpinned'
   | 'PreemptIssued'
   | 'AttentionWakeup'
   | 'MemoryUpdated'
@@ -239,6 +244,28 @@ export interface EventPayloadMap {
   ReactionAdded: {
     emoji: string;           // e.g. "👍", "❤️", "🚀"
     targetEventId: string;   // which message this reaction is on
+  };
+  ReactionRemoved: {
+    emoji: string;
+    targetEventId: string;
+  };
+  // An edit does not change the message. The spine is append-only, so the
+  // original stays exactly as it was posted and this supersedes it — which is
+  // also what makes "edited" honest rather than a claim nobody can check.
+  MessageEdited: {
+    targetEventId: string;
+    body: string;
+  };
+  // Deleting is redacting. The event stays, so the sequence stays gapless and
+  // a reply to it still has something to point at; the body stops being served.
+  MessageRedacted: {
+    targetEventId: string;
+  };
+  MessagePinned: {
+    targetEventId: string;
+  };
+  MessageUnpinned: {
+    targetEventId: string;
   };
   PreemptIssued: {
     interruptingAgentId: string;

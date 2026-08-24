@@ -37,7 +37,8 @@ export const EVENT_TYPES = [
   'EscalationOpened', 'EscalationResolved', 'MemberJoined', 'MemberRoleChanged', 'MemberRetired',
   'WikiSectionAuthored', 'AgentThought', 'SharedItem', 'ReactionAdded',
   'PreemptIssued', 'AttentionWakeup', 'MemoryUpdated', 'PaProactiveNote',
-  'AgentHandoff', 'ToolCalled',
+  'AgentHandoff', 'ToolCalled', 'ReactionRemoved', 'MessageEdited',
+  'MessageRedacted', 'MessagePinned', 'MessageUnpinned',
 ] as const;
 
 export const SCOPE_TYPES = [
@@ -62,7 +63,22 @@ const nonEmptyObject = z
 // ─── Payloads that cause durable damage if wrong ─────────────────────────────
 
 const strictPayloads: Partial<Record<(typeof EVENT_TYPES)[number], z.ZodTypeAny>> = {
+  // Still `min(1)`. These strict payloads guard `parseAgentOutput`, which is
+  // the boundary agent output crosses — and an agent posting an empty message
+  // is a bug, not a screenshot with no caption. The attachments-only case is a
+  // person in the composer, and `/api/messages` validates that path itself:
+  // body or files, never neither.
   MessagePosted: z.object({ body: z.string().min(1) }).loose(),
+
+  // Everything that acts on another message. Strict, because these are the
+  // events that change what a conversation says it said — an edit with no
+  // target silently edits nothing, and nobody finds out.
+  ReactionAdded: z.object({ emoji: z.string().min(1).max(16), targetEventId: z.string().min(1) }).loose(),
+  ReactionRemoved: z.object({ emoji: z.string().min(1).max(16), targetEventId: z.string().min(1) }).loose(),
+  MessageEdited: z.object({ targetEventId: z.string().min(1), body: z.string().min(1).max(4000) }).loose(),
+  MessageRedacted: z.object({ targetEventId: z.string().min(1) }).loose(),
+  MessagePinned: z.object({ targetEventId: z.string().min(1) }).loose(),
+  MessageUnpinned: z.object({ targetEventId: z.string().min(1) }).loose(),
 
   ClaimStatusChanged: z
     .object({

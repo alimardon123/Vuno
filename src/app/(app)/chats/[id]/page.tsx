@@ -37,6 +37,7 @@ export default async function ChatPage({
       conversation={conversation}
       window={window}
       mentionable={await mentionableIn(org.id, conversation)}
+      viewerId={viewer.id}
     />
   );
 }

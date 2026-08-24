@@ -54,15 +54,26 @@ function draftKey(conversationId: string): string {
   return `vuno-draft:${conversationId}`;
 }
 
+export interface ReplyTarget {
+  id: string;
+  author: string;
+  body: string;
+}
+
 export function Composer({
   conversationId,
   conversationName,
   mentionable = [],
+  replyingTo = null,
+  onCancelReply,
 }: {
   conversationId: string;
   conversationName: string;
   /** Everyone `@` can reach here. Deterministic, not a guess at the text. */
   mentionable?: Mentionable[];
+  /** The message being replied to, shown above the box and sent with it. */
+  replyingTo?: ReplyTarget | null;
+  onCancelReply?: () => void;
 }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -102,6 +113,12 @@ export function Composer({
       // A browser refusing storage is not a reason to stop typing.
     }
   }, [body, conversationId]);
+
+  // Starting a reply moves the caret to where you are about to type. Without
+  // it, clicking Reply on a message three screens up leaves the cursor there.
+  useEffect(() => {
+    if (replyingTo) textarea.current?.focus();
+  }, [replyingTo?.id]);
 
   // ── Growing with the text ─────────────────────────────────────────────────
   // A fixed two rows means a long message is composed through a slot. Capped,
@@ -332,12 +349,14 @@ export function Composer({
           channelId: conversationId,
           body: body.trim(),
           attachmentIds: ready.map((a) => a.id),
+          ...(replyingTo ? { replyToEventId: replyingTo.id } : {}),
         }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || data.error) throw new Error(data.error ?? 'Could not send');
       setBody('');
       setFiles([]);
+      onCancelReply?.();
       try {
         window.localStorage.removeItem(draftKey(conversationId));
       } catch {
@@ -382,6 +401,28 @@ export function Composer({
         {dragging ? (
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-lg text-[12px] font-medium text-[var(--fg-2)]">
             Drop to attach
+          </div>
+        ) : null}
+
+        {replyingTo ? (
+          <div className="flex items-start gap-2 border-b border-[var(--line)] px-2.5 py-1.5">
+            <span className="mt-px shrink-0 text-[var(--fg-4)]" aria-hidden>
+              <ReplyIcon />
+            </span>
+            <p className="min-w-0 flex-1 text-[11px] leading-[1.45] text-[var(--fg-3)]">
+              Replying to <span className="font-semibold text-[var(--fg-2)]">{replyingTo.author}</span>
+              {replyingTo.body ? (
+                <span className="ml-1 line-clamp-2 text-[var(--fg-4)]">{replyingTo.body}</span>
+              ) : null}
+            </p>
+            <button
+              type="button"
+              onClick={onCancelReply}
+              aria-label="Stop replying"
+              className="shrink-0 rounded px-1 text-[var(--fg-4)] transition-colors hover:text-[var(--fg)]"
+            >
+              ×
+            </button>
           </div>
         ) : null}
 
@@ -487,6 +528,11 @@ export function Composer({
                 setMention(null);
                 return;
               }
+            }
+            if (e.key === 'Escape' && replyingTo) {
+              e.preventDefault();
+              onCancelReply?.();
+              return;
             }
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
@@ -673,6 +719,15 @@ function MicIcon() {
     <svg {...I}>
       <rect x="9" y="2.5" width="6" height="11.5" rx="3" />
       <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5" />
+    </svg>
+  );
+}
+
+function ReplyIcon() {
+  return (
+    <svg {...I} width={13} height={13}>
+      <path d="M9 10 4 15l5 5" />
+      <path d="M4 15h10a6 6 0 0 0 6-6V5" />
     </svg>
   );
 }

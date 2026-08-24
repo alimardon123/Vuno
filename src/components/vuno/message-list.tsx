@@ -4,9 +4,10 @@
 // minutes collapse into one block — the pattern every chat app uses, and the
 // reason a dense list still reads as a conversation.
 
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Avatar, MemberName, RelativeTime, StatusPill, type ClaimStatus } from '@/components/vuno/primitives';
 import { MessageBody } from '@/components/vuno/message-body';
+import { InlineEditor, MessageToolbar, Reactions } from '@/components/vuno/message-actions';
 import type { ConversationMessage } from '@/lib/conversations';
 import { cn } from '@/lib/utils';
 
@@ -32,7 +33,21 @@ const RECORD_LABEL: Record<string, string> = {
   AgentThought: 'Thinking',
 };
 
-export function MessageList({ messages }: { messages: ConversationMessage[] }) {
+/** What counts as somebody saying something, rather than a record of an event. */
+const SAID = new Set(['MessagePosted', 'ThreadReplyPosted']);
+
+export function MessageList({
+  messages,
+  conversationId,
+  viewerId,
+  onReply,
+}: {
+  messages: ConversationMessage[];
+  conversationId: string;
+  /** Whose messages carry an edit and a delete. */
+  viewerId: string;
+  onReply: (m: ConversationMessage) => void;
+}) {
   // Day boundaries and grouping are derived up front rather than accumulated
   // while rendering — a render pass that mutates as it goes is the kind of
   // thing that works until it is rendered twice.
@@ -51,6 +66,15 @@ export function MessageList({ messages }: { messages: ConversationMessage[] }) {
       !m.restrictedTo &&
       !RECORD_LABEL[m.type] &&
       !RECORD_LABEL[prev.type] &&
+      // A reply keeps its own header, because the line quoting what it answers
+      // is part of the header. Folded in, it would read as a continuation of
+      // the message above rather than an answer to one somewhere else.
+      !m.replyTo &&
+      // Same for a message somebody pinned or deleted: both carry a mark that
+      // belongs to that message alone.
+      !m.pinned &&
+      !prev.pinned &&
+      !m.redacted &&
       new Date(m.at).getTime() - new Date(prev.at).getTime() < GROUP_WINDOW_MS;
     return { m, showDay, grouped };
   });
@@ -60,7 +84,13 @@ export function MessageList({ messages }: { messages: ConversationMessage[] }) {
       {rows.map(({ m, showDay, grouped }) => (
         <Fragment key={m.id}>
           {showDay ? <DayDivider date={m.at} /> : null}
-          <MessageRow message={m} grouped={grouped} />
+          <MessageRow
+            message={m}
+            grouped={grouped}
+            conversationId={conversationId}
+            viewerId={viewerId}
+            onReply={onReply}
+          />
         </Fragment>
       ))}
     </div>
@@ -82,18 +112,49 @@ function DayDivider({ date }: { date: string }) {
   );
 }
 
-function MessageRow({ message: m, grouped }: { message: ConversationMessage; grouped: boolean }) {
+function MessageRow({
+  message: m,
+  grouped,
+  conversationId,
+  viewerId,
+  onReply,
+}: {
+  message: ConversationMessage;
+  grouped: boolean;
+  conversationId: string;
+  viewerId: string;
+  onReply: (m: ConversationMessage) => void;
+}) {
+  const [editing, setEditing] = useState(false);
   const label = RECORD_LABEL[m.type];
   const name = m.isSystem ? 'Vuno' : (m.author?.displayName ?? 'Unknown');
   const kind = m.author?.kind === 'agent' ? 'agent' : 'human';
+  // Only what somebody actually said can be acted on. A gate verdict is a
+  // record of something that happened; reacting to it is not a thing.
+  const actionable = !m.isSystem && !m.redacted && (m.type === 'MessagePosted' || m.type === 'ThreadReplyPosted');
 
   return (
     <article
+      id={`m-${m.id}`}
       className={cn(
-        'group grid grid-cols-[28px_minmax(0,1fr)] gap-x-2.5 px-4 transition-colors hover:bg-[var(--hover)]',
+        'group relative grid grid-cols-[28px_minmax(0,1fr)] gap-x-2.5 px-4 transition-colors hover:bg-[var(--hover)]',
         grouped ? 'py-px' : 'pb-0.5 pt-1.5',
+        m.pinned && 'bg-[var(--asserted-bg)]/25',
       )}
     >
+      {actionable ? (
+        <MessageToolbar
+          on={{
+            channelId: conversationId,
+            targetEventId: m.id,
+            mine: m.author?.id === viewerId,
+            pinned: m.pinned,
+            body: m.body,
+          }}
+          onReply={() => onReply(m)}
+          onEdit={() => setEditing(true)}
+        />
+      ) : null}
       <div className="pt-[3px]">
         {grouped ? (
           <span className="block text-[9px] leading-[18px] text-transparent group-hover:text-[var(--fg-4)] tnum">
@@ -151,9 +212,47 @@ function MessageRow({ message: m, grouped }: { message: ConversationMessage; gro
           </div>
         ) : null}
 
-        {m.body || m.attachments.length > 0 ? (
-          <MessageBody body={m.body} attachments={m.attachments} className="max-w-[78ch] break-words" />
+        {/* What a reply is answering, quoted and clickable. A reply with no
+            context is a sentence about something three screens up. */}
+        {m.replyTo ? (
+          <a
+            href={`#m-${m.replyTo.id}`}
+            className="mb-0.5 flex max-w-[62ch] items-baseline gap-1.5 rounded-[3px] border-l-2 border-line-2 py-px pl-2 text-[11px] text-[var(--fg-4)] transition-colors hover:border-[var(--accent)] hover:text-[var(--fg-3)]"
+          >
+            <span className="shrink-0 font-semibold text-[var(--fg-3)]">{m.replyTo.author}</span>
+            <span className="truncate">{m.replyTo.body || 'a message'}</span>
+          </a>
         ) : null}
+
+        {m.pinned ? (
+          <span className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--asserted)]">
+            Pinned
+          </span>
+        ) : null}
+
+        {m.redacted ? (
+          // The row keeps its place so replies still make sense, and says
+          // plainly that something was here rather than leaving a gap.
+          <p className="text-[12.5px] italic text-[var(--fg-4)]">This message was deleted.</p>
+        ) : editing ? (
+          <InlineEditor
+            channelId={conversationId}
+            targetEventId={m.id}
+            initial={m.body}
+            onDone={() => setEditing(false)}
+          />
+        ) : m.body || m.attachments.length > 0 ? (
+          <>
+            <MessageBody body={m.body} attachments={m.attachments} className="max-w-[78ch] break-words" />
+            {m.editedAt ? (
+              <span className="ml-1 align-baseline text-[10px] text-[var(--fg-4)]" title={`Edited ${new Date(m.editedAt).toLocaleString()}`}>
+                (edited)
+              </span>
+            ) : null}
+          </>
+        ) : null}
+
+        <Reactions reactions={m.reactions} channelId={conversationId} targetEventId={m.id} />
 
         <RecordCard message={m} />
       </div>

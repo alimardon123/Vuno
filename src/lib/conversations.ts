@@ -10,6 +10,7 @@ import { db } from '@/lib/db';
 import { isRestricted, reachOf, teamScopesFor, visibleTo, type Reach } from '@/lib/events/visibility';
 import { getMember, memberMap, type MemberSummary } from '@/lib/members';
 import { attachmentsForEvents, type StoredAttachment } from '@/lib/attachments';
+import { ACTION_TYPES, overlayFor, type Reaction } from '@/lib/messages/actions';
 
 export type ConversationKind = 'dm' | 'group' | 'team_room' | 'channel';
 
@@ -217,6 +218,15 @@ export interface ConversationMessage {
   restrictedTo: 'private' | 'team' | null;
   /** Files posted with it. Empty for almost every message. */
   attachments: StoredAttachment[];
+  /** Reactions standing on it right now, most-reacted first. */
+  reactions: Reaction[];
+  /** What this answers, when it is a reply — resolved so the row can quote it. */
+  replyTo: { id: string; author: string; body: string } | null;
+  /** When it was last edited, or null. The original is still on the spine. */
+  editedAt: string | null;
+  /** Deleted by its author. The row stays; the body does not. */
+  redacted: boolean;
+  pinned: boolean;
 }
 
 export interface MessageWindow {
@@ -272,6 +282,10 @@ export async function listMessages(
       scopeType: 'channel',
       scopeId: conversationId,
       ...(opts.before !== undefined ? { seq: { lt: opts.before } } : {}),
+      // A reaction is not a line in the conversation. These act on messages
+      // and are folded onto them below; left in, every thumbs-up would render
+      // as an empty row and push a real message out of the window.
+      type: { notIn: [...ACTION_TYPES] },
       ...visibleTo(reach, teamScopesFor(reach, [{ id: conversationId, teamId: channel?.teamId ?? null }])),
     },
     orderBy: { seq: 'desc' },
@@ -281,12 +295,50 @@ export async function listMessages(
   const hasOlder = rows.length > limit;
   const page = (hasOlder ? rows.slice(0, limit) : rows).reverse();
 
-  const [members, files] = await Promise.all([
+  // What the replies in this window are answering. Often already in the window;
+  // fetched by id so a reply to something older still quotes it.
+  const parentIds = [
+    ...new Set(
+      page
+        .map((e) => {
+          try {
+            return (JSON.parse(e.payload as string) as { parentId?: unknown }).parentId;
+          } catch {
+            return null;
+          }
+        })
+        .filter((v): v is string => typeof v === 'string'),
+    ),
+  ];
+
+  const [members, files, overlay] = await Promise.all([
     memberMap(page.flatMap((e) => [e.actorMemberId, e.onBehalfOfMemberId].filter((v): v is string => Boolean(v)))),
     // One query for the window rather than one per message: a page of 200
     // messages with a screenshot each is 200 round trips the other way.
     attachmentsForEvents(page.map((e) => e.id)),
+    overlayFor(orgId, page.map((e) => e.id), viewer === 'system' ? '' : viewer.id),
   ]);
+
+  const parents = new Map<string, { author: string; body: string }>();
+  if (parentIds.length > 0) {
+    const rows = await db.event.findMany({
+      where: { id: { in: parentIds }, orgId },
+      select: { id: true, payload: true, actorMemberId: true },
+    });
+    const authors = await memberMap(rows.map((r) => r.actorMemberId ?? '').filter(Boolean));
+    for (const r of rows) {
+      let body = '';
+      try {
+        body = (JSON.parse(r.payload as string) as { body?: string }).body ?? '';
+      } catch {
+        body = '';
+      }
+      parents.set(r.id, {
+        author: r.actorMemberId ? (authors.get(r.actorMemberId)?.displayName ?? 'Someone') : 'System',
+        body,
+      });
+    }
+  }
 
   const messages = page.map((e) => {
     let payload: Record<string, unknown> = {};
@@ -295,16 +347,30 @@ export async function listMessages(
     } catch {
       payload = {};
     }
+    const acted = overlay.get(e.id);
+    // A deleted message keeps its place — the sequence stays gapless and a
+    // reply still has something to point at — and stops carrying what it said.
+    const original = typeof payload.body === 'string' ? payload.body : '';
+    const body = acted?.redacted ? '' : (acted?.editedBody ?? original);
+
     return {
       id: e.id,
       seq: e.seq,
       type: e.type,
-      body: typeof payload.body === 'string' ? payload.body : '',
-      payload,
+      body,
+      payload: acted?.redacted ? {} : payload,
       at: String(e.createdAt),
       author: e.actorMemberId ? (members.get(e.actorMemberId) ?? null) : null,
       onBehalfOf: e.onBehalfOfMemberId ? (members.get(e.onBehalfOfMemberId) ?? null) : null,
-      attachments: files.get(e.id) ?? [],
+      attachments: acted?.redacted ? [] : (files.get(e.id) ?? []),
+      reactions: acted?.reactions ?? [],
+      replyTo:
+        typeof payload.parentId === 'string'
+          ? { id: payload.parentId, ...(parents.get(payload.parentId) ?? { author: 'Someone', body: '' }) }
+          : null,
+      editedAt: acted?.editedAt ?? null,
+      redacted: acted?.redacted ?? false,
+      pinned: acted?.pinned ?? false,
       isSystem: e.actorType === 'system',
       restrictedTo: isRestricted(e.visibility) ? (e.visibility as 'private' | 'team') : null,
     };

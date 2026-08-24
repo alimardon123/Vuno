@@ -14,6 +14,18 @@
 import { db } from '@/lib/db';
 import type { EventRecord, NewEventInput, EventType } from './types';
 
+/**
+ * The event an event acts on, for the ones that act on another.
+ *
+ * SQLite cannot index into a JSON string, and "what happened to these forty
+ * messages" is a question the message window asks on every render — so the
+ * pointer lives in a column as well as in the payload.
+ */
+function targetOf(input: NewEventInput): string | null {
+  const payload = input.payload as { targetEventId?: unknown };
+  return typeof payload?.targetEventId === 'string' ? payload.targetEventId : null;
+}
+
 export class EventSpine {
   constructor(
     private readonly tenantId: string,
@@ -30,6 +42,10 @@ export class EventSpine {
     const data = inputs.map((input) => ({
       type: input.type,
       payload: JSON.stringify(input.payload),
+      // Projected out of the payload here rather than passed in, so no caller
+      // can append a reaction or an edit that the read path cannot find. The
+      // payload stays the source of truth; this is an index into it.
+      targetEventId: targetOf(input),
       tenantId: this.tenantId,
       orgId: this.orgId,
       actorType: input.actorType,
