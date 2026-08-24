@@ -11,6 +11,7 @@ import { MessageList } from '@/components/vuno/message-list';
 import { Composer, type Mentionable } from '@/components/vuno/composer';
 import { Avatar, Empty } from '@/components/vuno/primitives';
 import { CallSurface, type CallMember, type LiveCall } from '@/components/vuno/call';
+import { MAX_PARTICIPANTS as MAX_IN_CALL, styleFor } from '@/lib/calls/shape';
 import { MeetingStrip, ScheduleButton } from '@/components/vuno/meetings';
 import type { MeetingRow } from '@/lib/meetings';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +41,7 @@ export function ConversationView({
   viewerId,
   meetings = [],
   apps = { calls: true, meetings: true },
+  autoJoinCall = false,
 }: {
   conversation: Conversation;
   window: MessageWindow;
@@ -51,7 +53,12 @@ export function ConversationView({
   meetings?: MeetingRow[];
   /** Which optional surfaces this org has added (Extensions). */
   apps?: { calls: boolean; meetings: boolean };
+  /** Arrived here from the ringing banner — join what is already running. */
+  autoJoinCall?: boolean;
 }) {
+  // A DM call rings the other person; a channel call is a room that is open.
+  // The button says which, because pressing it does a different thing.
+  const rings = styleFor(conversation.kind) === 'ring';
   const [replyingTo, setReplyingTo] = useState<ConversationMessage | null>(null);
   const [call, setCall] = useState<{ call: LiveCall; ice: { iceServers: RTCIceServer[]; limitation: string | null } } | null>(null);
   const [starting, setStarting] = useState(false);
@@ -72,6 +79,16 @@ export function ConversationView({
       cancelled = true;
     };
   }, [conversation.id, call]);
+
+  // Joining from the banner, once. `joined` guards a re-render from starting a
+  // second attempt while the first is still in flight.
+  const joined = useRef(false);
+  useEffect(() => {
+    if (!autoJoinCall || joined.current || !apps.calls || call) return;
+    joined.current = true;
+    void joinCall();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoJoinCall, apps.calls]);
 
   async function joinCall() {
     setStarting(true);
@@ -211,13 +228,22 @@ export function ConversationView({
           {!call && apps.meetings ? (
             <ScheduleButton channelId={conversation.id} conversationName={conversation.name} />
           ) : null}
+          {/* A channel call is a room: it does not ring anybody, and the mesh
+              caps it, so both facts belong on the button rather than in a
+              refusal after the seventh person clicks. */}
           {!call && apps.calls ? (
             <button
               type="button"
               onClick={() => void joinCall()}
-              disabled={starting}
+              disabled={starting || (running?.participants.length ?? 0) >= MAX_IN_CALL}
+              title={
+                rings
+                  ? `Call ${conversation.name}. Up to ${MAX_IN_CALL} people.`
+                  : `Open a call anyone here can join. Up to ${MAX_IN_CALL} people — nobody is rung.`
+              }
               className={cn(
                 'flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-50',
                 'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent)]',
                 running
                   ? 'border-[var(--tested)] bg-[var(--tested-bg)] text-[var(--tested)]'
@@ -228,7 +254,13 @@ export function ConversationView({
                 <rect x="2.5" y="6" width="13" height="12" rx="2" />
                 <path d="m15.5 12 6-3.5v11l-6-3.5z" />
               </svg>
-              {starting ? 'Starting…' : running ? `Join · ${running.participants.length}` : 'Call'}
+              {starting
+                ? 'Starting…'
+                : running
+                  ? `Join · ${running.participants.length}/${MAX_IN_CALL}`
+                  : rings
+                    ? 'Call'
+                    : 'Open a room'}
             </button>
           ) : null}
           <span>{KIND_LABEL[conversation.kind]}</span>

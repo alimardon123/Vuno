@@ -22,6 +22,7 @@
 // for a third of people.
 
 import { db } from '@/lib/db';
+import { MAX_PARTICIPANTS } from '@/lib/calls/shape';
 import { EventSpine } from '@/lib/events/spine';
 import type { MemberSummary } from '@/lib/members';
 
@@ -35,8 +36,10 @@ export class CallError extends Error {
   }
 }
 
-/** How many people may be in one call. Mesh topology: every pair connects. */
-export const MAX_PARTICIPANTS = 6;
+// The seat cap and the ring/room rule live in `./shape`, which imports nothing,
+// so a client component can ask for them without pulling Prisma into the
+// browser bundle — which is exactly what happened the first time.
+export { MAX_PARTICIPANTS, styleFor, type CallStyle } from '@/lib/calls/shape';
 
 /** A signal nobody collected within this is gone. Offers do not age well. */
 const SIGNAL_TTL_MS = 60_000;
@@ -240,6 +243,58 @@ export async function startOrJoin(input: {
   ]);
 
   return { call: await readCall(created.id), joined: false };
+}
+
+/**
+ * Calls ringing for this viewer, anywhere in the app.
+ *
+ * A DM call has to reach somebody who is reading something else — that is the
+ * difference between a call and a notice, and a call button that only works
+ * when the other person happens to have the conversation open is a notice.
+ *
+ * Deliberately *not* channel calls. A channel is a room somebody opened, and it
+ * announces itself in the channel; interrupting everyone in the org because a
+ * working group started talking is the behaviour this split exists to prevent.
+ */
+export async function ringingFor(
+  orgId: string,
+  viewer: { id: string; ownerMemberId?: string | null },
+): Promise<Array<{ callId: string; channelId: string; conversationName: string; from: string; since: string }>> {
+  const live = await db.call.findMany({
+    where: {
+      orgId,
+      endedAt: null,
+      // Ringing kinds only, in a conversation this viewer is part of.
+      // `styleFor` states the rule; this is the query form of the same sentence.
+      channel: { kind: { in: ['dm', 'group'] }, members: { some: { memberId: viewer.id } } },
+      // And not a call they are already in.
+      participants: { none: { memberId: viewer.id, leftAt: null } },
+    },
+    orderBy: { startedAt: 'desc' },
+    take: 5,
+    include: {
+      channel: { select: { id: true, name: true } },
+      startedBy: { select: { displayName: true } },
+      participants: {
+        where: { leftAt: null },
+        include: { member: { select: { id: true, displayName: true } } },
+      },
+    },
+  });
+
+  return live
+    // A call every participant has left is over even if nothing closed it —
+    // a browser that crashed does not get to ring somebody forever.
+    .filter((c) => c.participants.length > 0)
+    .map((c) => ({
+      callId: c.id,
+      channelId: c.channelId,
+      // A DM is named for whoever is not reading it, and the row's stored name
+      // is not that. The caller is who you actually want to see.
+      conversationName: c.channel.name,
+      from: c.startedBy?.displayName ?? c.participants[0]?.member.displayName ?? 'Someone',
+      since: c.startedAt.toISOString(),
+    }));
 }
 
 export async function leaveCall(input: {

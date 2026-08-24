@@ -14,10 +14,10 @@ export default async function ChatPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ before?: string }>;
+  searchParams: Promise<{ before?: string; join?: string }>;
 }) {
   const { id } = await params;
-  const { before } = await searchParams;
+  const { before, join } = await searchParams;
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) notFound();
 
@@ -50,6 +50,9 @@ export default async function ChatPage({
       viewerId={viewer.id}
       meetings={apps.meetings ? await meetingsIn(org.id, id) : []}
       apps={apps}
+      // Arriving from a ring: join the call rather than making them press
+      // the button they already pressed in the banner.
+      autoJoinCall={join === '1'}
     />
   );
 }

@@ -758,7 +758,10 @@ async function call(browser: Browser) {
   await pageB.waitForTimeout(2_500);
 
   const room = '/channels/ch-storage';
-  const callButton = (p: Page) => p.getByRole('button', { name: /Join · \d+|^Call$/ });
+  // "Open a room" in a channel, "Call" in a chat, "Join · 2/6" once one is
+  // running — the label says what pressing it does, so the selector has to
+  // accept all three.
+  const callButton = (p: Page) => p.getByRole('button', { name: /Join · \d+|^Call$|Open a room/ });
 
   await open(pageA, room);
 
@@ -916,6 +919,16 @@ async function threading(browser: Browser) {
   const posts = await page.locator('section').filter({ hasText: `under ${stamp}` }).count();
   check(posts === 1, 'a reply is not also a post of its own', `${posts} blocks contain it`);
 
+  // While here: a channel call is a room, a chat call rings. The button says
+  // which, because pressing it does a different thing — and the seat cap is on
+  // it up front rather than in a refusal after the seventh person clicks.
+  const roomBtn = page.locator('header button').filter({ hasText: /Open a room|Join/ }).first();
+  check((await roomBtn.count()) > 0, 'a channel offers a room, not a call');
+  check(
+    ((await roomBtn.getAttribute('title')) ?? '').includes('nobody is rung'),
+    'and says it rings nobody, with the seat limit',
+  );
+
   // A chat is flat: no thread blocks at all.
   await open(page, '/chats');
   await page.locator('a[href^="/chats/"]').first().click();
@@ -926,6 +939,13 @@ async function threading(browser: Browser) {
     'a chat composer sends a message, not a post',
   );
   check((await page.locator('main section').count()) === 0, 'a chat has no threads to fold anything into');
+
+  const callBtn = page.locator('header button').filter({ hasText: /^Call|Join/ }).first();
+  check((await callBtn.count()) > 0, 'a chat offers a call');
+  check(
+    ((await callBtn.getAttribute('title')) ?? '').startsWith('Call '),
+    'and it rings the person, rather than opening a room',
+  );
 
   await ctx.close();
 }
