@@ -10,10 +10,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+// Three colourways of one design language, then two directions that are
+// different arguments about what the product is — they change the type, the
+// shape language and the density, which is why they are listed apart.
 const THEMES = [
-  { id: 'ink', label: 'Ink', hint: 'Deep neutral' },
-  { id: 'paper', label: 'Paper', hint: 'Light neutral' },
-  { id: 'warm', label: 'Warm', hint: 'Cream and gold' },
+  { id: 'ink', label: 'Ink', hint: 'Deep neutral', group: 'Palette' },
+  { id: 'paper', label: 'Paper', hint: 'Light neutral', group: 'Palette' },
+  { id: 'warm', label: 'Warm', hint: 'Cream and gold', group: 'Palette' },
+  { id: 'ledger', label: 'Ledger', hint: 'A book of record — serif, ruled', group: 'Direction' },
+  { id: 'console', label: 'Console', hint: 'An instrument — mono, tight', group: 'Direction' },
 ] as const;
 
 export function ThemeMenu() {
@@ -75,11 +80,16 @@ export function ThemeMenu() {
           />
           <div
             role="menu"
-            className="absolute bottom-0 left-full z-50 ml-2 w-40 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--raised)] py-1 shadow-xl"
+            className="absolute bottom-0 left-full z-50 ml-2 w-56 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--raised)] py-1 shadow-xl"
           >
-            {THEMES.map((t) => (
+            {THEMES.map((t, i) => (
+              <div key={t.id}>
+                {i === 0 || THEMES[i - 1].group !== t.group ? (
+                  <p className="px-2.5 pb-0.5 pt-1.5 text-[9.5px] font-semibold uppercase tracking-[0.09em] text-[var(--fg-4)]">
+                    {t.group}
+                  </p>
+                ) : null}
               <button
-                key={t.id}
                 role="menuitem"
                 data-theme-option={t.id}
                 onClick={() => apply(t.id)}
@@ -91,6 +101,7 @@ export function ThemeMenu() {
                   <span className="text-[10px] text-[var(--fg-4)]">{t.hint}</span>
                 </span>
               </button>
+              </div>
             ))}
           </div>
         </>

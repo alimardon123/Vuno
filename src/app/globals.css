@@ -174,6 +174,175 @@
   color-scheme: light;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Two directions, not two palettes.
+
+   Ink, Paper and Warm are the same design language in three colourways: same
+   type, same density, same shapes. These two are different arguments about
+   what the product is, and they change the type, the shape language and the
+   density to make it — which is what makes them worth choosing between.
+
+   Both are written as a skin over the existing app rather than as a second set
+   of components. Tailwind v4 inlines `border-radius: 6px` into `.rounded-md`
+   rather than referencing a variable, so a direction that changes shape has to
+   say so about the utilities. It is contained here, in one file, and nothing
+   in a component knows which direction is on.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Ledger — a book of record ─────────────────────────────────────────────
+   The org keeps a ledger, so this is what a ledger looks like: ruled paper,
+   set in a reading serif, generous enough to actually read. No rounded corners,
+   because ruled paper has none. A falsified claim is struck through the way a
+   corrected entry is in a real one — the one place a direction earns its keep
+   is where it makes the subject legible rather than just different.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-theme="ledger"] {
+  --bg:      #FBF9F4;
+  --surface: #FFFEFB;
+  --raised:  #FFFEFB;
+  --sunken:  #F2EEE4;
+  --rail:    #24211B;
+  --rail-fg: #9C9484;
+
+  --fg:   #1C1A17;
+  --fg-2: #423E36;
+  --fg-3: #6E685C;
+  --fg-4: #9C9484;
+
+  --line:   #E0DACB;
+  --line-2: #C8C0AC;
+
+  --accent:      #1C1A17;
+  --accent-fg:   #FBF9F4;
+  --accent-soft: #EFEADC;
+  --select: #EFE9DA;
+  --hover:  #F5F1E7;
+
+  /* Muted, because in a document the words carry the meaning and the colour
+     only marks it. A ledger's one loud colour is the correction. */
+  --asserted:  #7A5B12;
+  --believed:  #2A5A85;
+  --tested:    #245F45;
+  --falsified: #A32B14;
+  --uncertain: #6E685C;
+  --asserted-bg:  #F3EAD4;
+  --believed-bg:  #E1E9F0;
+  --tested-bg:    #DDE9E1;
+  --falsified-bg: #F4DED8;
+  --uncertain-bg: #EDE9DE;
+
+  color-scheme: light;
+}
+
+[data-theme="ledger"] body {
+  font-family: var(--font-ledger-serif), Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+
+/* Ruled, not boxed: a ledger's structure is lines across a page. */
+[data-theme="ledger"] :is(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-\[3px\], .rounded-\[4px\], .rounded-\[2px\]) {
+  border-radius: 0;
+}
+[data-theme="ledger"] .rounded-full { border-radius: 9999px; }
+
+/* Numbers and identifiers stay in mono — a serif's figures are for prose. */
+[data-theme="ledger"] :is(.tnum, .font-mono) {
+  font-family: var(--font-mono-stack), ui-monospace, monospace;
+  letter-spacing: -0.01em;
+}
+
+/* Status reads as a marginal note rather than a filled chip. */
+[data-theme="ledger"] [data-status-pill] {
+  background: transparent !important;
+  border-bottom: 2px solid currentColor;
+  border-radius: 0;
+  padding-inline: 0;
+  letter-spacing: 0.08em;
+}
+
+/* The correction. A claim the org stopped believing is struck through, which
+   is what a ledger does and what a chip colour only implies. */
+[data-theme="ledger"] [data-claim-status="falsified"] [data-claim-statement] {
+  text-decoration: line-through;
+  text-decoration-color: var(--falsified);
+  text-decoration-thickness: 1px;
+  color: var(--fg-3);
+}
+
+/* ─── Console — an instrument ───────────────────────────────────────────────
+   The other reading of the same product: not a document you read, a panel you
+   watch. Everything is monospaced, including prose — unusual, and the single
+   choice that makes it feel like an instrument rather than a dark palette.
+   Tight, hard-edged, one amber for the thing that wants you.
+   ────────────────────────────────────────────────────────────────────────── */
+[data-theme="console"] {
+  --bg:      #0B0E11;
+  --surface: #11161B;
+  --raised:  #161C22;
+  --sunken:  #080A0D;
+  --rail:    #080A0D;
+  --rail-fg: #6B7A85;
+
+  --fg:   #DCE4EA;
+  --fg-2: #A3AFB9;
+  --fg-3: #6B7A85;
+  --fg-4: #4A565F;
+
+  --line:   #1E262D;
+  --line-2: #2C3740;
+
+  /* Amber, and only for what wants you: the selected row, the focused control,
+     the primary action. Nothing decorative is this colour. */
+  --accent:      #E8A33D;
+  --accent-fg:   #0B0E11;
+  --accent-soft: #241C0F;
+  --select: #1A2128;
+  --hover:  #151B21;
+
+  /* Saturated, because on an instrument the state *is* the information. */
+  --asserted:  #E8A33D;
+  --believed:  #5AA9E6;
+  --tested:    #4ECB8B;
+  --falsified: #FF6B4A;
+  --uncertain: #6B7A85;
+  --asserted-bg:  #2A1F0C;
+  --believed-bg:  #0E2436;
+  --tested-bg:    #0C2A1D;
+  --falsified-bg: #2E120A;
+  --uncertain-bg: #171E24;
+
+  color-scheme: dark;
+}
+
+[data-theme="console"] body {
+  font-family: var(--font-console-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  font-variant-ligatures: none;
+}
+
+/* Hard edges. An instrument is not upholstered. */
+[data-theme="console"] :is(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-\[3px\], .rounded-\[4px\], .rounded-\[2px\]) {
+  border-radius: 2px;
+}
+/* Avatars stay round: a square one reads as a file icon, not a person. */
+[data-theme="console"] .rounded-full { border-radius: 9999px; }
+
+/* Micro-labels are set as labels — this is where uppercase belongs. */
+[data-theme="console"] [data-status-pill] {
+  letter-spacing: 0.1em;
+  border-radius: 2px;
+}
+
+/* Headings do not need to shout when everything is already mono. */
+[data-theme="console"] :is(h1, h2, h3) {
+  letter-spacing: 0.01em;
+  font-weight: 600;
+}
+
 /* ─── Base ────────────────────────────────────────────────────────────────── */
 
 * { box-sizing: border-box; border-color: var(--line); }
@@ -230,14 +399,18 @@ body {
 
 /* The theme menu marks its active option from the root attribute, so React
    holds no state for it and there is nothing to hydrate. */
-[data-theme="ink"]   .theme-option[data-theme-option="ink"]   .theme-dot,
-[data-theme="paper"] .theme-option[data-theme-option="paper"] .theme-dot,
-[data-theme="warm"]  .theme-option[data-theme-option="warm"]  .theme-dot {
+[data-theme="ink"]     .theme-option[data-theme-option="ink"]     .theme-dot,
+[data-theme="paper"]   .theme-option[data-theme-option="paper"]   .theme-dot,
+[data-theme="warm"]    .theme-option[data-theme-option="warm"]    .theme-dot,
+[data-theme="ledger"]  .theme-option[data-theme-option="ledger"]  .theme-dot,
+[data-theme="console"] .theme-option[data-theme-option="console"] .theme-dot {
   background: var(--fg);
   border-color: var(--fg);
 }
-[data-theme="ink"]   .theme-option[data-theme-option="ink"]   span,
-[data-theme="paper"] .theme-option[data-theme-option="paper"] span,
-[data-theme="warm"]  .theme-option[data-theme-option="warm"]  span {
+[data-theme="ink"]     .theme-option[data-theme-option="ink"]     span,
+[data-theme="paper"]   .theme-option[data-theme-option="paper"]   span,
+[data-theme="warm"]    .theme-option[data-theme-option="warm"]    span,
+[data-theme="ledger"]  .theme-option[data-theme-option="ledger"]  span,
+[data-theme="console"] .theme-option[data-theme-option="console"] span {
   color: var(--fg);
 }

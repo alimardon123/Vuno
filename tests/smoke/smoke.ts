@@ -475,7 +475,13 @@ async function themes(browser: Browser) {
   const page = await ctx.newPage();
   await open(page, '/activity');
 
-  for (const [label, id] of [['Ink', 'ink'], ['Paper', 'paper'], ['Warm', 'warm']] as const) {
+  for (const [label, id] of [
+    ['Ink', 'ink'],
+    ['Paper', 'paper'],
+    ['Warm', 'warm'],
+    ['Ledger', 'ledger'],
+    ['Console', 'console'],
+  ] as const) {
     await page.getByRole('button', { name: 'Theme' }).click();
     await page.getByRole('menuitem', { name: new RegExp(label) }).click();
     await page.waitForTimeout(200);
@@ -487,6 +493,51 @@ async function themes(browser: Browser) {
     check(bg !== 'rgba(0, 0, 0, 0)' && bg !== '', `${label} paints a background`, bg);
   }
 
+  // A direction is not a palette: it changes the type and the shape language
+  // too. Without this the two of them are two more colourways.
+  const shape = async () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.rounded-xl') ?? document.querySelector('.rounded-md');
+      return {
+        font: getComputedStyle(document.body).fontFamily.split(',')[0].replace(/"/g, ''),
+        radius: el ? getComputedStyle(el).borderRadius : 'n/a',
+      };
+    });
+
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'ink'));
+  await page.waitForTimeout(300);
+  const ink = await shape();
+
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'ledger'));
+  await page.waitForTimeout(400);
+  const ledger = await shape();
+  check(ledger.font !== ink.font, 'Ledger sets its own type', `${ledger.font} vs ${ink.font}`);
+  check(ledger.radius === '0px', 'Ledger is ruled, not boxed', ledger.radius);
+
+  // The one place the direction earns its keep: a claim the org stopped
+  // believing is struck through, the way a corrected entry is in a real ledger.
+  await open(page, '/ledger');
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'ledger'));
+  await page.waitForTimeout(400);
+  const struck = await page.evaluate(() => {
+    const el = document.querySelector('[data-claim-status="falsified"] [data-claim-statement]');
+    return el ? getComputedStyle(el).textDecorationLine : null;
+  });
+  if (struck !== null) {
+    check(struck.includes('line-through'), 'Ledger strikes a falsified claim through', struck);
+  }
+
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'console'));
+  await page.waitForTimeout(400);
+  const console_ = await shape();
+  check(console_.font !== ink.font && console_.font !== ledger.font, 'Console sets its own type', console_.font);
+  check(console_.radius !== ink.radius, 'Console is hard-edged', console_.radius);
+
+  // Through the menu, not by setting the attribute: only choosing one stores
+  // it, and storing it is what this check is about.
+  await page.getByRole('button', { name: 'Theme' }).click();
+  await page.getByRole('menuitem', { name: /Warm/ }).click();
+  await page.waitForTimeout(300);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('nav[aria-label="Sections"]').waitFor({ timeout: 15_000 });
   check(

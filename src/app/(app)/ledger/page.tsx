@@ -56,9 +56,18 @@ export default async function LedgerPage() {
             try { evidence = JSON.parse(c.evidenceIds || '[]') as string[]; } catch { evidence = []; }
 
             return (
-              <li key={c.id} id={`claim-${c.id}`} className="scroll-mt-20 px-6 py-3 transition-colors hover:bg-[var(--hover)]">
+              <li
+                key={c.id}
+                id={`claim-${c.id}`}
+                // The Ledger direction strikes a falsified claim through, the
+                // way a corrected entry is in a real one (globals.css).
+                data-claim-status={c.status}
+                className="scroll-mt-20 px-6 py-3 transition-colors hover:bg-[var(--hover)]"
+              >
                 <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
-                  <p className="min-w-0 flex-1 text-[13px] font-medium leading-[1.45] text-[var(--fg)]">{c.statement}</p>
+                  <p data-claim-statement className="min-w-0 flex-1 text-[13px] font-medium leading-[1.45] text-[var(--fg)]">
+                    {c.statement}
+                  </p>
                   <StatusPill status={c.status as ClaimStatus} />
                 </div>
 

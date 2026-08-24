@@ -247,3 +247,35 @@ Three capabilities added, zero destinations added.
 
 That is the test every future feature should pass: **if it needs a new rail tab, it
 probably belongs inside one that already exists.**
+
+
+---
+
+## Directions
+
+Ink, Paper and Warm are one design language in three colourways: same type,
+same density, same shapes. Two directions sit beside them, and they are
+different arguments about what the product is — which is why they change the
+type, the shape language and the density rather than the colours.
+
+**Ledger — a book of record.** The org keeps a ledger, so this is what a ledger
+looks like: ruled paper, set in a reading serif, generous enough to read.
+No rounded corners, because ruled paper has none. Status is a marginal note
+rather than a filled chip. The move that earns it: a falsified claim is struck
+through the way a corrected entry is in a real one — a direction is worth
+having when it makes the subject more legible, not just different.
+
+**Console — an instrument.** The same product read as a panel you watch rather
+than a document you read. Everything is monospaced, including prose, which is
+the single choice that makes it feel like an instrument rather than a dark
+palette. Tight, hard-edged, one amber for whatever wants you; nothing
+decorative is that colour.
+
+Both are written as a skin in `globals.css` rather than a second set of
+components, and nothing in a component knows which direction is on. Tailwind v4
+inlines `border-radius: 6px` into `.rounded-md` rather than referencing a
+variable, so a direction that changes shape has to say so about the utilities;
+that is contained to the one file. The two hooks that are not utilities —
+`data-status-pill` and `data-claim-status` / `data-claim-statement` — exist
+because "how status is set" and "a claim the org stopped believing" are
+semantic, and a direction should be able to say something about them.

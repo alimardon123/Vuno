@@ -1,10 +1,28 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { IBM_Plex_Mono, Inter, JetBrains_Mono, Source_Serif_4 } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'], display: 'swap' });
 const mono = JetBrains_Mono({ variable: '--font-mono-stack', subsets: ['latin'], display: 'swap' });
+
+// The two directions carry their own type — that is most of what makes them
+// directions rather than palettes. `preload: false` because a viewer on Ink
+// should not pay to download a serif they will never see; the browser fetches
+// these only when a rule under the direction's selector actually asks for them.
+const ledgerSerif = Source_Serif_4({
+  variable: '--font-ledger-serif',
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+});
+const consoleMono = IBM_Plex_Mono({
+  variable: '--font-console-mono',
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  display: 'swap',
+  preload: false,
+});
 
 export const metadata: Metadata = {
   title: 'Vuno',
@@ -26,7 +44,7 @@ const THEME_BOOTSTRAP = `
 (function () {
   try {
     var t = localStorage.getItem('vuno-theme');
-    if (t === 'ink' || t === 'paper' || t === 'warm') {
+    if (t === 'ink' || t === 'paper' || t === 'warm' || t === 'ledger' || t === 'console') {
       document.documentElement.setAttribute('data-theme', t);
       return;
     }
@@ -44,7 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
-      <body className={`${inter.variable} ${mono.variable}`}>
+      <body className={`${inter.variable} ${mono.variable} ${ledgerSerif.variable} ${consoleMono.variable}`}>
         {children}
         <Toaster />
       </body>

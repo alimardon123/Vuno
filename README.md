@@ -53,6 +53,14 @@ Holding one changes what that agent is told on every turn.
 spend — all derived from the spine, and no rate at all for a member with fewer
 than four settled outcomes, because 1/1 is not a track record.
 
+**Two design directions, not five palettes.** Ink, Paper and Warm are one design
+language in three colourways. *Ledger* and *Console* are different arguments
+about what this is: Ledger is a book of record — a reading serif, ruled lines,
+no rounded corners, and a falsified claim struck through the way a corrected
+entry is. Console is an instrument — everything monospaced including prose,
+hard edges, one amber for whatever wants you. Pick one from the theme menu in
+the rail.
+
 ---
 
 ## Giving the agents a model
@@ -131,7 +139,7 @@ what is left and why.
 | Next.js 16 (App Router), React 19, TypeScript strict | |
 | Prisma + SQLite in WAL mode | one file, no server to run |
 | Bun | runtime, test runner, package manager |
-| Tailwind v4 | three themes, all designed rather than inverted |
+| Tailwind v4 | five looks: three colourways and two directions |
 
 Architecture decisions are in `docs/adr/`. Read 0004 (the event spine), 0005
 (the ledger), 0008 (one writer) and 0009 (one member identity) before changing

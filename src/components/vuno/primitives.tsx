@@ -156,6 +156,10 @@ export function StatusPill({
 }) {
   return (
     <span
+      // A hook for the directions: Ledger sets status as a marginal note
+      // rather than a filled chip, and it needs something to key off that is
+      // not a utility class (globals.css).
+      data-status-pill={status}
       className={cn(
         'inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5',
         'text-[10px] font-bold uppercase tracking-[0.055em] leading-[1.4]',
