@@ -31,6 +31,31 @@ each re-derive "is this a channel, a DM or a group chat" from `isDm` plus a null
 `teamId`, with different logic, which is why the Channels panel currently lists
 `# Aris` and `# Bob`.
 
+## Search — above the seven, not among them
+
+Search would have been the eighth tab, and the rule at the top of this document says
+that is the moment to look harder. It failed the test in an unusual way: it is not that
+search belongs *inside* one of the seven, but that it belongs to all of them at once.
+Every other destination is a place you go and stay. Search is the way into the other
+seven — you type, you land in a conversation, and the search page is behind you.
+
+So it is a magnifier at the top of the rail with a hairline under it, separated from the
+group rather than added to it, plus **⌘K** from anywhere. The surface itself is
+`/search?q=…`: one field, results underneath, no second pane, because on this page the
+results *are* the list. It renders on the server, so a search you send somebody opens
+with its results already there.
+
+Two rules it inherits rather than invents:
+
+- **The visibility rule is the one that already exists.** The index ranks and knows
+  nothing about who is asking; `visibleTo()` — the same fragment the conversation window
+  and the sidebar preview use — decides what survives. Writing that rule a second time
+  in raw SQL would have been faster and is exactly how the sidebar-preview leak
+  happened, on the one surface that reads every conversation in the org at once.
+- **Deleted means gone.** Everywhere else "deleted" means the row stays and the body
+  stops being served. Here a result *is* the body, so a redaction removes the message
+  from the index outright.
+
 ## The seven rail tabs
 
 ### Activity — *new*

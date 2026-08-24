@@ -76,6 +76,19 @@ person wherever they are in the app. A call in a channel rings nobody — it is 
 room that is open, and you join it if it concerns you. Six is the cap either
 way: a mesh has every browser encoding one stream per other participant.
 
+**Search, and what it will not tell you.** ⌘K from anywhere, or `/search?q=`,
+which is a real URL that renders its results on the server — a link to a search
+works with JavaScript switched off. The index is SQLite's own FTS5 over message
+bodies, kept true by database triggers rather than application code. Ranking and
+permission are two separate phases on purpose: the index ranks and knows nothing
+about who is asking, and the same visibility rule the conversation window uses
+then decides what survives. So a DM you are not in, a private thought, a team
+message when you are not on that team, and anything anyone deleted are all
+absent — a search result *is* the body, which makes this the surface where that
+has to be true rather than nearly true. A distinctive word takes 0.2 ms across
+fifty thousand messages; the whole call, including naming the room each hit came
+from, takes ten.
+
 **Continuous review.** Claim survival, objection precision, escalation rate,
 spend — all derived from the spine, and no rate at all for a member with fewer
 than four settled outcomes, because 1/1 is not a track record.
