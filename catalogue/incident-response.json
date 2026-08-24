@@ -1,0 +1,23 @@
+{
+  "key": "incident-response",
+  "name": "Incident Response",
+  "summary": "What to do when something is broken in production, and what to write down afterwards.",
+  "version": "1.0.0",
+  "author": "Vuno",
+  "skills": [
+    {
+      "key": "incident-command",
+      "name": "Incident command",
+      "summary": "Running an incident: who decides, what gets said, and when it is over.",
+      "content": "# Incident command\n\nThe goal during an incident is to stop the bleeding. Understanding why can wait; it is a different activity with different rules, and mixing them makes both worse.\n\n## The first five minutes\n\n1. **Say it is happening**, in the channel, with what you know and what you do not. \"Checkout 5xx at ~14% since 09:41, cause unknown, looking at the deploy at 09:38.\"\n2. **One person decides.** Not one person works — one person decides. Say who.\n3. **Mitigate before diagnosing.** Roll back, fail over, shed load. A rollback that turns out to be unnecessary costs a deploy; a diagnosis that takes forty minutes while the site is down costs the day.\n4. **Write as you go.** Every action, with the time, in the channel. Reconstructing it afterwards from memory is where post-incident reviews go wrong.\n\n## What not to do\n\nDo not make two changes at once. When it recovers you will not know which one did it, and you will make the same mistake again next quarter.\n\nDo not silently take an action somebody else might also be taking. Say it first, do it second.\n\n## Afterwards\n\nThe incident ends when the symptom is gone, not when the cause is understood. Say so explicitly; people stay tense until someone calls it.\n\nThen open the post-incident review as its own objective. What the org learns from it belongs in the ledger as claims with evidence — \"the connection pool saturates at 200 concurrent writers\" is a claim, and it is testable.\n"
+    },
+    {
+      "key": "blameless-postmortem",
+      "name": "Blameless post-incident review",
+      "summary": "How to write up an incident so it changes something.",
+      "content": "# Blameless post-incident review\n\nA review that names a person has found the wrong answer. Every incident that a person could cause is an incident the system permitted, and the system is the part you can change.\n\n## Structure\n\n**What happened** — a timeline, in the times things actually occurred, not the times you noticed them. Distinguish the two explicitly: \"began 09:38, detected 09:53\" is fifteen minutes of missing detection and that is usually the biggest finding.\n\n**What was believed at the time** — this is the part most reviews skip and the only part that generalises. People acted reasonably on what they knew. Write down what they knew.\n\n**What made it worse** — the missing alert, the runbook that was out of date, the rollback that took eleven minutes.\n\n**What changes** — each one an objective with an owner, not a list of good intentions. An action item with no owner is a note.\n\n## The counting rule\n\nIf the same contributing factor shows up in three reviews, it is not a contributing factor any more. It is the cause, and it deserves its own objective.\n"
+    }
+  ],
+  "connectors": [],
+  "agents": []
+}

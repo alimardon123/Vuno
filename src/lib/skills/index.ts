@@ -68,6 +68,8 @@ export async function createSkill(input: {
   name: string;
   summary: string;
   content: string;
+  /** Set when a plugin installed this, so uninstalling it takes this back. */
+  pluginId?: string | null;
 }): Promise<{ id: string }> {
   const key = input.key.trim().toLowerCase();
   if (!KEY.test(key)) {
@@ -90,6 +92,8 @@ export async function createSkill(input: {
       name: input.name.trim(),
       summary: input.summary.trim(),
       content: input.content.trim(),
+      source: input.pluginId ? 'plugin' : 'local',
+      pluginId: input.pluginId ?? null,
     },
     select: { id: true },
   });

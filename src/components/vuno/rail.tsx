@@ -2,9 +2,13 @@
 
 // Vuno — the app rail.
 //
-// Six destinations, and the test every future feature has to pass: if it needs a
-// seventh, it probably belongs inside one that already exists
+// Seven destinations, and the test every future feature has to pass: if it
+// needs an eighth, it probably belongs inside one that already exists
 // (docs/IA-NAVIGATION.md).
+//
+// Extensions earned the seventh. It was a tab inside Members, which put "what
+// can this org do" inside "who is in this org" — two different questions, and
+// people looking for the first one had to already know to look in the second.
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,6 +22,7 @@ const TABS = [
   { href: '/channels', label: 'Channels', hint: 'Team and project channels', icon: HashIcon },
   { href: '/work', label: 'Work', hint: 'Objectives, products, experiments', icon: WorkIcon },
   { href: '/members', label: 'Members', hint: 'People and agents', icon: MembersIcon },
+  { href: '/extensions', label: 'Extensions', hint: 'Skills, plugins and connectors', icon: ExtensionsIcon },
   { href: '/ledger', label: 'Ledger', hint: 'What the org believes', icon: LedgerIcon },
 ] as const;
 
@@ -83,3 +88,6 @@ function HashIcon() { return <svg {...S}><path d="M4 9h16M4 15h16M10 3 8 21M16 3
 function WorkIcon() { return <svg {...S}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /></svg>; }
 function MembersIcon() { return <svg {...S}><path d="M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20" /><circle cx="9" cy="7" r="3.2" /><path d="M22 20v-1.5a4 4 0 0 0-3-3.85" /><path d="M16 3.6a4 4 0 0 1 0 7.75" /></svg>; }
 function LedgerIcon() { return <svg {...S}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" /><path d="M9 8h7M9 12h5" /></svg>; }
+// A block with a tab that keys into something else — the shape every extension
+// system has used since the word meant a physical card.
+function ExtensionsIcon() { return <svg {...S}><path d="M9 4.5a2 2 0 1 1 4 0V6h3.5A1.5 1.5 0 0 1 18 7.5V11h1.5a2 2 0 1 1 0 4H18v3.5a1.5 1.5 0 0 1-1.5 1.5H13v-1.5a2 2 0 1 0-4 0V20H5.5A1.5 1.5 0 0 1 4 18.5V15h1.5a2 2 0 1 0 0-4H4V7.5A1.5 1.5 0 0 1 5.5 6H9z" /></svg>; }

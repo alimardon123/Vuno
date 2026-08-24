@@ -391,27 +391,106 @@ async function roster(browser: Browser) {
   // Retired, not deleted: they authored events and may carry a claim.
   check(after.includes('Smoke Agent'), 'a retired member stays on the roster');
 
-  // The Library and Review live inside Members rather than as rail tabs, and
-  // both put their state in the URL.
-  await open(page, '/members?view=library');
-  const library = await page.locator('main').innerText();
-  check(library.includes('SKILL.md') || library.toLowerCase().includes('skills'), 'the Library is reachable by URL');
+  // Review lives inside Members rather than as a rail tab, and puts its state
+  // in the URL.
+  await open(page, '/members?view=review');
+  check(
+    (await page.locator('main').innerText()).toLowerCase().includes('escalation'),
+    'Review is reachable by URL',
+  );
+  await ctx.close();
+}
+
+/** Take a plugin out if it is installed, so the round trip starts from nothing. */
+async function removeIfInstalled(page: Page, name: string): Promise<void> {
+  await open(page, '/extensions?tab=plugins');
+  await page.locator('main li').first().waitFor({ timeout: 15_000 });
+
+  // "Remove Incident Response", not "Remove": the row's button carries an
+  // aria-label naming what it removes, because "Remove" alone in a list of rows
+  // tells a screen reader nothing. The dialog's button is the bare one.
+  const remove = page.locator('li').getByRole('button', { name: new RegExp(`^Remove ${name}$`) });
+  if ((await remove.count()) === 0) return;
+
+  await remove.first().click();
+  // Confirm inside the dialog, not by name alone: the row's own Remove button
+  // has the same label, and clicking that one just reopens what is already open.
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor({ timeout: 10_000 });
+  await dialog.getByRole('button', { name: /^Remove$/ }).click();
+  await dialog.waitFor({ state: 'detached', timeout: 15_000 });
+  await page.waitForTimeout(500);
+}
+
+// ── Extensions: skills, plugins, connectors ─────────────────────────────────
+// The check that matters is the round trip. A plugin screen that lists things
+// and installs nothing is the failure this whole section guards against, so the
+// test installs one, watches the Skills count go up by exactly what the plugin
+// carries, and takes it back out again.
+async function extensions(browser: Browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState });
+  const page = await ctx.newPage();
+
+  await open(page, '/extensions');
+  const skillsText = await page.locator('main').innerText();
+  check(
+    skillsText.includes('Skills') && skillsText.includes('Connectors') && skillsText.includes('Plugins'),
+    'Extensions has all three sections',
+  );
 
   const read = page.getByRole('button', { name: 'Read' }).first();
   if ((await read.count()) > 0) {
     await read.click();
     await page.waitForTimeout(400);
     const shown = await page.locator('pre').first().innerText();
-    // What the Library shows has to be what the agent is told — there is no
+    // What the screen shows has to be what the agent is told — there is no
     // second, prettier version.
     check(shown.trim().length > 40, 'a skill shows the instructions it carries', `${shown.length} chars`);
   }
 
-  await open(page, '/members?view=review');
+  // How many skills before. The count lives on the tab.
+  const skillCount = async () => {
+    await open(page, '/extensions');
+    const label = await page.locator('nav[aria-label="Extensions view"] a').first().innerText();
+    return Number(label.replace(/[^0-9]/g, ''));
+  };
+  await open(page, '/extensions?tab=plugins');
   check(
-    (await page.locator('main').innerText()).toLowerCase().includes('escalation'),
-    'Review is reachable by URL',
+    (await page.locator('main').innerText()).includes('Incident Response'),
+    'the bundled catalogue is listed',
   );
+
+  // Chosen because it carries no agents: hiring one is an event on the spine
+  // and would not be undone by removing the plugin, so the test could not run
+  // twice against the same database.
+  //
+  // A previous run that died between install and remove leaves it here. Clear
+  // that first — a test that only passes on a clean database is a test people
+  // learn to ignore.
+  await removeIfInstalled(page, 'Incident Response');
+  const before = await skillCount();
+
+  await open(page, '/extensions?tab=plugins');
+  const install = page.locator('li').filter({ hasText: 'Incident Response' }).getByRole('button', { name: /^Install$/ });
+  await install.first().click();
+  await page.waitForTimeout(3_000);
+
+  const after = await skillCount();
+  check(after === before + 2, 'installing a plugin adds the skills it carries', `${before} → ${after}`);
+
+  await open(page, '/extensions?tab=plugins');
+  check(
+    (await page.locator('main').innerText()).includes('Blameless') ||
+      (await page.locator('li').filter({ hasText: 'Incident Response' }).first().innerText()).includes('in this org'),
+    'an installed plugin says what it put in the org',
+  );
+
+  // And back out again, so the run leaves the database as it found it.
+  await removeIfInstalled(page, 'Incident Response');
+
+  const restored = await skillCount();
+  check(restored === before, 'removing a plugin takes back what it installed', `${before} → ${restored}`);
+
   await ctx.close();
 }
 
@@ -611,6 +690,7 @@ try {
   await liveUpdates(browser);
   await phone(browser);
   await roster(browser);
+  await extensions(browser);
   await keyboard(browser);
   await agentEdge(browser);
   await themes(browser);

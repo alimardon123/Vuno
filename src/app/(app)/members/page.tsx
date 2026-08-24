@@ -7,9 +7,6 @@ import { listMembers, roleLabel } from '@/lib/members';
 import { configuredHarnesses } from '@/lib/agents/registry';
 import { reviewOrg } from '@/lib/review/metrics';
 import { Review } from '@/components/vuno/review';
-import { Library } from '@/components/vuno/library';
-import { listSkills } from '@/lib/skills';
-import { listConnections } from '@/lib/connections';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Empty } from '@/components/vuno/primitives';
@@ -22,10 +19,12 @@ export default async function MembersPage({
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
-  // A sub-view rather than a seventh rail tab (docs/IA-NAVIGATION.md), and in
-  // the URL, so a review is a link someone can send.
+  // A sub-view rather than a rail tab of its own, and in the URL, so a review
+  // is a link someone can send. Skills and connectors used to be a third tab
+  // here; they moved to Extensions, which answers "what can this org do" rather
+  // than "who is in it" (docs/IA-NAVIGATION.md).
   const requested = (await searchParams).view;
-  const view = requested === 'review' || requested === 'library' ? requested : 'roster';
+  const view = requested === 'review' ? requested : 'roster';
   const org = await db.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
   if (!org) {
     return <main className="flex flex-1 items-center justify-center"><Empty title="No organisation yet" hint="Run bun run setup." /></main>;
@@ -86,7 +85,7 @@ export default async function MembersPage({
             One roster. A person and an agent are the same kind of member — same teams, same workflow, same rows.
           </p>
           <nav className="mt-2 flex gap-1" aria-label="Members view">
-            {([['roster', 'Roster'], ['library', 'Library'], ['review', 'Review']] as const).map(([id, label]) => (
+            {([['roster', 'Roster'], ['review', 'Review']] as const).map(([id, label]) => (
               <Link
                 key={id}
                 href={id === 'roster' ? '/members' : `/members?view=${id}`}
@@ -109,14 +108,6 @@ export default async function MembersPage({
       <div className="mx-auto w-full max-w-[70rem] px-6 pb-8 pt-3">
         {view === 'review' ? (
           <Review review={await reviewOrg(org.id)} />
-        ) : view === 'library' ? (
-          <Library
-            skills={await listSkills(org.id)}
-            connections={await listConnections(org.id)}
-            members={roster
-              .filter((m) => m.status === 'active')
-              .map((m) => ({ id: m.id, displayName: m.displayName, kind: m.kind }))}
-          />
         ) : (
           <Roster members={roster} teams={teams} runnable={configuredHarnesses()} />
         )}

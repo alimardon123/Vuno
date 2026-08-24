@@ -150,6 +150,7 @@ model Organization {
   gates       Gate[]
   skills      Skill[]
   connections Connection[]
+  plugins     Plugin[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -244,12 +245,17 @@ model Connection {
   lastError   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  /// The plugin that installed this, or null for one added by hand. Uninstalling
+  /// a plugin removes what it created and nothing else.
+  pluginId    String?
 
   org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plugin      Plugin?            @relation(fields: [pluginId], references: [id], onDelete: SetNull)
   holders     MemberConnection[]
 
   @@unique([orgId, key])
   @@index([orgId])
+  @@index([pluginId])
 }
 
 // Who may call a connection. A person holds one the same way an agent does —
@@ -290,12 +296,17 @@ model Skill {
   version     String   @default("1.0.0")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  /// The plugin that installed this, or null for one written here. Uninstalling
+  /// a plugin removes what it created and nothing else.
+  pluginId    String?
 
   org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plugin      Plugin?       @relation(fields: [pluginId], references: [id], onDelete: SetNull)
   holders     MemberSkill[]
 
   @@unique([orgId, key])
   @@index([orgId])
+  @@index([pluginId])
 }
 
 // Who holds a skill. A person can hold one too — it is a shared reference, and
@@ -313,6 +324,43 @@ model MemberSkill {
 
   @@unique([memberId, skillId])
   @@index([skillId])
+}
+
+// A plugin: skills, connectors and agents that arrive together.
+//
+// The unit exists because the three of them are useless apart. "How this org
+// runs a benchmark" is a skill that reads a metric from a connector and is held
+// by an agent hired to do it; installing those one at a time and wiring them up
+// by hand is the work the package is meant to remove.
+//
+// `manifest` is stored verbatim rather than reconstructed from what was
+// created. An uninstall has to know exactly what this plugin brought — not what
+// currently happens to match its keys, which would take a skill someone wrote
+// by hand and happened to name the same thing.
+model Plugin {
+  id          String   @id @default(cuid())
+  tenantId    String
+  orgId       String
+  /// Stable id. Lowercase, dashed. Unique per org — installing twice is an update.
+  key         String
+  name        String
+  summary     String
+  version     String
+  author      String?
+  /// 'catalogue' for one that shipped with this install, 'added' for one
+  /// supplied here. Nothing else claims a provenance it cannot support.
+  source      String   @default("catalogue")
+  /// The manifest exactly as supplied.
+  manifest    String
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  skills      Skill[]
+  connections Connection[]
+
+  @@unique([orgId, key])
+  @@index([orgId])
 }
 
 model Channel {

@@ -18,9 +18,10 @@ Then open http://localhost:3000. Nothing else to configure to look around.
 
 ## What is actually here
 
-**Six places, and nothing hidden behind a seventh.**
-Activity · Chats · Channels · Work · Members · Ledger. Every surface has a URL,
-including a point in a long conversation and a member review.
+**Seven places, and nothing hidden behind an eighth.**
+Activity · Chats · Channels · Work · Members · Extensions · Ledger. Every
+surface has a URL, including a point in a long conversation and a member
+review.
 
 **An append-only event spine.** Every message, objection, benchmark and role
 change is an event with a monotonic sequence. The chat you read is a projection
@@ -46,8 +47,18 @@ before anything reaches the spine, and what it cost is recorded. With no model
 configured it fails on the first attempt saying which environment variable to
 set — it never falls back to something that sounds like an answer.
 
-**A skill library.** Instructions an agent holds, in the `SKILL.md` convention.
-Holding one changes what that agent is told on every turn.
+**Extensions — skills, plugins and connectors.** The same three sections Claude
+Code has, because they are the three real kinds of thing. A *skill* is
+instructions in the `SKILL.md` convention, and holding one changes what that
+member is told on their next turn. A *connector* is an MCP server the org has
+added, and holding one **is** the permission to call it — there is no second
+permission list to drift out of step. A *plugin* installs both and hires
+whoever uses them, which is what makes the other two useful: a skill nobody
+holds and a connector nobody may call are equally inert.
+
+Three plugins ship in `catalogue/`. Anything else goes in as a manifest, in the
+same format the catalogue files use. `bun run mcp:example` starts an MCP server
+to point a connector at, for anyone who has not got one yet.
 
 **Continuous review.** Claim survival, objection precision, escalation rate,
 spend — all derived from the spine, and no rate at all for a member with fewer
@@ -127,9 +138,7 @@ password hashes and sessions are deliberately left out of it.
 `bun run start` still binds 127.0.0.1 and warns if you point it elsewhere.
 Authentication is not the same as being ready for the open internet. Writes are
 limited to sixty a minute per member, but the counters live in one process, so a
-second server would not share them. `Event.visibility` is written and never
-read: a conversation you are not in is closed to you, and everything inside a
-conversation you *are* in is open. `docs/REVIEW-2026-08-23.md` lists what is
+second server would not share them. `docs/REVIEW-2026-08-23.md` lists what is
 left and why.
 
 ---
@@ -146,7 +155,7 @@ left and why.
 Architecture decisions are in `docs/adr/`. Read 0004 (the event spine), 0005
 (the ledger), 0008 (one writer) and 0009 (one member identity) before changing
 the shape of anything. `docs/IA-NAVIGATION.md` says where every surface belongs
-and why there is no seventh tab. `docs/REVIEW-2026-08-23.md` is the standing
+and why there are seven tabs and not nine. `docs/REVIEW-2026-08-23.md` is the standing
 account of what is broken, what was removed and why.
 
 `CLAUDE.md` is how work is done here: research before writing, evidence before

@@ -31,7 +31,7 @@ each re-derive "is this a channel, a DM or a group chat" from `isDm` plus a null
 `teamId`, with different logic, which is why the Channels panel currently lists
 `# Aris` and `# Bob`.
 
-## The six rail tabs
+## The seven rail tabs
 
 ### Activity — *new*
 The screen you open first. What needs you, ordered by urgency: decisions escalated to
@@ -146,15 +146,31 @@ A capability library, a Multica-style board, and a runtime panel. Each is a real
 Each would also be a seventh, eighth and ninth rail destination — which is exactly how a
 communication app stops being one. **All three fit without adding a tab.**
 
-### Skills, connections and runtimes → one Library, inside Members
+### Skills, connectors and plugins → Extensions
 
 Multica gives Agents, Runtimes and Skills three separate nav items. That is an
 implementation detail promoted to navigation: all three answer the same question, *what
 is this agent made of*.
 
-One **Library** section inside Members holds installed skills, MCP connections, runtimes
-and agent packages, each row showing who uses it. Assignment happens on the agent's own
-profile — giving Aris database access is a staffing decision, not a setting.
+This was built first as a **Library** tab inside Members, and that was wrong in a way
+that took using it to see. Members answers *who is in this org*; skills and connectors
+answer *what can this org do*. They are different questions, and burying the second
+inside the first meant you had to already know it was there to find it — the failure the
+rule below is meant to prevent, arrived at from the other direction.
+
+So **Extensions** is the seventh destination, with the three sections people already
+know the words for, in the order Claude Code uses:
+
+- **Skills** — instructions in the `SKILL.md` convention. Holding one is not a setting:
+  the text is put in front of the member on their next turn.
+- **Plugins** — a package that installs skills and connectors together and hires whoever
+  uses them. The unit that makes the other two useful, since a skill nobody holds and a
+  connector nobody may call are both inert.
+- **Connectors** — MCP servers this org has added. Holding one *is* the permission to
+  call it; there is no second permission list to drift out of step.
+
+Assignment stays where it was: giving Aris database access is a staffing decision, and
+the row says who holds it.
 
 **Do not invent formats.** Adopt **MCP** for tools and connections and the **`SKILL.md`**
 convention for skills. Both are what the harnesses we want to plug in already speak —
@@ -242,11 +258,12 @@ is already next to the name, in a form both kinds of member share.
 
 ### Net effect
 
-The rail stays at six: **Activity · Chats · Channels · Work · Members · Ledger**.
-Three capabilities added, zero destinations added.
+The rail is seven: **Activity · Chats · Channels · Work · Members · Extensions · Ledger**.
 
 That is the test every future feature should pass: **if it needs a new rail tab, it
-probably belongs inside one that already exists.**
+probably belongs inside one that already exists.** Extensions is the one thing so far
+that has passed it rather than failed it — a destination is justified when it answers a
+question none of the others does, and "what can this org do" is not "who is in it".
 
 
 ---

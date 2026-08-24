@@ -87,6 +87,8 @@ export async function createConnection(input: {
   summary: string;
   url: string;
   authEnvVar?: string | null;
+  /** Set when a plugin installed this, so uninstalling it takes this back. */
+  pluginId?: string | null;
 }): Promise<{ id: string }> {
   const key = input.key.trim().toLowerCase();
   if (!KEY.test(key)) {
@@ -136,6 +138,7 @@ export async function createConnection(input: {
       summary: input.summary.trim(),
       url,
       authEnvVar,
+      pluginId: input.pluginId ?? null,
     },
     select: { id: true },
   });

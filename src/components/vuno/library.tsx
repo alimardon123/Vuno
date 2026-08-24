@@ -1,10 +1,10 @@
 'use client';
 
-// The Library: what an agent is made of.
+// Skills and connectors: what a member is made of.
 //
-// Multica gives Agents, Runtimes and Skills three separate nav items. That is
-// an implementation detail promoted to navigation — all three answer the same
-// question, so this is one section inside Members (docs/IA-NAVIGATION.md).
+// Two of the three sections under Extensions, and the same component because
+// they are the same shape — a row, who holds it, and what holding it changes.
+// The third, Plugins, installs both at once (`plugins.tsx`).
 //
 // Holding a skill is not a setting. `src/lib/agents/turn.ts` reads it on every
 // turn and puts it in the agent's instructions, so giving Peri the benchmark
@@ -30,10 +30,13 @@ export function Library({
   skills,
   connections,
   members,
+  tab,
 }: {
   skills: SkillRow[];
   connections: ConnectionRow[];
   members: LibraryMember[];
+  /** Which half of "what a member is made of" this view is showing. */
+  tab: 'skills' | 'connectors';
 }) {
   const [open, setOpen] = useState<
     | { kind: 'new' }
@@ -59,16 +62,21 @@ export function Library({
     <>
       <div className="mb-2 flex items-center gap-2">
         <p className="max-w-[62ch] text-[11.5px] leading-[1.5] text-[var(--fg-3)]">
-          What a member is made of: skills are what they know, connections are what they can reach.
-          Both are staffing decisions rather than settings — holding one changes what that member does
-          on their next turn.
+          {tab === 'skills'
+            ? 'What a member knows. A skill is instructions in the SKILL.md convention, and holding one is not a setting — the text below is put in front of the member on their next turn.'
+            : 'What a member can reach. A connector is an MCP server this org has added, and holding one is the permission to call it — there is no second permission list.'}
         </p>
         <div className="ml-auto flex shrink-0 gap-1">
-          <Button onClick={() => setOpen({ kind: 'connect' })}>Add a connection</Button>
-          <Button variant="primary" onClick={() => setOpen({ kind: 'new' })}>Write a skill</Button>
+          {tab === 'skills' ? (
+            <Button variant="primary" onClick={() => setOpen({ kind: 'new' })}>Write a skill</Button>
+          ) : (
+            <Button variant="primary" onClick={() => setOpen({ kind: 'connect' })}>Add a connector</Button>
+          )}
         </div>
       </div>
 
+      {tab === 'skills' ? (
+        <>
       <SectionLabel count={skills.length}>Skills</SectionLabel>
       <ul className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
         {skills.map((s) => (
@@ -128,7 +136,8 @@ export function Library({
           </li>
         ) : null}
       </ul>
-
+        </>
+      ) : (
       <Connections
         connections={connections}
         onHolders={(c) => setOpen({ kind: 'connHolders', connection: c })}
@@ -139,6 +148,7 @@ export function Library({
           )
         }
       />
+      )}
 
       {open?.kind === 'new' ? <NewSkill onClose={() => setOpen(null)} onSubmit={call} /> : null}
       {open?.kind === 'connect' ? <NewConnection onClose={() => setOpen(null)} onSubmit={call} /> : null}
@@ -312,7 +322,7 @@ function Connections({
 
   return (
     <>
-      <SectionLabel count={connections.length}>Connections</SectionLabel>
+      <SectionLabel count={connections.length}>Connectors</SectionLabel>
       <ul className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
         {connections.map((c) => (
           <li key={c.id} className="border-b border-[var(--line)] last:border-b-0">
@@ -433,7 +443,7 @@ function NewConnection({ onClose, onSubmit }: { onClose: () => void; onSubmit: C
 
   return (
     <Dialog
-      title="Add a connection"
+      title="Add a connector"
       hint="An MCP server this org can reach. It is dialled as soon as you add it, so you find out now whether it works."
       onClose={onClose}
       footer={
@@ -538,7 +548,7 @@ function ConnectionHolders({
   return (
     <Dialog
       title={`Who can call ${connection.name}`}
-      hint="Holding a connection is the permission to call it. An agent that holds it is told what it offers on every turn."
+      hint="Holding a connector is the permission to call it. An agent that holds it is told what it offers on every turn."
       onClose={onClose}
       footer={<Button data-dismiss variant="primary" onClick={onClose}>Done</Button>}
     >
